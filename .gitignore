@@ -1,0 +1,23 @@
+# tool output / working folders (never source-controlled - these are
+# per-shard generated artifacts, not part of the pipeline itself)
+patched_*/
+out*/
+backup/
+_nelderim_gui_recipe.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# do not commit actual client data (.mul/.uop/.def are per-shard and huge)
+*.mul
+*.uop
+*.idx
+*.vd

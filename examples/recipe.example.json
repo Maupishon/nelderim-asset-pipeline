@@ -1,0 +1,20 @@
+{
+  "_comment": "Example recipe. Two item shapes: a wearable (recycling an existing, working anim id) and a new monster animation from a .vd file. Paths below are relative to wherever this JSON file lives - normally your client folder.",
+
+  "items": [
+    {
+      "name": "Example Robe",
+      "item_id": "0x5390",
+      "anim": 617,
+      "layer": 22,
+      "tile_name": "example robe",
+      "art": "example_robe_icon.png",
+      "gump_male": "example_robe_male.png",
+      "gump_female": "example_robe_female.png"
+    },
+    {
+      "name": "Example New Monster",
+      "vd": "example_monster.vd"
+    }
+  ]
+}
