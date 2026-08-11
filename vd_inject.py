@@ -372,16 +372,29 @@ def run(client, vd_path, out, target_body, lo, hi, apply_changes):
     say("OK", f"wrote {len(injected)} blocks; anim.mul "
               f"{mul_size} -> {os.path.getsize(out_mul)} bytes")
 
-    # mobtypes.txt: copy existing + append our entry
+    # mobtypes.txt: copy existing + append our entry, but ONLY if this
+    # body isn't already declared. Re-running the tool on the same body
+    # (e.g. after fixing a bug and re-injecting, as happened once on this
+    # shard) must not silently duplicate the line.
     out_mob = os.path.join(out, "mobtypes.txt")
     if mobtypes_path:
         shutil.copyfile(mobtypes_path, out_mob)
     else:
         open(out_mob, "w", encoding="latin-1").close()
-    with open(out_mob, "a", encoding="latin-1", newline="\r\n") as f:
-        f.write(f"\r\n# --- added by vd_inject.py ---\r\n")
-        f.write(f"{target_body}\tMONSTER\t0\t# {os.path.basename(vd_path)}\r\n")
-    say("OK", f"mobtypes.txt: appended '{target_body}\\tMONSTER\\t0'")
+
+    already = mob.get(target_body)
+    if already == "MONSTER":
+        say("OK", f"mobtypes.txt already declares body {target_body} as "
+                  "MONSTER - not duplicating the entry")
+    elif already is not None:
+        say("WARN", f"mobtypes.txt already declares body {target_body} as "
+                    f"{already}, not MONSTER - leaving it untouched rather "
+                    "than silently overriding; fix by hand if this is wrong")
+    else:
+        with open(out_mob, "a", encoding="latin-1", newline="\r\n") as f:
+            f.write(f"\r\n# --- added by vd_inject.py ---\r\n")
+            f.write(f"{target_body}\tMONSTER\t0\t# {os.path.basename(vd_path)}\r\n")
+        say("OK", f"mobtypes.txt: appended '{target_body}\\tMONSTER\\t0'")
 
     # ---- verify: re-read output files, confirm round-trip -----------
     say("VERIFY", "re-reading output files")

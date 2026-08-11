@@ -1,0 +1,149 @@
+# ===========================================================================
+# equipconv.def
+# ---------------------------------------------------------------------------
+# Reorganized for readability. SEMANTICS UNCHANGED - every mapping that was
+# live before is live now, with the same value. Only order and comments moved.
+#
+# Fields: <bodyType> <equipmentID> <convertToID> <gumpID> <hue>
+#   gumpID  0 = equipmentID + 50000
+#   gumpID -1 = convertToID  + 50000
+#   else       literal gump id (female art = male + 10000)
+#
+# Used to show different equipment art per body type, e.g. so
+# human clothing does not look wrong on the slimmer elf bodies.
+#
+# HOW TO ADD: find the "ADD NEW HERE" block for the right band and append.
+#             Keep entries sorted so the next person can find them.
+# ===========================================================================
+
+
+# --- bodyType 400 ---
+400	1250	1249	51249	0	# Human F to M
+400	1251	1249	51249	0	# Garg M to Human M
+400	1252	1249	51249	0	# GArg F to H M
+# >>> ADD NEW bodyType 400 CONVERSIONS HERE <<<
+
+
+# --- bodyType 401 ---
+401	423	842	0	0	# leather ninja pants
+401	425	839	0	0	# leather ninja hood
+401	426	840	0	0	# leather ninja jacket
+401	457	812	0	0	# leather mogami-do
+401	458	813	0	0	# studded mogami-do
+401	459	814	0	0	# platemail mogami-do
+401	513	818	0	0	# cloth ninja hood
+401	514	819	0	0	# leather ninja belt
+401	517	833	0	0	# kamishimo
+401	518	834	0	0	# hakama
+401	538	986	0	0	# female chain substitution
+401	552	835	0	0	# tattsuke-hakama
+401	553	836	0	0	# hakama-shita
+401	567	837	0	0	# obi
+401	568	838	0	0	# battle surcoat
+401	571	822	0	0	# cloth ninja jacket
+401	679	684	60684	0	# Dragon Pauldrons M to F
+401	680	685	60685	0	# Dragon Torso  M to F
+401	681	688	60686	0	# Dragon Gauntlets M to F
+401	682	686	60687	0	# Dragon Helm M to F
+401	683	687	60688	0	# Dragon Legs M to F
+401	866	867	60867	0	# Helm of swiftness M to F
+401	871	868	60889	0
+401	942	948	0	0	# elven plate
+401	1249	1250	61250	0	# Human M to F
+401	1251	1250	61250	0	# GArg M to H F
+401	1252	1250	61250	0	# Garg F to Human F
+# >>> ADD NEW bodyType 401 CONVERSIONS HERE <<<
+
+
+# --- bodyType 605 ---
+605	914	907	-1	0	# elven shirt 1
+605	915	908	-1	0	# elven shirt 2
+605	948	942	-1	0	# plate chest
+605	977	968	-1	0	# hide chest
+605	997	978	-1	0	# light armor
+605	1250	1249	51249	0	# Elf F to M
+605	1251	1249	51249	0	# Garg M to Elf M
+605	1252	1249	51249	0	# GArg F to Elf M
+# >>> ADD NEW bodyType 605 CONVERSIONS HERE <<<
+
+
+# --- bodyType 606 ---
+606	423	842	0	0	# leather ninja pants
+606	426	840	0	0	# leather ninja jacket
+606	457	812	0	0	# leather mogami-do
+606	458	813	0	0	# studded mogami-do
+606	459	814	0	0	# platemail mogami-do
+606	514	819	0	0	# leather ninja belt
+606	517	833	0	0	# kamishimo
+606	518	834	0	0	# hakama
+606	538	986	0	0	# female chain substitution
+606	552	835	0	0	# tattsuke-hakama
+606	553	836	0	0	# hakama-shita
+606	567	837	0	0	# obi
+606	568	838	0	0	# battle surcoat
+606	571	822	0	0	# cloth ninja jacket
+606	679	684	60684	0	# Dragon Pauldrons M to F
+606	680	685	60685	0	# Dragon Torso  M to F
+606	681	688	60686	0	# Dragon Gauntlets M to F
+606	682	686	60687	0	# Dragon Helm M to F
+606	683	687	60688	0	# Dragon Legs M to F
+606	866	867	60867	0	# Helm of Swiftness M to F
+606	907	914	-1	0	# elven shirt 1
+606	908	915	-1	0	# elven shirt 2
+606	942	948	-1	0	# plate chest
+606	968	977	-1	0	# hide chest
+606	978	997	-1	0	# light armor
+606	1249	1250	61250	0	# Elf M to F
+606	1251	1250	61250	0	# GArg M to Elf F
+606	1252	1250	61250	0	# Garg F to Elf F
+606	1914	1907	-1	0	# elven shirt 1
+606	1915	1908	-1	0	# elven shirt 2
+606	1948	1942	-1	0	# plate chest
+606	1977	1968	-1	0	# hide chest
+606	1997	1978	-1	0	# light armor
+# >>> ADD NEW bodyType 606 CONVERSIONS HERE <<<
+
+
+# --- bodyType 666 ---
+666	427	428	-1	0	# Male Garge
+666	865	-1	50885	0	# Male Garge
+666	1048	1049	-1	0	# Convert to Male
+666	1050	1051	-1	0	# Convert to Male
+666	1057	1058	-1	0	# Convert to Male
+666	1249	1251	51251	0	# Human M to GArg M
+666	1250	1251	51251	0	# Human F to GArg M
+666	1252	1251	51251	0	# Garg F to M
+# >>> ADD NEW bodyType 666 CONVERSIONS HERE <<<
+
+
+# --- bodyType 667 ---
+667	427	428	-1	0	# Female Garge
+667	865	-1	60885	0	# Female Garge
+667	1049	1048	-1	0	# Convert to Female
+667	1051	1050	-1	0	# Convert to Female
+667	1058	1057	-1	0	# Convert to Female
+667	1249	1252	61252	0	# Human M to GArg F
+667	1250	1252	61252	0	# Human F to GArg F
+667	1251	1252	61252	0	# Garg M to F
+# >>> ADD NEW bodyType 667 CONVERSIONS HERE <<<
+
+
+# --- bodyType 745 ---
+745	423	842	0	0	# leather ninja pants
+745	425	839	0	0	# leather ninja hood
+745	426	840	0	0	# leather ninja jacket
+745	457	812	0	0	# leather mogami-do
+745	458	813	0	0	# studded mogami-do
+745	459	814	0	0	# platemail mogami-do
+745	513	818	0	0	# cloth ninja hood
+745	514	819	0	0	# leather ninja belt
+745	517	833	0	0	# kamishimo
+745	518	834	0	0	# hakama
+745	538	986	0	0	# female chain substitution
+745	552	835	0	0	# tattsuke-hakama
+745	553	836	0	0	# hakama-shita
+745	567	837	0	0	# obi
+745	568	838	0	0	# battle surcoat
+745	571	822	0	0	# cloth ninja jacket
+745	942	948	0	0	# elven plate
+# >>> ADD NEW bodyType 745 CONVERSIONS HERE <<<

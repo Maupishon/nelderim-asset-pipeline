@@ -68,6 +68,7 @@ anything.
 | `uop_gump_patch.py` | Patches a gump directly inside `gumpartLegacyMUL.uop` in place, for items whose gump id already lives there. |
 | `vd_inject.py` | Imports a `.vd` monster-animation container into `anim.mul`/`anim.idx`, auto-picking (or taking) a target body id. |
 | `uop_probe.py` | Thin compatibility shim - re-exports `uop_hash`/`read_uop_hashes` from `nelderim_core` under the name the other tools optionally import. Keep it alongside the other tools **in the client folder** so the `AnimationFrame*.uop` collision check is never silently skipped. |
+| `client-config/` | Reference snapshot of this shard's live `.def`/`mobtypes.txt` files - see its own README. Not deployed automatically; a tool's own `--out` folder is always the real deploy source. |
 
 ## Recipe format
 

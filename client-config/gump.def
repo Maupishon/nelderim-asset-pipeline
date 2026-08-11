@@ -1,0 +1,49 @@
+# ===========================================================================
+# gump.def
+# ---------------------------------------------------------------------------
+# Reorganized for readability. SEMANTICS UNCHANGED - every mapping that was
+# live before is live now, with the same value. Only order and comments moved.
+#
+# Format: <ORIG GUMP> {<NEW GUMP>} <NEW HUE>
+#
+# Male paperdoll gumps start at 0xC350; female = male + 10000.
+#
+# HOW TO ADD: find the "ADD NEW HERE" block for the right band and append.
+#             Keep entries sorted so the next person can find them.
+# ===========================================================================
+
+
+# Paperdoll gump substitutions
+50481	{50492}	0
+50482	{50477}	0
+50483	{50468}	0
+50484	{50455}	0
+50486	{50909}	0
+50522	{50543}	0
+50524	{50545}	0
+50759	{50468}	0
+50760	{50524}	0
+50761	{50469}	0
+50762	{50476}	0
+50930	{50624}	0
+50931	{50637}	0
+50932	{50642}	0
+50933	{50639}	0
+50934	{50623}	0
+50935	{50639}	0
+50937	{50637}	0
+50938	{50649}	0
+50939	{50651}	0
+50940	{50643}	0
+60482	{60477}	35
+60483	{60468}	35
+60484	{60455}	35
+60486	{60909}	35
+60522	{60543}	0
+60524	{60545}	0
+60759	{60468}	0
+60760	{60524}	0
+60761	{60469}	0
+60762	{60476}	0
+
+# >>> ADD NEW HERE <<<
