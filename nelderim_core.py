@@ -673,12 +673,11 @@ def load_bodyconv_bodies(path):
     return out
 
 
-def load_bodydef_bodies(path):
-    """body.def rewrites a body id to a DIFFERENT one before the client
-    ever looks at anim.idx (resolution order: body.def -> UOP ->
-    Bodyconv.def -> anim.mul). Format per line: `original {newBody}
-    newHue`. Any original id listed here is unusable as an injection
-    target - the client always resolves to newBody instead."""
+def _load_brace_redirect_ids(path):
+    """Shared parser for the `<ORIG> {<NEW>} <HUE>` redirect format used
+    by body.def, gump.def, and art.def alike. Returns the set of ORIG ids
+    - each one means the client resolves to something else instead, so
+    writing to the original id's own slot may render nothing."""
     out = set()
     for line in open(path, encoding="latin-1"):
         s = line.strip()
@@ -690,6 +689,35 @@ def load_bodydef_bodies(path):
         except (ValueError, IndexError):
             continue
     return out
+
+
+def load_bodydef_bodies(path):
+    """body.def rewrites a body id to a DIFFERENT one before the client
+    ever looks at anim.idx (resolution order: body.def -> UOP ->
+    Bodyconv.def -> anim.mul). Format per line: `original {newBody}
+    newHue`. Any original id listed here is unusable as an injection
+    target - the client always resolves to newBody instead."""
+    return _load_brace_redirect_ids(path)
+
+
+def load_gumpdef_ids(path):
+    """gump.def redirects a paperdoll gump id to a different one, same
+    `<ORIG> {<NEW>} <HUE>` syntax as body.def. If a gump id being patched
+    is listed here as an ORIG, the client may show the {NEW} gump instead
+    of whatever was just written - the same silent-redirect risk as
+    body.def, just for gumps instead of bodies. This project only
+    discovered gump.def's real content late (2026-08-11); until its exact
+    position in the resolution order relative to gumpartLegacyMUL.uop is
+    verified against client source, treat any match as a WARN, not a
+    hard block - the write may still be fine, but check in-game."""
+    return _load_brace_redirect_ids(path)
+
+
+def load_artdef_ids(path):
+    """art.def redirects a static/item art id, same `<ORIG> {<NEW>}
+    <HUE>` syntax. Same caveat as load_gumpdef_ids: flagged as a WARN
+    when a target art id matches, not silently avoided or blocked."""
+    return _load_brace_redirect_ids(path)
 
 
 # --- Equipconv.def: per-bodyType equipment art override -------------------

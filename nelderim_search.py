@@ -115,6 +115,13 @@ def describe_anim(client, aid):
     out["gump_male"] = {"mul": mul_male, "uop": uop_male}
     out["gump_female"] = {"mul": mul_female, "uop": uop_female}
 
+    # gump.def redirect: a gump id listed here may not render what's
+    # actually stored at it, regardless of MUL/UOP state above
+    gumpdef_path = core.find(client, "gump.def")
+    gumpdef_ids = core.load_gumpdef_ids(gumpdef_path) if gumpdef_path else set()
+    out["gumpdef_male"] = (aid + core.GUMP_MALE_BASE) in gumpdef_ids
+    out["gumpdef_female"] = (aid + core.GUMP_FEMALE_BASE) in gumpdef_ids
+
     # which tiledata entries already use this anim (recycling candidates,
     # or "this is already spoken for")
     td_path = core.find(client, "tiledata.mul")
@@ -141,7 +148,12 @@ def print_anim_report(rep):
             where = "Gumpart.mul only"
         else:
             where = "absent"
-        print(f"  gump {label} (id {aid + (core.GUMP_MALE_BASE if key=='gump_male' else core.GUMP_FEMALE_BASE)}): {where}")
+        gid = aid + (core.GUMP_MALE_BASE if key == "gump_male" else core.GUMP_FEMALE_BASE)
+        print(f"  gump {label} (id {gid}): {where}")
+        redirect_key = "gumpdef_male" if key == "gump_male" else "gumpdef_female"
+        if rep.get(redirect_key):
+            print(f"    WARN: gump.def redirects id {gid} elsewhere - the "
+                  "client may not show what's stored here. Check in-game.")
     if rep["tiledata_users"]:
         print(f"  used by {len(rep['tiledata_users'])} tiledata entr"
               f"{'y' if len(rep['tiledata_users'])==1 else 'ies'}:")

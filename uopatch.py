@@ -88,6 +88,11 @@ try:
 except ImportError:
     read_uop_hashes = uop_hash = None
 
+try:
+    from nelderim_core import load_gumpdef_ids, load_artdef_ids
+except ImportError:
+    load_gumpdef_ids = load_artdef_ids = None
+
 IDX_REC = 12
 ART_STATIC_BASE = 0x4000
 GUMP_MALE_BASE = 50000
@@ -531,6 +536,14 @@ def run(client, recipe, out, apply_changes, allow_link=False):
     if up and read_uop_hashes:
         uop_hashes = read_uop_hashes(up)
 
+    gumpdef_ids, artdef_ids = None, None
+    gd = find(client, "gump.def")
+    if gd and load_gumpdef_ids:
+        gumpdef_ids = load_gumpdef_ids(gd)
+    ad = find(client, "art.def")
+    if ad and load_artdef_ids:
+        artdef_ids = load_artdef_ids(ad)
+
     mob_add, bodydef_add = [], []
     touched = {"art": False, "gump": False, "anim": False, "tiledata": False}
 
@@ -542,6 +555,10 @@ def run(client, recipe, out, apply_changes, allow_link=False):
         # --- static art -------------------------------------------------
         if it.get("art"):
             slot = ART_STATIC_BASE + iid
+            if artdef_ids and iid in artdef_ids:
+                say("WARN", f"  art id {iid} is redirected by art.def - "
+                            "the client may show art.def's target instead "
+                            "of what's about to be written. Check in-game.")
             if art.occupied(slot) and not it.get("overwrite"):
                 say("ERROR", f"  art slot {slot} already used; "
                              f"set \"overwrite\": true to replace")
@@ -572,6 +589,11 @@ def run(client, recipe, out, apply_changes, allow_link=False):
                                 "gumpartLegacyMUL.uop - ClassicUO prefers UOP, "
                                 "so this MUL write will be IGNORED. Pick a "
                                 "different anim id, or patch the UOP too.")
+            if gumpdef_ids and gid in gumpdef_ids:
+                say("WARN", f"  gump {gid} ({label}) is redirected by "
+                            "gump.def - the client may show gump.def's "
+                            "target instead of what's about to be written. "
+                            "Check in-game.")
             if gump.occupied(gid) and not it.get("overwrite"):
                 say("ERROR", f"  gump slot {gid} ({label}) already used; "
                              "set \"overwrite\": true to replace")

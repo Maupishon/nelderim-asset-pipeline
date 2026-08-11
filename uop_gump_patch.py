@@ -32,6 +32,12 @@ try:
 except ImportError:
     Image = None
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from nelderim_core import load_gumpdef_ids
+except ImportError:
+    load_gumpdef_ids = None
+
 IDX_REC = 12
 GUMP_MALE_BASE = 50000
 GUMP_FEMALE_BASE = 60000
@@ -244,6 +250,11 @@ def run(client, recipe, apply_changes):
     base = os.path.dirname(os.path.abspath(recipe.get("__path__", ".")))
     items = recipe.get("items", [])
 
+    gumpdef_ids = None
+    for e in os.listdir(client):
+        if e.lower() == "gump.def" and load_gumpdef_ids:
+            gumpdef_ids = load_gumpdef_ids(os.path.join(client, e))
+
     print(f"[INFO ] target UOP: {uop_path}")
     plan = []
     for it in items:
@@ -253,6 +264,11 @@ def run(client, recipe, apply_changes):
             if not it.get(key):
                 continue
             gid = aid + gbase
+            if gumpdef_ids and gid in gumpdef_ids:
+                print(f"[WARN ]  {it.get('name','?')} {label}: gump {gid} "
+                      "is redirected by gump.def - the client may show "
+                      "gump.def's target instead of what's about to be "
+                      "patched. Check in-game.")
             h = uop_hash(gump_path(gid))
             png_path = os.path.join(base, it[key])
             if not os.path.exists(png_path):

@@ -30,6 +30,12 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+try:
+    import nelderim_core as core
+except ImportError:
+    core = None
+
 PATCH_TOOL = os.path.join(HERE, "nelderim_patch.py")
 SEARCH_TOOL = os.path.join(HERE, "nelderim_search.py")
 
@@ -302,12 +308,14 @@ class App:
         tip(ml, "What to do if an image/.vd file listed in an item can't "
                "be found on disk.")
         mc = ttk.Combobox(actions, textvariable=self.missing_mode, width=6,
-                          values=("stop", "skip"), state="readonly")
+                          values=("stop", "skip", "ask"), state="readonly")
         mc.pack(side="left")
         tip(mc, "stop = check everything first and refuse to run if "
                "anything is missing (safest, default).\n"
                "skip = leave out just the missing piece and still process "
-               "the rest of that item.")
+               "the rest of that item.\n"
+               "ask = for each missing file, offer to browse for it now, "
+               "skip just that piece, or cancel the whole run.")
 
     # ---- bottom: log ----------------------------------------------------
 
@@ -409,12 +417,73 @@ class App:
         txt.insert("1.0", json.dumps(recipe, indent=2, ensure_ascii=False))
         txt.configure(state="disabled")
 
-    def _write_recipe_file(self, client):
-        recipe = self._build_recipe()
-        path = os.path.join(client, "_nelderim_gui_recipe.json")
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(recipe, f, indent=2, ensure_ascii=False)
-        return path
+    def _resolve_missing_interactive(self, recipe, base):
+        """For 'ask' mode: walk every missing asset and let the user
+        browse for it, skip just that piece, or cancel the whole run.
+        Mutates `recipe` in place. Returns False if the user cancelled."""
+        if core is None:
+            messagebox.showerror(
+                "nelderim_core not found",
+                "Interactive missing-asset handling needs nelderim_core.py "
+                "next to this GUI. Falling back is not possible - place "
+                "the file there or use 'stop'/'skip' instead.")
+            return False
+
+        missing = core.scan_missing_assets(recipe, base)
+        for idx, name, field, path in missing:
+            # a Browse pick for an earlier field in the same loop can
+            # incidentally satisfy a later one only if paths coincide -
+            # harmless to re-check, so just verify it's still missing.
+            if os.path.exists(path):
+                continue
+            choice = self._ask_missing_dialog(name, field, path)
+            if choice == "cancel":
+                return False
+            elif choice == "browse":
+                picked = filedialog.askopenfilename(
+                    title=f"Locate {field} for {name}")
+                if picked:
+                    try:
+                        recipe["items"][idx][field] = os.path.relpath(picked, base)
+                    except ValueError:
+                        recipe["items"][idx][field] = picked  # different drive
+                else:
+                    recipe["items"][idx].pop(field, None)
+            else:  # skip
+                recipe["items"][idx].pop(field, None)
+        return True
+
+    def _ask_missing_dialog(self, name, field, path):
+        """Modal Browse/Skip/Cancel dialog for one missing asset. Returns
+        'browse', 'skip', or 'cancel'."""
+        win = tk.Toplevel(self.root)
+        win.title("Missing file")
+        win.transient(self.root)
+        win.grab_set()
+        result = {"choice": "cancel"}
+
+        msg = (f"{name}: {field} not found.\n\n{path}\n\n"
+              "What would you like to do?")
+        ttk.Label(win, text=msg, justify="left", wraplength=360).pack(
+            padx=16, pady=16)
+
+        btns = ttk.Frame(win)
+        btns.pack(pady=(0, 12))
+
+        def pick(choice):
+            result["choice"] = choice
+            win.destroy()
+
+        ttk.Button(btns, text="Browse...",
+                  command=lambda: pick("browse")).pack(side="left", padx=6)
+        ttk.Button(btns, text="Skip this file",
+                  command=lambda: pick("skip")).pack(side="left", padx=6)
+        ttk.Button(btns, text="Cancel run",
+                  command=lambda: pick("cancel")).pack(side="left", padx=6)
+
+        win.protocol("WM_DELETE_WINDOW", lambda: pick("cancel"))
+        self.root.wait_window(win)
+        return result["choice"]
 
     def _run_patch(self, apply):
         client = self._require_client()
@@ -423,12 +492,28 @@ class App:
         if not self.items:
             messagebox.showinfo("No items", "Add at least one recipe item.")
             return
+
         try:
-            recipe_path = self._write_recipe_file(client)
+            recipe = self._build_recipe()
         except ValueError as e:
             messagebox.showerror("Invalid field",
                                  f"A numeric field has bad input: {e}")
             return
+
+        base = self._base_dir()
+        missing_choice = self.missing_mode.get()
+
+        if missing_choice == "ask":
+            if not self._resolve_missing_interactive(recipe, base):
+                self._log_line("[cancelled by user during missing-asset check]")
+                return
+            subprocess_missing_flag = "stop"  # everything should be resolved now
+        else:
+            subprocess_missing_flag = missing_choice
+
+        recipe_path = os.path.join(client, "_nelderim_gui_recipe.json")
+        with open(recipe_path, "w", encoding="utf-8") as f:
+            json.dump(recipe, f, indent=2, ensure_ascii=False)
 
         if apply:
             if not messagebox.askyesno(
@@ -441,7 +526,7 @@ class App:
         argv = [sys.executable, PATCH_TOOL,
                 "--client", client, "--recipe", recipe_path,
                 "--out", os.path.join(client, "patched_gui"),
-                "--missing", self.missing_mode.get()]
+                "--missing", subprocess_missing_flag]
         if apply:
             argv.append("--apply")
 

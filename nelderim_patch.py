@@ -128,9 +128,11 @@ def main():
     ap.add_argument("--apply", action="store_true",
                     help="actually write (default is a dry run of every "
                          "routed subprocess)")
-    ap.add_argument("--missing", choices=["stop", "skip"], default="stop",
-                    help="policy for referenced assets not on disk "
-                         "(default: stop). Interactive mode is GUI-only.")
+    ap.add_argument("--missing", choices=["stop", "skip", "ask"], default="stop",
+                    help="policy for referenced assets not on disk: "
+                         "stop = report all and abort (default), "
+                         "skip = drop the missing field and continue, "
+                         "ask = prompt y/n per asset in the terminal")
     ap.add_argument("--range", default="900-2000",
                     help="body-id search band passed to vd_inject for "
                          "monster anims")
@@ -150,9 +152,22 @@ def main():
 
     # ---- preflight: missing assets across the WHOLE recipe --------------
     if core is not None:
-        mode = core.MISSING_STOP if a.missing == "stop" else core.MISSING_SKIP
+        if a.missing == "stop":
+            mode = core.MISSING_STOP
+            ask_fn = None
+        elif a.missing == "skip":
+            mode = core.MISSING_SKIP
+            ask_fn = None
+        else:  # ask
+            mode = core.MISSING_ASK
+
+            def ask_fn(name, field, path):
+                reply = input(f"[nelderim] {name}: {field} not found at "
+                              f"{path}\n  Do you have this file now? "
+                              "(y/n): ").strip().lower()
+                return reply.startswith("y")
         try:
-            core.resolve_missing_assets(recipe, base, mode=mode)
+            core.resolve_missing_assets(recipe, base, mode=mode, ask_fn=ask_fn)
         except core.Problem as e:
             print(f"[nelderim] preflight: {e}")
             return 2

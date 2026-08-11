@@ -88,10 +88,22 @@ touched). Paths are relative to the recipe file's own folder.
 - Every engine re-reads its own output after writing and verifies it
   round-trips, before declaring success.
 - `anim.mul` is only ever appended to - existing bytes never move.
-- A target id is checked against `body.def`, `Bodyconv.def`, and
-  `AnimationFrame*.uop`/`gumpartLegacyMUL.uop` *before* being used, because
-  each of those can silently redirect a body/gump the client actually
-  reads, independent of what gets written to `anim.idx`/`Gumpart.mul`.
+- A target id is checked against `body.def`, `Bodyconv.def`,
+  `AnimationFrame*.uop`/`gumpartLegacyMUL.uop`, `gump.def`, and `art.def`
+  *before or during* writing, because each of those can silently redirect
+  what the client actually shows, independent of what gets written to
+  `anim.idx`/`Gumpart.mul`/`art.mul`. The `gump.def`/`art.def` checks are
+  WARN-level (surfaced by `uopatch.py`, `uop_gump_patch.py`, and
+  `nelderim_search.py --anim`) rather than hard blocks, since this
+  project's exact knowledge of their resolution order relative to UOP is
+  less battle-tested than `body.def`'s - treat a warning as "verify this
+  one in-game," not as an error.
+- Referenced assets (art/gump/`.vd` files) are checked for existence
+  across the *whole* recipe before anything is written. Three policies:
+  `stop` (default - list everything missing, write nothing), `skip`
+  (drop just the missing field, process the rest of that item), `ask`
+  (CLI: y/n prompt per file in the terminal; GUI: a Browse/Skip/Cancel
+  dialog per file, resolved before the patch subprocess is even started).
 
 ## Landmines this project already found, so you don't have to
 
@@ -125,3 +137,12 @@ use in `nelderim_core.py`, but worth having in one place:
    this stack) - a BMP with an intended transparent cutout renders fully
    opaque in-game. `load_png()` warns when this is detected; prefer PNG
    for anything that needs a transparent background.
+7. **`gump.def` and `art.def` redirect ids the same way `body.def` does**,
+   just for gumps and static art instead of bodies. Discovered late
+   (2026-08-11, once their real content was first reviewed) - a gump or
+   art id listed as a redirect source there may not show what was just
+   written to it. Checked and WARNed on by `uopatch.py`,
+   `uop_gump_patch.py`, and `nelderim_search.py --anim`, but their exact
+   position in the resolution order isn't as thoroughly verified as
+   `body.def`'s - a WARN here means "check this one in-game," not "this
+   is definitely broken."
