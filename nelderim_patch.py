@@ -176,6 +176,24 @@ def main():
               "preflight missing-asset check")
 
     # ---- classify every item -------------------------------------------
+    # Asset paths (art/gump_male/gump_female) in the ORIGINAL recipe are
+    # relative to `base` (the original recipe's own directory). Each
+    # engine gets its own sub-recipe JSON written into a DIFFERENT
+    # directory (tmpdir, under --out) - so those paths must be resolved
+    # to ABSOLUTE before being copied into a sub-recipe, or the target
+    # engine resolves them relative to the wrong directory and fails to
+    # find a file that actually exists. (Found via a real --apply run
+    # against the live client, 2026-08-11 - the exact bug this project
+    # keeps trying to catch before it reaches a live client.)
+    _ASSET_FIELDS = ("art", "gump_male", "gump_female")
+
+    def _absolutize_assets(d):
+        out = dict(d)
+        for f in _ASSET_FIELDS:
+            if out.get(f) and not os.path.isabs(out[f]):
+                out[f] = os.path.abspath(os.path.join(base, out[f]))
+        return out
+
     wearable_items, gump_uop_items, monster_items = [], [], []
     for it in items:
         engines, uop_resident = classify(it, a.client)
@@ -191,7 +209,7 @@ def main():
                 g["gump_male"] = it["gump_male"]
             if it.get("gump_female") and (it.get("anim") + GUMP_FEMALE_BASE) in uop_resident:
                 g["gump_female"] = it["gump_female"]
-            gump_uop_items.append(g)
+            gump_uop_items.append(_absolutize_assets(g))
         if "wearable" in engines:
             # strip any UOP-resident gump fields (they're handled above; a
             # MUL write to them would be ignored by the client anyway)
@@ -201,7 +219,7 @@ def main():
                     w.pop("gump_male", None)
                 if (it.get("anim") + GUMP_FEMALE_BASE) in uop_resident:
                     w.pop("gump_female", None)
-            wearable_items.append(w)
+            wearable_items.append(_absolutize_assets(w))
 
     os.makedirs(a.out, exist_ok=True)
     tmpdir = tempfile.mkdtemp(prefix="nelderim_recipes_", dir=a.out)
@@ -248,6 +266,11 @@ def main():
     print("\n" + "=" * 68)
     if not a.apply:
         print("DRY RUN complete. Nothing was written. Re-run with --apply.")
+    elif rc_total:
+        print("ONE OR MORE ENGINES FAILED (see [ERROR]/traceback output "
+              "above). Nothing further to deploy - fix the failure and "
+              "re-run before touching the live client with any output "
+              "that WAS produced.")
     else:
         print("All routed engines finished. Per-engine outputs are under:")
         print(f"  {os.path.join(a.out, 'wearable')}   (Gumpart/tiledata/art .mul)")
