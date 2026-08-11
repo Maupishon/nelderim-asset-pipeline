@@ -10,6 +10,26 @@ against the actual ClassicUO client source, or verified end-to-end on a
 live server. Where that history matters for correctness, it's documented
 in the code, not just in a commit message.
 
+## For non-technical users
+
+Never used a developer tool before? Start here:
+
+1. Download this repo: on GitHub, click the green **Code** button →
+   **Download ZIP**, then unzip it somewhere (or `git clone` it if you
+   already know how).
+2. Double-click **`run_nelderim.bat`** in the unzipped folder.
+   - The first time, it checks whether Python is installed and installs
+     one small missing piece (Pillow) automatically. If Python itself is
+     missing, it will tell you exactly what to download and how.
+   - If something goes wrong, the window stays open so you can read the
+     message - it won't just vanish.
+3. The app opens with a **Welcome** panel explaining what it does. Follow
+   it: point the tool at your UO client folder, then use **Dry run**
+   (always safe, changes nothing) before ever clicking **Apply**.
+
+That's the whole setup. Everything below is more detailed reference
+material for developers/CLI users - you don't need it to get started.
+
 ## Requirements
 
 - Python 3.10+ (tested on the Windows client install)

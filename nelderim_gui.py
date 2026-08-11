@@ -116,7 +116,9 @@ class ToolRunner:
                 self.proc.wait()
                 self.q.put(("done", self.proc.returncode))
             except Exception as e:  # noqa: BLE001 - surface any launch error
-                self.q.put(("line", f"[GUI ERROR] {e}"))
+                self.q.put(("line",
+                            "[Could not start the patch tool - is Python "
+                            f"still installed and on PATH?]\nDetails: {e}"))
                 self.q.put(("done", -1))
 
         threading.Thread(target=worker, daemon=True).start()
@@ -203,16 +205,39 @@ class App:
     def __init__(self, root):
         self.root = root
         root.title("Nelderim Asset Pipeline")
-        root.geometry("980x720")
+        root.geometry("980x780")
 
         self.client_dir = tk.StringVar()
         self.items: list[ItemRow] = []
         self.runner = ToolRunner(self._log_line, self._on_done)
         self.runner.pump(root)
 
+        self._build_welcome()
         self._build_top()
         self._build_middle()
         self._build_log()
+
+    # ---- welcome: shown once at startup, plain-language orientation ----
+
+    def _build_welcome(self):
+        self.welcome = ttk.LabelFrame(self.root, text="Welcome")
+        self.welcome.pack(fill="x", padx=8, pady=(8, 0))
+        msg = (
+            "This tool adds custom items, gumps (icons/paperdolls), and "
+            "monster animations to your Nelderim client, without hand-"
+            "editing any game files yourself.\n\n"
+            "It's safe to explore: \"Dry run\" always shows you what WOULD "
+            "happen without changing a single file. Only \"APPLY\" writes "
+            "anything to disk, and even then every tool keeps a backup "
+            "first.\n\n"
+            "To get started: below, point \"Client folder\" at your UO "
+            "game folder (the one containing files like tiledata.mul) - "
+            "then add or search for items and click Dry run.")
+        ttk.Label(self.welcome, text=msg, justify="left",
+                 wraplength=920).pack(padx=10, pady=(6, 4), anchor="w")
+        ttk.Button(self.welcome, text="Got it, let's start",
+                  command=lambda: self.welcome.pack_forget()).pack(
+            anchor="e", padx=10, pady=(0, 8))
 
     # ---- top: client folder + search -----------------------------------
 
@@ -221,12 +246,18 @@ class App:
         f.pack(fill="x", padx=8, pady=(8, 4))
         entry = ttk.Entry(f, textvariable=self.client_dir)
         entry.pack(side="left", fill="x", expand=True, padx=4, pady=4)
+        entry.bind("<FocusOut>", lambda e: self._check_client_folder())
         tip(entry, "Path to the UO client folder that holds the .mul/.uop "
                    "files (tiledata.mul, anim.idx, Gumpart.mul, ...). This "
                    "is the SAME folder you run the command-line tools from.")
         btn = ttk.Button(f, text="Browse...", command=self._pick_client)
         btn.pack(side="left", padx=4)
         tip(btn, "Open a folder picker to choose the client folder.")
+
+        self.client_warning = ttk.Label(
+            self.root, text="", foreground="#b45309", justify="left",
+            wraplength=940)
+        self.client_warning.pack(fill="x", padx=12, pady=(0, 4))
 
         s = ttk.LabelFrame(self.root, text="Search (read-only)")
         s.pack(fill="x", padx=8, pady=4)
@@ -332,6 +363,37 @@ class App:
         d = filedialog.askdirectory(title="Select client folder")
         if d:
             self.client_dir.set(d)
+        self._check_client_folder()
+
+    # Files we expect to find directly in a real UO client folder.
+    # tiledata.mul is treated as required; the others are a soft check.
+    _REQUIRED_MARKER = "tiledata.mul"
+    _SOFT_MARKERS = ("anim.idx", "Gumpart.mul")
+
+    def _check_client_folder(self):
+        c = self.client_dir.get().strip()
+        if not c:
+            self.client_warning.configure(text="")
+            return
+        if not os.path.isdir(c):
+            self.client_warning.configure(
+                text=f"This folder doesn't exist: {c}")
+            return
+        if not os.path.exists(os.path.join(c, self._REQUIRED_MARKER)):
+            self.client_warning.configure(
+                text="This doesn't look like a UO client folder - expected "
+                     f"to find {self._REQUIRED_MARKER} here. Point this at "
+                     "the folder that has your game's .mul/.uop files.")
+            return
+        soft_missing = [m for m in self._SOFT_MARKERS
+                        if not os.path.exists(os.path.join(c, m))]
+        if soft_missing:
+            self.client_warning.configure(
+                text="Found tiledata.mul, but couldn't find: " +
+                     ", ".join(soft_missing) +
+                     ". Some features may not work until those are present.")
+        else:
+            self.client_warning.configure(text="")
 
     def _log_line(self, line):
         self.log.configure(state="normal")
@@ -350,8 +412,10 @@ class App:
     def _require_client(self):
         c = self.client_dir.get().strip()
         if not c or not os.path.isdir(c):
-            messagebox.showerror("No client folder",
-                                 "Pick a valid client folder first.")
+            messagebox.showerror(
+                "No client folder",
+                "Pick your UO client folder first (the \"Browse...\" "
+                "button next to \"Client folder\" at the top).")
             return None
         return c
 
@@ -406,8 +470,10 @@ class App:
         try:
             recipe = self._build_recipe()
         except ValueError as e:
-            messagebox.showerror("Invalid field",
-                                 f"A numeric field has bad input: {e}")
+            messagebox.showerror(
+                "Invalid field",
+                "One of the numeric fields (Anim id, Layer, or Body) "
+                "isn't a whole number.\n\nTechnical detail: " + str(e))
             return
         win = tk.Toplevel(self.root)
         win.title("Recipe JSON")
@@ -496,8 +562,10 @@ class App:
         try:
             recipe = self._build_recipe()
         except ValueError as e:
-            messagebox.showerror("Invalid field",
-                                 f"A numeric field has bad input: {e}")
+            messagebox.showerror(
+                "Invalid field",
+                "One of the numeric fields (Anim id, Layer, or Body) "
+                "isn't a whole number.\n\nTechnical detail: " + str(e))
             return
 
         base = self._base_dir()
@@ -512,8 +580,16 @@ class App:
             subprocess_missing_flag = missing_choice
 
         recipe_path = os.path.join(client, "_nelderim_gui_recipe.json")
-        with open(recipe_path, "w", encoding="utf-8") as f:
-            json.dump(recipe, f, indent=2, ensure_ascii=False)
+        try:
+            with open(recipe_path, "w", encoding="utf-8") as f:
+                json.dump(recipe, f, indent=2, ensure_ascii=False)
+        except OSError as e:
+            messagebox.showerror(
+                "Couldn't write recipe file",
+                "Could not save the recipe file into the client folder.\n"
+                "Check that the folder is writable and not read-only.\n\n"
+                f"Technical detail: {e}")
+            return
 
         if apply:
             if not messagebox.askyesno(
@@ -689,7 +765,21 @@ class ItemEditor(ttk.Frame):
         self.on_change()
 
 
+def _friendly_callback_exception(self, exc, val, tb):
+    """Replaces Tkinter's default callback-error dialog (a raw traceback)
+    with a plain-language message; the technical detail is still included,
+    just secondary, for anyone who needs to report a bug."""
+    import traceback
+    detail = "".join(traceback.format_exception(exc, val, tb))
+    messagebox.showerror(
+        "Something went wrong",
+        "The app hit an unexpected error while handling that action. "
+        "You can usually keep going - if it happens again, please share "
+        "the technical detail below.\n\n" + detail[-1500:])
+
+
 def main():
+    tk.Tk.report_callback_exception = _friendly_callback_exception
     root = tk.Tk()
     App(root)
     root.mainloop()
