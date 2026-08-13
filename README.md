@@ -17,12 +17,17 @@ Never used a developer tool before? Start here:
 1. Download this repo: on GitHub, click the green **Code** button →
    **Download ZIP**, then unzip it somewhere (or `git clone` it if you
    already know how).
-2. Double-click **`run_nelderim.bat`** in the unzipped folder.
+2. **Windows**: double-click **`run_nelderim.bat`**.
+   **Linux/macOS**: open a terminal in the unzipped folder and run
+   `./run_nelderim.sh` (or double-click it, if your file manager runs
+   `.sh` files - not all do by default).
    - The first time, it checks whether Python is installed and installs
      one small missing piece (Pillow) automatically. If Python itself is
-     missing, it will tell you exactly what to download and how.
-   - If something goes wrong, the window stays open so you can read the
-     message - it won't just vanish.
+     missing, it will tell you exactly what to install and how - on
+     Linux, the GUI's `tkinter` window toolkit is also checked, since
+     many distros ship it as a separate package from Python itself.
+   - If something goes wrong, the window/terminal stays open so you can
+     read the message - it won't just vanish.
 3. The app opens with a **Welcome** panel explaining what it does. Follow
    it: point the tool at your UO client folder, then use **Dry run**
    (always safe, changes nothing) before ever clicking **Apply**.
@@ -88,6 +93,7 @@ anything.
 | `uop_gump_patch.py` | Patches a gump directly inside `gumpartLegacyMUL.uop` in place, for items whose gump id already lives there. |
 | `vd_inject.py` | Imports a `.vd` monster-animation container into `anim.mul`/`anim.idx`, auto-picking (or taking) a target body id. |
 | `uop_probe.py` | Thin compatibility shim - re-exports `uop_hash`/`read_uop_hashes` from `nelderim_core` under the name the other tools optionally import. Keep it alongside the other tools **in the client folder** so the `AnimationFrame*.uop` collision check is never silently skipped. |
+| `run_nelderim.bat` / `run_nelderim.sh` | Idiot-proof launchers for Windows / Linux+macOS - check Python/Pillow/tkinter, install what's missing, launch the GUI, and never let the window vanish before an error can be read. |
 | `client-config/` | Reference snapshot of this shard's live `.def`/`mobtypes.txt` files - see its own README. Not deployed automatically; a tool's own `--out` folder is always the real deploy source. |
 
 ## Recipe format
