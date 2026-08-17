@@ -877,6 +877,9 @@ class ItemEditor(ttk.Frame):
             self.vars[key].set(p)
             self._commit()
 
+    # not gated by Kind - relevant no matter what's being added
+    ALWAYS_VISIBLE = ("name",)
+
     def _update_visibility(self):
         """Show only the fields relevant to the selected Kind. Hidden
         fields are grid_remove()'d (not destroyed) so their values, if
@@ -885,7 +888,7 @@ class ItemEditor(ttk.Frame):
         is_monster = self.kind_var.get().startswith("monster")
         relevant = self.MONSTER_FIELDS if is_monster else self.WEARABLE_FIELDS
         for key, (lbl, entry, btn) in self.rows.items():
-            if key in relevant:
+            if key in relevant or key in self.ALWAYS_VISIBLE:
                 lbl.grid()
                 entry.grid()
                 if btn:
