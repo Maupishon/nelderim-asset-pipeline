@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -38,6 +39,7 @@ except ImportError:
 
 PATCH_TOOL = os.path.join(HERE, "nelderim_patch.py")
 SEARCH_TOOL = os.path.join(HERE, "nelderim_search.py")
+VD_INJECT_TOOL = os.path.join(HERE, "vd_inject.py")
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +313,8 @@ class App:
 
         right = ttk.LabelFrame(mid, text="Item editor")
         right.pack(side="left", fill="both", expand=True)
-        self.editor = ItemEditor(right, on_change=self._refresh_list)
+        self.editor = ItemEditor(right, on_change=self._refresh_list,
+                                 get_client_dir=lambda: self.client_dir.get())
         self.editor.pack(fill="both", expand=True, padx=4, pady=4)
 
         actions = ttk.Frame(self.root)
@@ -618,11 +621,27 @@ class App:
         if not q:
             messagebox.showinfo("Empty query", "Type something to search for.")
             return
+        kind = self.search_kind.get()
+        if kind in ("anim", "body") and not self._looks_numeric(q):
+            messagebox.showinfo(
+                "Numbers only for this search",
+                f"'{kind}' search needs a number (like 617 or 0x269), not "
+                f"a name - '{q}' isn't one.\n\nLooking for something by "
+                "name instead? Switch to 'item' search on the left.")
+            return
         argv = [sys.executable, SEARCH_TOOL, "--client", client,
-                "--" + self.search_kind.get(), q]
+                "--" + kind, q]
         self._clear_log()
         self._log_line(">>> " + " ".join(argv) + "\n")
         self.runner.run(argv)
+
+    @staticmethod
+    def _looks_numeric(s):
+        try:
+            int(s, 16) if s.lower().startswith("0x") else int(s)
+            return True
+        except ValueError:
+            return False
 
 
 # ---------------------------------------------------------------------------
@@ -630,11 +649,20 @@ class App:
 # ---------------------------------------------------------------------------
 
 class ItemEditor(ttk.Frame):
-    def __init__(self, parent, on_change):
+    # which fields matter for each Kind - the rest are hidden, not just
+    # left blank, so a person can't be confused by ten fields when only
+    # two are relevant to what they're doing
+    WEARABLE_FIELDS = ("item_id", "anim", "layer", "tile_name",
+                       "art", "gump_male", "gump_female")
+    MONSTER_FIELDS = ("vd", "body")
+
+    def __init__(self, parent, on_change, get_client_dir=None):
         super().__init__(parent)
         self.on_change = on_change
+        self.get_client_dir = get_client_dir or (lambda: "")
         self.item: ItemRow | None = None
         self.vars = {}
+        self.rows = {}  # key -> (label_widget, entry_widget, button_widget_or_None)
 
         r = 0
         self._row("name", "Name", r,
@@ -653,9 +681,10 @@ class ItemEditor(ttk.Frame):
         self.kind_box = ttk.Combobox(self, textvariable=self.kind_var, width=22,
                                      values=ItemRow.KINDS, state="readonly")
         self.kind_box.grid(row=r, column=1, sticky="w", padx=4, pady=2)
-        self.kind_box.bind("<<ComboboxSelected>>", lambda e: self._commit())
-        tip(self.kind_box, "Pick one - the fields below change meaning "
-                           "depending on this choice.")
+        self.kind_box.bind("<<ComboboxSelected>>",
+                           lambda e: (self._commit(), self._update_visibility()))
+        tip(self.kind_box, "Pick one - the fields below change to show only "
+                           "what's relevant for this kind of item.")
         r += 1
 
         self._row("item_id", "Item ID (0x..)", r,
@@ -697,13 +726,33 @@ class ItemEditor(ttk.Frame):
         self._file_row("vd", "VD file", r,
                        [("VD", "*.vd"), ("All", "*.*")],
                        "The .vd container holding the new monster's "
-                       "animation frames (walk, attack, stand still...).")
+                       "animation frames (walk, attack, stand still...). "
+                       "This is the ONLY file you need to pick for a new "
+                       "monster - everything else below is for wearable "
+                       "items instead.")
         r += 1
-        self._row("body", "Body (vd, optional)", r,
+        self._body_row(r,
                   "Which body id the new monster should use. Leave this "
                   "empty to have the tool automatically pick a free, "
-                  "collision-free id for you - the safer default.")
+                  "collision-free id for you - the safer default. Click "
+                  "\"Suggest free slot\" to see what it would pick, without "
+                  "writing anything.")
         r += 1
+
+        self.suggest_status = ttk.Label(self, text="", foreground="#555555",
+                                        wraplength=500, justify="left")
+        self.suggest_status.grid(row=r, column=0, columnspan=3, sticky="w",
+                                 padx=4, pady=(0, 4))
+        r += 1
+
+        # shown only when self.item is None, telling the person what to
+        # do instead of letting them type into fields that go nowhere
+        self.placeholder = ttk.Label(
+            self, text="← Click \"Add\" on the left to create a new item, "
+                       "or select an existing one from the list.",
+            foreground="#555555", wraplength=500, justify="left")
+        self.placeholder.grid(row=r, column=0, columnspan=3, sticky="w",
+                              padx=4, pady=16)
 
         self.load(None)
 
@@ -715,6 +764,7 @@ class ItemEditor(ttk.Frame):
         e.grid(row=r, column=1, sticky="we", padx=4, pady=2)
         e.bind("<FocusOut>", lambda ev: self._commit())
         self.vars[key] = v
+        self.rows[key] = (lbl, e, None)
         if tooltip:
             tip(lbl, tooltip)
             tip(e, tooltip)
@@ -734,10 +784,92 @@ class ItemEditor(ttk.Frame):
         btn = ttk.Button(self, text="...", width=3,
                          command=lambda: self._pick(key, ft))
         btn.grid(row=r, column=2, padx=2)
+        self.rows[key] = (lbl, e, btn)
         if tooltip:
             tip(lbl, tooltip)
             tip(e, tooltip)
             tip(btn, "Browse for the file instead of typing the path.")
+
+    def _body_row(self, r, tooltip=""):
+        key = "body"
+        lbl = ttk.Label(self, text="Body (vd, optional)")
+        lbl.grid(row=r, column=0, sticky="w", padx=4, pady=2)
+        v = tk.StringVar()
+        e = ttk.Entry(self, textvariable=v, width=30)
+        e.grid(row=r, column=1, sticky="we", padx=4, pady=2)
+        e.bind("<FocusOut>", lambda ev: self._commit())
+        self.vars[key] = v
+        btn = ttk.Button(self, text="Suggest free slot",
+                         command=self._suggest_free_slot)
+        btn.grid(row=r, column=2, padx=2, sticky="w")
+        self.rows[key] = (lbl, e, btn)
+        if tooltip:
+            tip(lbl, tooltip)
+            tip(e, tooltip)
+            tip(btn, "Runs a dry check (writes nothing) against your .vd "
+                    "file and fills this box with the body id it would "
+                    "auto-pick, so you can see it before committing to it.")
+
+    def _suggest_free_slot(self):
+        client = self.get_client_dir().strip()
+        if not client or not os.path.isdir(client):
+            self.suggest_status.configure(
+                text="Pick a valid client folder above first.",
+                foreground="#a33")
+            return
+        vd_path = self.vars.get("vd", tk.StringVar()).get().strip()
+        if not vd_path:
+            self.suggest_status.configure(
+                text="Pick a .vd file above first, then click Suggest again.",
+                foreground="#a33")
+            return
+        if not os.path.isabs(vd_path):
+            vd_path = os.path.join(client, vd_path)
+        if not os.path.exists(vd_path):
+            self.suggest_status.configure(
+                text=f".vd file not found: {vd_path}",
+                foreground="#a33")
+            return
+
+        self.suggest_status.configure(text="Checking for a free slot...",
+                                      foreground="#555555")
+        self.update_idletasks()
+
+        try:
+            proc = subprocess.run(
+                [sys.executable, VD_INJECT_TOOL,
+                 "--client", client, "--vd", vd_path],
+                capture_output=True, text=True, timeout=30)
+        except subprocess.TimeoutExpired:
+            self.suggest_status.configure(
+                text="Timed out checking for a free slot - your client "
+                    "folder may be very large. Try the command line tool "
+                    "directly if this keeps happening.",
+                foreground="#a33")
+            return
+        except OSError as e:
+            self.suggest_status.configure(
+                text=f"Couldn't run the check: {e}", foreground="#a33")
+            return
+
+        output = (proc.stdout or "") + (proc.stderr or "")
+        m = re.search(r"auto-selected body (\d+)", output)
+        if m:
+            body_id = m.group(1)
+            self.vars["body"].set(body_id)
+            self._commit()
+            self.suggest_status.configure(
+                text=f"Suggested body {body_id} (free, no collisions found) "
+                    "- filled in above. You can still change it, or clear "
+                    "the box to let the tool auto-pick again at Apply time.",
+                foreground="#2a2")
+        else:
+            err_line = next((ln for ln in output.splitlines()
+                            if "ERROR" in ln or "error" in ln.lower()),
+                           output.strip().splitlines()[-1] if output.strip() else "")
+            self.suggest_status.configure(
+                text=f"Couldn't find a suggestion: {err_line or 'no output'}",
+                foreground="#a33")
 
     def _pick(self, key, filetypes):
         p = filedialog.askopenfilename(filetypes=filetypes)
@@ -745,16 +877,57 @@ class ItemEditor(ttk.Frame):
             self.vars[key].set(p)
             self._commit()
 
+    def _update_visibility(self):
+        """Show only the fields relevant to the selected Kind. Hidden
+        fields are grid_remove()'d (not destroyed) so their values, if
+        any were set before switching Kind, are preserved if the person
+        switches back - nothing is silently lost."""
+        is_monster = self.kind_var.get().startswith("monster")
+        relevant = self.MONSTER_FIELDS if is_monster else self.WEARABLE_FIELDS
+        for key, (lbl, entry, btn) in self.rows.items():
+            if key in relevant:
+                lbl.grid()
+                entry.grid()
+                if btn:
+                    btn.grid()
+            else:
+                lbl.grid_remove()
+                entry.grid_remove()
+                if btn:
+                    btn.grid_remove()
+        if is_monster:
+            self.suggest_status.grid()
+        else:
+            self.suggest_status.grid_remove()
+            self.suggest_status.configure(text="")
+
+    def _set_editor_enabled(self, enabled):
+        state = "normal" if enabled else "disabled"
+        combo_state = "readonly" if enabled else "disabled"
+        for key, (lbl, entry, btn) in self.rows.items():
+            entry.configure(state=state)
+            if btn:
+                btn.configure(state=state)
+        self.kind_box.configure(state=combo_state)
+        if enabled:
+            self.placeholder.grid_remove()
+        else:
+            self.placeholder.grid()
+
     def load(self, item):
         self.item = item
         if item is None:
             for v in self.vars.values():
                 v.set("")
             self.kind_var.set(ItemRow.KINDS[0])
+            self._update_visibility()
+            self._set_editor_enabled(False)
             return
+        self._set_editor_enabled(True)
         self.kind_var.set(item.kind)
         for key, var in self.vars.items():
             var.set(getattr(item, key, "") or "")
+        self._update_visibility()
 
     def _commit(self):
         if self.item is None:
