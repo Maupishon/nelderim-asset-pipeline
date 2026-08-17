@@ -239,6 +239,86 @@ def print_body_report(rep):
 
 # ===========================================================================
 
+# ===========================================================================
+# --free-anim : batch search for anim ids safe to use for NEW gump art
+# ===========================================================================
+
+def find_free_anim_ids(client, count, lo=None, hi=100000):
+    """Find `count` anim ids whose gump slots (aid+50000/+60000) are clear
+    for a brand-new paperdoll texture: not occupied in Gumpidx.mul, not
+    present in gumpartLegacyMUL.uop, and not redirected by gump.def.
+
+    body.def/Bodyconv.def are deliberately NOT checked here - those affect
+    a living mobile's animated body, not a worn item's paperdoll gump
+    lookup (aid+50000/60000 is a flat, direct lookup independent of a
+    mobile's body redirect chain). Checking them would exclude perfectly
+    usable ids for this purpose.
+
+    Default floor: one above the highest id already in mobtypes.txt, the
+    same convention used for monster body picking - not because gump ids
+    have the cumulative-offset problem monster bodies do (they don't,
+    aid+50000 is a flat offset with no ordering dependency), but because
+    ids above that point are reliably unused by anything else on this
+    shard, giving clean, low-surprise results.
+
+    Returns a list of ints, in ascending order, up to `count` long (may
+    be shorter if the range runs out).
+    """
+    if lo is None:
+        mobtypes_path = core.find(client, "mobtypes.txt")
+        mob = core.load_mobtypes(mobtypes_path) if mobtypes_path else {}
+        lo = (max(mob.keys()) + 1) if mob else 1
+
+    gumpidx_path = core.need(client, "Gumpidx.mul")
+    idx = open(gumpidx_path, "rb").read()
+    n = len(idx) // core.IDX_REC
+
+    uop_hashes = set()
+    uop_path = core.find(client, "gumpartLegacyMUL.uop")
+    if uop_path:
+        uop_hashes = core.read_uop_hashes(uop_path)
+
+    gumpdef_path = core.find(client, "gump.def")
+    gumpdef_ids = core.load_gumpdef_ids(gumpdef_path) if gumpdef_path else set()
+
+    def mul_occupied(gid):
+        if gid >= n:
+            return False
+        lk = struct.unpack_from("<i", idx, gid * core.IDX_REC)[0]
+        return lk != -1
+
+    def uop_occupied(gid):
+        return core.uop_hash(core.gump_path(gid)) in uop_hashes
+
+    found = []
+    aid = lo
+    while len(found) < count and aid < hi:
+        m_gid = aid + core.GUMP_MALE_BASE
+        f_gid = aid + core.GUMP_FEMALE_BASE
+        clear = (
+            not mul_occupied(m_gid) and not mul_occupied(f_gid)
+            and not uop_occupied(m_gid) and not uop_occupied(f_gid)
+            and m_gid not in gumpdef_ids and f_gid not in gumpdef_ids
+        )
+        if clear:
+            found.append(aid)
+        aid += 1
+    return found
+
+
+def print_free_anim_ids(ids, requested, lo):
+    if not ids:
+        print(f"no free anim ids found starting from {lo}")
+        return
+    print(f"{len(ids)} free anim id(s) starting from {lo} "
+          f"(gump slots clear in Gumpidx.mul, gumpartLegacyMUL.uop, "
+          f"and gump.def):")
+    print(", ".join(str(i) for i in ids))
+    if len(ids) < requested:
+        print(f"\n(asked for {requested}, only found {len(ids)} in range - "
+              "raise --hi or lower --lo if you need more)")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -247,10 +327,20 @@ def main():
     ap.add_argument("--anim", type=int, help="describe one anim id")
     ap.add_argument("--body", type=int, help="describe one body id")
     ap.add_argument("--limit", type=int, default=50, help="max --item results")
+    ap.add_argument("--free-anim", type=int, metavar="N",
+                    help="find N anim ids with clear gump slots (for "
+                         "batches of new paperdoll art) - safe to use "
+                         "together with --lo/--hi")
+    ap.add_argument("--lo", type=int, default=None,
+                    help="--free-anim search floor (default: one above "
+                         "the highest id in mobtypes.txt)")
+    ap.add_argument("--hi", type=int, default=100000,
+                    help="--free-anim search ceiling (default 100000)")
     a = ap.parse_args()
 
-    if not any([a.item, a.anim is not None, a.body is not None]):
-        ap.error("give at least one of --item / --anim / --body")
+    if not any([a.item, a.anim is not None, a.body is not None,
+               a.free_anim is not None]):
+        ap.error("give at least one of --item / --anim / --body / --free-anim")
 
     if a.item:
         hits = search_items(a.client, a.item, a.limit)
@@ -263,6 +353,16 @@ def main():
 
     if a.body is not None:
         print_body_report(describe_body(a.client, a.body))
+        print()
+
+    if a.free_anim is not None:
+        lo = a.lo
+        if lo is None:
+            mobtypes_path = core.find(a.client, "mobtypes.txt")
+            mob = core.load_mobtypes(mobtypes_path) if mobtypes_path else {}
+            lo = (max(mob.keys()) + 1) if mob else 1
+        ids = find_free_anim_ids(a.client, a.free_anim, lo=lo, hi=a.hi)
+        print_free_anim_ids(ids, a.free_anim, lo)
         print()
 
 
