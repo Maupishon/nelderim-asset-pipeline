@@ -266,9 +266,22 @@ def animframe_uop_bodies(client, lo, hi):
 
 # --- slot selection --------------------------------------------------
 
-def find_free_monster_body(client, lo, hi, anim_idx):
+def find_free_monster_body(client, lo, hi, anim_idx, mob):
     """First graphic in [lo,hi) that is:
       - absent from body.def, Bodyconv.def, AnimationFrame*.uop,
+      - absent from mobtypes.txt under ANY type (not just non-MONSTER) -
+        the client picks its anim.idx offset FORMULA from whatever type
+        mobtypes.txt already declares for a body id, regardless of what
+        we write. A body already declared EQUIPMENT/HUMAN/ANIMAL there
+        will be read at that type's own offset formula, never the flat
+        MONSTER one, no matter what bytes we write at the MONSTER offset.
+        This is not hypothetical: it happened for real on this shard -
+        an auto-suggested "free" body (900) turned out to already be
+        declared EQUIPMENT (a block of hair-related items nearby), so
+        the client rendered whatever pre-existing data lived at the
+        EQUIPMENT-formula offset instead of the new animation, with no
+        error anywhere. Only a body with NO declaration at all is safe
+        for an auto-pick to land on.
       - and whose High-group span (graphic*110) is empty in the real
         anim.idx bytes.
     Returns (body, span_start)."""
@@ -283,14 +296,16 @@ def find_free_monster_body(client, lo, hi, anim_idx):
     animframe_bodies = animframe_uop_bodies(client, lo, hi)
 
     for body in range(lo, hi):
-        if body in bodydef_bodies or body in bodyconv_bodies or body in animframe_bodies:
+        if (body in bodydef_bodies or body in bodyconv_bodies
+                or body in animframe_bodies or body in mob):
             continue
         span_start = monster_record_offset(body)
         if anim_idx.span_free(span_start, VD_RECORDS):
             return body, span_start
 
     raise Problem(f"no free monster body found in [{lo},{hi}) after "
-                  "excluding body.def / Bodyconv.def / UOP collisions")
+                  "excluding body.def / Bodyconv.def / UOP / mobtypes.txt "
+                  "collisions")
 
 
 # --- driver -------------------------------------------------------------
@@ -315,11 +330,24 @@ def run(client, vd_path, out, target_body, lo, hi, apply_changes):
     mul_size = os.path.getsize(anim_mul_path)
 
     if target_body is None:
-        target_body, span_start = find_free_monster_body(client, lo, hi, anim_idx)
+        target_body, span_start = find_free_monster_body(client, lo, hi, anim_idx, mob)
         say("SLOT", f"auto-selected body {target_body} (graphic*110 offset "
                     f"{span_start}) - clear of body.def, Bodyconv.def, "
-                    f"and AnimationFrame*.uop")
+                    f"AnimationFrame*.uop, and mobtypes.txt")
     else:
+        existing_type = mob.get(target_body)
+        if existing_type is not None and existing_type != "MONSTER":
+            raise Problem(
+                f"body {target_body} is already declared {existing_type} "
+                f"in mobtypes.txt, not MONSTER. The client picks its "
+                f"anim.idx offset FORMULA from that declared type, so it "
+                f"will read this body at the {existing_type} offset "
+                f"formula, never the flat MONSTER one - writing here would "
+                f"be silently invisible (or worse, land on and appear to "
+                f"show whatever unrelated data already exists at the "
+                f"{existing_type} offset). Pick a different body id, or "
+                f"use auto-pick (omit --body) to get one that's genuinely "
+                f"undeclared.")
         span_start = monster_record_offset(target_body)
         if not anim_idx.span_free(span_start, VD_RECORDS):
             say("WARN", f"body {target_body}'s computed span is not empty "
