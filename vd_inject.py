@@ -264,40 +264,70 @@ def animframe_uop_bodies(client, lo, hi):
     return out
 
 
+# --- centralized collision check, used by BOTH the auto-pick loop and
+# the explicit --body path, so they can never again drift apart the way
+# they just did (auto-pick checked all four sources; explicit --body
+# only checked mobtypes.txt after the previous fix, silently missing
+# body.def/Bodyconv.def/AnimationFrame*.uop for a manually-typed id). ---
+
+def body_collision_reasons(client, body, mob, bodydef_bodies=None,
+                           bodyconv_bodies=None, animframe_bodies=None):
+    """Returns a list of plain-language reasons this body is unsafe to
+    use as a MONSTER target, checking all four known sources. Empty list
+    means clean. The three *_bodies sets can be pre-loaded/pre-scanned
+    and passed in to avoid re-reading the same files on every call (used
+    by the auto-pick scan, which may check hundreds of candidates); left
+    None, each is computed fresh for just this one body - fine for a
+    single explicit --body check, too slow to do per-candidate in a
+    scan loop."""
+    reasons = []
+
+    if bodydef_bodies is None:
+        bd = find(client, "body.def")
+        bodydef_bodies = load_bodydef_bodies(bd) if bd else set()
+    if body in bodydef_bodies:
+        reasons.append("body.def redirects this id elsewhere - the client "
+                       "never reaches anim.idx for it")
+
+    if bodyconv_bodies is None:
+        bc = find(client, "Bodyconv.def")
+        bodyconv_bodies = load_bodyconv_bodies(bc) if bc else set()
+    if body in bodyconv_bodies:
+        reasons.append("Bodyconv.def claims this id (legacy multi-file "
+                       "anim routing)")
+
+    if animframe_bodies is None:
+        animframe_bodies = animframe_uop_bodies(client, body, body + 1)
+    if body in animframe_bodies:
+        reasons.append("AnimationFrame*.uop already has this body - UOP "
+                       "beats anim.mul, a write here would be ignored")
+
+    existing_type = mob.get(body)
+    if existing_type is not None and existing_type != "MONSTER":
+        reasons.append(
+            f"mobtypes.txt already declares this body {existing_type}, "
+            f"not MONSTER - the client uses the {existing_type} offset "
+            f"formula for it, never the flat MONSTER one")
+
+    return reasons
+
+
 # --- slot selection --------------------------------------------------
 
 def find_free_monster_body(client, lo, hi, anim_idx, mob):
-    """First graphic in [lo,hi) that is:
-      - absent from body.def, Bodyconv.def, AnimationFrame*.uop,
-      - absent from mobtypes.txt under ANY type (not just non-MONSTER) -
-        the client picks its anim.idx offset FORMULA from whatever type
-        mobtypes.txt already declares for a body id, regardless of what
-        we write. A body already declared EQUIPMENT/HUMAN/ANIMAL there
-        will be read at that type's own offset formula, never the flat
-        MONSTER one, no matter what bytes we write at the MONSTER offset.
-        This is not hypothetical: it happened for real on this shard -
-        an auto-suggested "free" body (900) turned out to already be
-        declared EQUIPMENT (a block of hair-related items nearby), so
-        the client rendered whatever pre-existing data lived at the
-        EQUIPMENT-formula offset instead of the new animation, with no
-        error anywhere. Only a body with NO declaration at all is safe
-        for an auto-pick to land on.
-      - and whose High-group span (graphic*110) is empty in the real
-        anim.idx bytes.
+    """First graphic in [lo,hi) that is clean on all four collision
+    sources (see body_collision_reasons) AND whose High-group span
+    (graphic*110) is empty in the real anim.idx bytes.
     Returns (body, span_start)."""
-    bodydef_bodies = set()
     bd = find(client, "body.def")
-    if bd:
-        bodydef_bodies = load_bodydef_bodies(bd)
-    bodyconv_bodies = set()
+    bodydef_bodies = load_bodydef_bodies(bd) if bd else set()
     bc = find(client, "Bodyconv.def")
-    if bc:
-        bodyconv_bodies = load_bodyconv_bodies(bc)
+    bodyconv_bodies = load_bodyconv_bodies(bc) if bc else set()
     animframe_bodies = animframe_uop_bodies(client, lo, hi)
 
     for body in range(lo, hi):
-        if (body in bodydef_bodies or body in bodyconv_bodies
-                or body in animframe_bodies or body in mob):
+        if body_collision_reasons(client, body, mob, bodydef_bodies,
+                                  bodyconv_bodies, animframe_bodies):
             continue
         span_start = monster_record_offset(body)
         if anim_idx.span_free(span_start, VD_RECORDS):
@@ -335,19 +365,14 @@ def run(client, vd_path, out, target_body, lo, hi, apply_changes):
                     f"{span_start}) - clear of body.def, Bodyconv.def, "
                     f"AnimationFrame*.uop, and mobtypes.txt")
     else:
-        existing_type = mob.get(target_body)
-        if existing_type is not None and existing_type != "MONSTER":
+        reasons = body_collision_reasons(client, target_body, mob)
+        if reasons:
+            bullets = "\n  - ".join(reasons)
             raise Problem(
-                f"body {target_body} is already declared {existing_type} "
-                f"in mobtypes.txt, not MONSTER. The client picks its "
-                f"anim.idx offset FORMULA from that declared type, so it "
-                f"will read this body at the {existing_type} offset "
-                f"formula, never the flat MONSTER one - writing here would "
-                f"be silently invisible (or worse, land on and appear to "
-                f"show whatever unrelated data already exists at the "
-                f"{existing_type} offset). Pick a different body id, or "
-                f"use auto-pick (omit --body) to get one that's genuinely "
-                f"undeclared.")
+                f"body {target_body} is not safe to use:\n  - {bullets}\n"
+                f"Pick a different body id, or use auto-pick (omit "
+                f"--body) to get one that's genuinely clean on all four "
+                f"fronts.")
         span_start = monster_record_offset(target_body)
         if not anim_idx.span_free(span_start, VD_RECORDS):
             say("WARN", f"body {target_body}'s computed span is not empty "
