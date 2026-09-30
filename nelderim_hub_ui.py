@@ -17,7 +17,39 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
-MUTED, OKC, BADC, ACC = "#5a6570", "#187a2f", "#a8322d", "#2b6cb0"
+MUTED, OKC, BADC, ACC = "muted", "ok", "bad", "acc"      # status levels -> ttk styles Muted/Ok/Bad/Acc.TLabel
+
+# palette taken from Levy's vd-viewer (warm neutral + amber accent, light and dark)
+THEMES = {
+    "light": dict(bg="#eef0ee", panel="#f8f9f7", line="#d3d8d2", fg="#1d2420", muted="#5d6a62", accent="#a4661c",
+                  accent_fg="#ffffff", btn="#ffffff", btnline="#bcc4bb", soft="#f2e2cb", stage="#26302a", stage_fg="#f2e2cb", ok="#2f7a45", bad="#a8322d"),
+    "dark": dict(bg="#151a17", panel="#1c2320", line="#2f3a34", fg="#e3e8e4", muted="#93a198", accent="#e0a458",
+                 accent_fg="#1d2420", btn="#28322d", btnline="#4b5d52", soft="#3a2d1c", stage="#0e1311", stage_fg="#e0a458", ok="#7fbf8f", bad="#f08a84"),
+}
+T = dict(THEMES["light"])
+REG = {"canvas": [], "menu": [], "tk": []}       # widgets that ttk styles cannot reach: recolored on theme change
+
+
+def sty(level):
+    return {"muted": "Muted.TLabel", "ok": "Ok.TLabel", "bad": "Bad.TLabel", "acc": "Acc.TLabel"}.get(level, "Status.TLabel")
+
+
+def system_theme():
+    try:
+        import winreg
+        k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+        return "light" if winreg.QueryValueEx(k, "AppsUseLightTheme")[0] else "dark"
+    except Exception:  # noqa: BLE001
+        return "light"
+
+
+def pick_font(root, names, default):
+    from tkinter import font as tkfont
+    have = {f.lower(): f for f in tkfont.families(root)}
+    for n in names:
+        if n.lower() in have:
+            return have[n.lower()]
+    return default
 
 # known error text -> plain-language advice
 HINTS = [
@@ -93,13 +125,16 @@ class Tip:
         self.tw = tw = tk.Toplevel(self.w)
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{self.w.winfo_rootx() + 16}+{self.w.winfo_rooty() + self.w.winfo_height() + 4}")
-        tk.Label(tw, text=self.text, justify="left", background="#fffbe6", relief="solid", borderwidth=1,
+        tk.Label(tw, text=self.text, justify="left", background=T["soft"], foreground=T["fg"], relief="solid", borderwidth=1,
                  wraplength=380, padx=6, pady=4).pack()
 
 
 def popup(widget, items):
     """Right-click menu. items: [(label, callable) | None for a separator]."""
     m = tk.Menu(widget, tearoff=0)
+    REG["menu"].append(m)
+    m.configure(background=T["panel"], foreground=T["fg"], activebackground=T["soft"], activeforeground=T["fg"],
+                borderwidth=1, relief="solid")
     for it in items:
         if it is None:
             m.add_separator()
@@ -122,26 +157,27 @@ class Step(ttk.LabelFrame):
     def __init__(self, parent, num, title, text):
         super().__init__(parent, text=f"  Krok {num}: {title}  ", padding=10)
         self.pack(fill="x", padx=10, pady=6)
-        ttk.Label(self, text=text, wraplength=700, justify="left", foreground=MUTED).pack(anchor="w")
+        ttk.Label(self, text=text, wraplength=700, justify="left", style=sty(MUTED)).pack(anchor="w")
         self.body = ttk.Frame(self)
         self.body.pack(fill="x", pady=(6, 0))
         self.result = ttk.Label(self, text="", wraplength=700, justify="left")
         self.result.pack(anchor="w", pady=(4, 0))
 
     def ok(self, msg):
-        self.result.configure(text="✓ " + msg, foreground=OKC)
+        self.result.configure(text="✓ " + msg, style=sty(OKC))
 
     def bad(self, msg):
-        self.result.configure(text="✗ " + msg, foreground=BADC)
+        self.result.configure(text="✗ " + msg, style=sty(BADC))
 
     def info(self, msg):
-        self.result.configure(text=msg, foreground=MUTED)
+        self.result.configure(text=msg, style=sty(MUTED))
 
 
 class Scroll(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
-        self.canvas = tk.Canvas(self, highlightthickness=0)
+        self.canvas = tk.Canvas(self, highlightthickness=0, background=T["panel"])
+        REG["canvas"].append(self.canvas)
         bar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.inner = ttk.Frame(self.canvas)
         self.inner.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
@@ -167,46 +203,150 @@ class App:
         self.cfg = H.load_config()
         self.root = tk.Tk()
         self.root.title("Nelderim Hub – kreator")
-        self.root.geometry("1120x800")
+        self.root.geometry("1180x820")
         self.q: queue.Queue = queue.Queue()
         self.busy = False
         self.server = None
         self.last_lab = ""
         self.pages: dict[str, tuple] = {}
         self.current = None
+        self.current_key = "start"
+        self.navbtns: dict[str, ttk.Button] = {}
+        pref = self.cfg.get("theme", "auto")
+        self.theme = system_theme() if pref == "auto" else pref
+        self.apply_theme(first=True)
         self._build_shell()
+        self.apply_theme()
         self.root.after(80, self._pump)
         self.root.protocol("WM_DELETE_WINDOW", self._close)
+
+    # ------------------------------------------------------------ theme
+    def apply_theme(self, first=False):
+        r = self.root
+        T.update(THEMES[self.theme])
+        body = pick_font(r, ["IBM Plex Sans", "Segoe UI", "Helvetica Neue", "DejaVu Sans", "Arial"], "TkDefaultFont")
+        disp = pick_font(r, ["Alegreya Sans SC", "Trebuchet MS", "Segoe UI Semibold", "DejaVu Sans"], body)
+        mono = pick_font(r, ["IBM Plex Mono", "Cascadia Mono", "Consolas", "DejaVu Sans Mono"], "TkFixedFont")
+        self.fonts = dict(body=body, disp=disp, mono=mono)
+        from tkinter import font as tkfont
+        for n in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont"):
+            tkfont.nametofont(n).configure(family=body, size=10)
+        st = ttk.Style(r)
+        st.theme_use("clam")
+        bg, pn, ln, fg, mu, ac = T["bg"], T["panel"], T["line"], T["fg"], T["muted"], T["accent"]
+        r.configure(background=bg)
+        st.configure(".", background=pn, foreground=fg, bordercolor=ln, lightcolor=pn, darkcolor=pn, troughcolor=bg,
+                     focuscolor=ac, fieldbackground=pn, insertcolor=fg, font=(body, 10))
+        st.configure("TFrame", background=pn)
+        st.configure("TLabel", background=pn, foreground=fg)
+        for name, col in (("Muted", mu), ("Ok", T["ok"]), ("Bad", T["bad"]), ("Acc", ac), ("Status", fg)):
+            st.configure(f"{name}.TLabel", background=pn, foreground=col)
+        st.configure("Status.TLabel", background=bg, foreground=fg)
+        st.configure("Title.TLabel", font=(disp, 20, "bold"), foreground=fg)
+        st.configure("CardTitle.TLabel", font=(disp, 13, "bold"), foreground=fg)
+        st.configure("TLabelframe", background=pn, bordercolor=ln, relief="solid", borderwidth=1)
+        st.configure("TLabelframe.Label", background=pn, foreground=mu, font=(disp, 11, "bold"))
+        st.configure("Card.TFrame", background=pn, bordercolor=ln, relief="solid", borderwidth=1)
+        st.configure("CardHot.TFrame", background=pn, bordercolor=ac, relief="solid", borderwidth=1)
+        st.configure("Nav.TFrame", background=bg)
+        st.configure("TButton", background=T["btn"], foreground=fg, bordercolor=T["btnline"], relief="flat",
+                     padding=(10, 5), borderwidth=1, lightcolor=T["btn"], darkcolor=T["btn"])
+        st.map("TButton", bordercolor=[("active", ac), ("focus", ac)], background=[("active", T["btn"]), ("disabled", bg)],
+               foreground=[("disabled", mu)])
+        st.configure("Big.TButton", background=ac, foreground=T["accent_fg"], bordercolor=ac, padding=(14, 8),
+                     font=(body, 10, "bold"))
+        st.map("Big.TButton", background=[("active", ac), ("pressed", ac)], bordercolor=[("active", fg)],
+               foreground=[("disabled", mu)])
+        st.configure("Nav.TButton", background=bg, foreground=fg, bordercolor=bg, borderwidth=0, padding=(12, 8),
+                     anchor="w", relief="flat")
+        st.map("Nav.TButton", background=[("active", T["soft"])], bordercolor=[("active", T["soft"])])
+        st.configure("NavSel.TButton", background=T["soft"], foreground=ac, bordercolor=ac, borderwidth=0,
+                     padding=(12, 8), anchor="w", relief="flat", font=(body, 10, "bold"))
+        st.map("NavSel.TButton", background=[("active", T["soft"])], bordercolor=[("active", ac)])
+        st.configure("TEntry", fieldbackground=T["btn"], background=T["btn"], foreground=fg, bordercolor=T["btnline"], padding=4)
+        st.map("TEntry", bordercolor=[("focus", ac)])
+        st.configure("TCombobox", fieldbackground=T["btn"], background=T["btn"], foreground=fg, bordercolor=T["btnline"], arrowcolor=mu,
+                     padding=4)
+        st.map("TCombobox", fieldbackground=[("readonly", T["btn"])], bordercolor=[("focus", ac)],
+               foreground=[("readonly", fg)], selectbackground=[("readonly", T["btn"])], selectforeground=[("readonly", fg)])
+        r.option_add("*TCombobox*Listbox.background", pn)
+        r.option_add("*TCombobox*Listbox.foreground", fg)
+        r.option_add("*TCombobox*Listbox.selectBackground", T["soft"])
+        r.option_add("*TCombobox*Listbox.selectForeground", ac)
+        st.configure("TCheckbutton", background=pn, foreground=fg, indicatorcolor=pn)
+        st.map("TCheckbutton", indicatorcolor=[("selected", ac)], background=[("active", pn)])
+        st.configure("Vertical.TScrollbar", background=ln, troughcolor=bg, bordercolor=bg, arrowcolor=mu)
+        st.configure("TNotebook", background=pn)
+        for c in REG["canvas"]:
+            c.configure(background=pn)
+        for m in REG["menu"]:
+            m.configure(background=pn, foreground=fg, activebackground=T["soft"], activeforeground=fg)
+        for w, kind in REG["tk"]:
+            if kind == "header":
+                w.configure(background=T["stage"])
+            elif kind == "title":
+                w.configure(background=T["stage"], foreground=T["stage_fg"], font=(disp, 18, "bold"))
+            elif kind == "sub":
+                w.configure(background=T["stage"], foreground="#9fb0a6", font=(body, 9))
+            elif kind == "toggle":
+                w.configure(background=T["stage"], foreground=T["stage_fg"], activebackground=T["stage"],
+                            activeforeground="#ffffff")
+            elif kind == "log":
+                w.configure(background=T["stage"], foreground="#d7e2db", insertbackground="#d7e2db",
+                            font=(mono, 9))
+        if not first:
+            self.show(self.current_key)
+
+    def toggle_theme(self):
+        self.theme = "dark" if self.theme == "light" else "light"
+        self.cfg["theme"] = self.theme
+        self.H.save_config(self.cfg)
+        self.apply_theme()
 
     # ------------------------------------------------------------ shell
     def _build_shell(self):
         r = self.root
-        style = ttk.Style()
-        style.configure("Nav.TButton", padding=8, anchor="w")
-        style.configure("Big.TButton", padding=10)
-        style.configure("Title.TLabel", font=("Segoe UI", 16, "bold"))
         r.columnconfigure(1, weight=1)
-        r.rowconfigure(0, weight=1)
-        nav = ttk.Frame(r, padding=8)
-        nav.grid(row=0, column=0, sticky="ns")
+        r.rowconfigure(1, weight=1)
+        head = tk.Frame(r, padx=16, pady=10)
+        head.grid(row=0, column=0, columnspan=2, sticky="ew")
+        REG["tk"].append((head, "header"))
+        box = tk.Frame(head)
+        box.pack(side="left")
+        REG["tk"].append((box, "header"))
+        t = tk.Label(box, text="Nelderim Hub", anchor="w")
+        t.pack(anchor="w")
+        REG["tk"].append((t, "title"))
+        sub = tk.Label(box, text="animacje ubrań i broni do Ultima Online – krok po kroku", anchor="w")
+        sub.pack(anchor="w")
+        REG["tk"].append((sub, "sub"))
+        tg = tk.Button(head, text="◐  jasny / ciemny", relief="flat", borderwidth=0, cursor="hand2",
+                       command=self.toggle_theme)
+        tg.pack(side="right")
+        REG["tk"].append((tg, "toggle"))
+        Tip(tg, "Przełącz jasny / ciemny motyw.")
+        nav = ttk.Frame(r, padding=(8, 10), style="Nav.TFrame")
+        nav.grid(row=1, column=0, sticky="ns")
         self.content = ttk.Frame(r)
-        self.content.grid(row=0, column=1, sticky="nsew")
+        self.content.grid(row=1, column=1, sticky="nsew")
         self.content.columnconfigure(0, weight=1)
         self.content.rowconfigure(0, weight=1)
         for key, label in [("start", "🏠  Start"), ("cloth", "👕  Ubranie / szata"), ("weapon", "⚔  Broń"),
                            ("gump", "🖼  Obrazek na lalce (gump)"), ("pack", "📦  Spakuj do .vd"),
                            ("tools", "🔎  Podgląd i narzędzia"), ("set", "🧩  Zestaw z arkusza"),
                            ("patch", "🛠  Dodawanie do klienta"), ("settings", "⚙  Ustawienia"), ("help", "❓  Pomoc")]:
-            b = ttk.Button(nav, text=label, style="Nav.TButton", width=28, command=lambda k=key: self.show(k))
-            b.pack(fill="x", pady=2)
-        bottom = ttk.Frame(r)
-        bottom.grid(row=1, column=0, columnspan=2, sticky="ew")
+            b = ttk.Button(nav, text=label, style="Nav.TButton", width=26, command=lambda k=key: self.show(k))
+            b.pack(fill="x", pady=1)
+            self.navbtns[key] = b
+        bottom = ttk.Frame(r, style="Nav.TFrame")
+        bottom.grid(row=2, column=0, columnspan=2, sticky="ew")
         bottom.columnconfigure(0, weight=1)
-        self.status = ttk.Label(bottom, text="Gotowy.", padding=(10, 4))
+        self.status = ttk.Label(bottom, text="Gotowy.", padding=(12, 6), style="Status.TLabel")
         self.status.grid(row=0, column=0, sticky="w")
         self.log_btn = ttk.Button(bottom, text="Szczegóły ▸", command=self._toggle_log)
-        self.log_btn.grid(row=0, column=1, padx=8, pady=2)
-        self.log = scrolledtext.ScrolledText(r, height=11, state="disabled", font=("Consolas", 9))
+        self.log_btn.grid(row=0, column=1, padx=10, pady=4)
+        self.log = scrolledtext.ScrolledText(r, height=11, state="disabled", relief="flat", borderwidth=0, padx=8, pady=6)
+        REG["tk"].append((self.log, "log"))
         self.log_shown = False
         popup(self.log, [("Kopiuj", lambda: self.log.event_generate("<<Copy>>")),
                          ("Zaznacz wszystko", lambda: self.log.tag_add("sel", "1.0", "end")),
@@ -215,7 +355,7 @@ class App:
     def _toggle_log(self, force=None):
         show = (not self.log_shown) if force is None else force
         if show and not self.log_shown:
-            self.log.grid(row=2, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 8))
+            self.log.grid(row=3, column=0, columnspan=2, sticky="ew")
         elif not show and self.log_shown:
             self.log.grid_remove()
         self.log_shown = show
@@ -242,7 +382,7 @@ class App:
             while True:
                 t = self.q.get_nowait()
                 if isinstance(t, tuple) and t[0] == "status":
-                    self.status.configure(text=t[1], foreground=t[2] or "")
+                    self.status.configure(text=t[1], style=sty(t[2]))
                 elif isinstance(t, tuple) and t[0] == "call":
                     t[1]()
                 else:
@@ -269,6 +409,9 @@ class App:
         f = self.pages[key][0]
         f.grid()
         self.current = f
+        self.current_key = key
+        for k, b in self.navbtns.items():
+            b.configure(style="NavSel.TButton" if k == key else "Nav.TButton")
         if key == "start":
             self.refresh_start()
 
@@ -420,7 +563,7 @@ class App:
 
     def head(self, parent, title, text):
         ttk.Label(parent, text=title, style="Title.TLabel").pack(anchor="w", padx=12, pady=(12, 2))
-        ttk.Label(parent, text=text, wraplength=700, justify="left", foreground=MUTED).pack(anchor="w", padx=12,
+        ttk.Label(parent, text=text, wraplength=700, justify="left", style=sty(MUTED)).pack(anchor="w", padx=12,
                                                                                             pady=(0, 6))
 
     def lab_dir(self, name) -> Path:
@@ -598,11 +741,20 @@ class App:
                   "Podgląd .vd, podgląd pracy w przeglądarce, wyszukiwanie ItemID, UOFiddler.", "tools"),
                  ("⚙  Ustawić foldery (pierwszy raz)", "Gdzie leży klient gry, toolkit i inne programy.", "settings")]
         for i, (t, d, k) in enumerate(cards):
-            f = ttk.Frame(grid, padding=4)
-            f.grid(row=i // 2, column=i % 2, sticky="nsew", padx=6, pady=6)
             grid.columnconfigure(i % 2, weight=1, uniform="c")
-            ttk.Button(f, text=t, style="Big.TButton", command=lambda k=k: self.show(k)).pack(fill="x")
-            ttk.Label(f, text=d, wraplength=380, foreground=MUTED, justify="left").pack(anchor="w", pady=(2, 0))
+            card = ttk.Frame(grid, style="Card.TFrame", padding=14)
+            card.grid(row=i // 2, column=i % 2, sticky="nsew", padx=6, pady=6)
+            ttk.Label(card, text=t, style="CardTitle.TLabel", wraplength=330, justify="left").pack(anchor="w")
+            ttk.Label(card, text=d, wraplength=330, style=sty(MUTED), justify="left").pack(anchor="w", pady=(4, 0))
+
+            def hot(_e, c=card, on=True):
+                c.configure(style="CardHot.TFrame" if on else "Card.TFrame")
+
+            for w in [card, *card.winfo_children()]:
+                w.bind("<Enter>", hot, add="+")
+                w.bind("<Leave>", lambda e, c=card: hot(e, c, False), add="+")
+                w.bind("<Button-1>", lambda e, k=k: self.show(k), add="+")
+                w.configure(cursor="hand2")
 
     def refresh_start(self):
         H = self.H
@@ -616,15 +768,15 @@ class App:
             allok &= ok
             r = ttk.Frame(self.pre)
             r.pack(fill="x")
-            ttk.Label(r, text=("✓ " if ok else "✗ ") + PL[k], foreground=OKC if ok else BADC,
+            ttk.Label(r, text=("✓ " if ok else "✗ ") + PL[k], style=sty(OKC if ok else BADC),
                       width=48).pack(side="left")
             if not ok:
                 ttk.Button(r, text="Ustaw", command=lambda: self.show("settings")).pack(side="left")
         if H.path_ok("toolkit", self.cfg.get("toolkit")) and not H.toolkit_has_axisfit(self.cfg):
             ttk.Label(self.pre, text="⚠ Toolkit ma starą wersję skryptów (bez obsługi broni). Skopiuj paczkę Levy'ego v2.",
-                      foreground=BADC, wraplength=760).pack(anchor="w")
+                      style=sty(BADC), wraplength=700).pack(anchor="w")
         if allok:
-            ttk.Label(self.pre, text="Wszystko gotowe. Wybierz zadanie poniżej. 👇", foreground=OKC).pack(anchor="w")
+            ttk.Label(self.pre, text="Wszystko gotowe. Wybierz zadanie poniżej. 👇", style=sty(OKC)).pack(anchor="w")
 
     def page_settings(self, p):
         H = self.H
@@ -655,7 +807,7 @@ class App:
                     "Szuka folderów obok tego programu i w katalogu domowym.")
         self.button(b, "Pokaż, gdzie zapisano ustawienia",
                     lambda: messagebox.showinfo("Plik ustawień", str(H.CONFIG_FILE)))
-        self.st_note = ttk.Label(p, text="", foreground=MUTED, wraplength=700)
+        self.st_note = ttk.Label(p, text="", style=sty(MUTED), wraplength=700)
         self.st_note.pack(anchor="w", padx=12)
         self._paths_status()
         for v in self.pv.values():
@@ -667,7 +819,7 @@ class App:
             ok = H.path_ok(k, self.pv[k].get().strip())
             req = H.PATHS[k][3]
             lab.configure(text="OK" if ok else ("brak" if req else "-"),
-                          foreground=OKC if ok else (BADC if req else MUTED))
+                          style=sty(OKC if ok else (BADC if req else MUTED)))
 
     def _autodetect(self):
         H = self.H
@@ -942,7 +1094,7 @@ class App:
                     or messagebox.showinfo("Porównanie", "Nie ma jeszcze obrazka – najpierw kliknij „Zrób gump”."))
         self.button(s4.body, "Otwórz folder", lambda: self.open_folder(outdir()))
         ttk.Label(s4.body, text="").pack()
-        ttk.Label(p, text="Import: UOFiddler → Gumps → Replace (lub Insert, jeśli gumpu nie ma).", foreground=MUTED
+        ttk.Label(p, text="Import: UOFiddler → Gumps → Replace (lub Insert, jeśli gumpu nie ma).", style=sty(MUTED)
                   ).pack(anchor="w", padx=14, pady=4)
 
     # ---- pack (any lab)
