@@ -1,6 +1,7 @@
 name: build-exe
 on:
   workflow_dispatch:
+  pull_request:
   push:
     tags: ['v*']
 jobs:
