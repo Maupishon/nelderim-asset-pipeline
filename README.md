@@ -10,51 +10,61 @@ against the actual ClassicUO client source, or verified end-to-end on a
 live server. Where that history matters for correctness, it's documented
 in the code, not just in a commit message.
 
-## For non-technical users
+## Jak uruchomić (dla początkujących)
 
-Never used a developer tool before? Start here:
+Są dwa programy. Oba uruchamiasz dwuklikiem.
 
-1. Download this repo: on GitHub, click the green **Code** button →
-   **Download ZIP**, then unzip it somewhere (or `git clone` it if you
-   already know how).
-2. **Windows**: double-click **`run_nelderim.bat`**.
-   **Linux/macOS**: open a terminal in the unzipped folder and run
-   `./run_nelderim.sh` (or double-click it, if your file manager runs
-   `.sh` files - not all do by default).
-   - The first time, it checks whether Python is installed and installs
-     one small missing piece (Pillow) automatically. If Python itself is
-     missing, it will tell you exactly what to install and how - on
-     Linux, the GUI's `tkinter` window toolkit is also checked, since
-     many distros ship it as a separate package from Python itself.
-   - If something goes wrong, the window/terminal stays open so you can
-     read the message - it won't just vanish.
-3. The app opens with a **Welcome** panel explaining what it does. Follow
-   it: point the tool at your UO client folder, then use **Dry run**
-   (always safe, changes nothing) before ever clicking **Apply**.
+| Program | Do czego | Plik startowy |
+|---|---|---|
+| **Nelderim Hub** | Zmiana wyglądu ubrań i broni, gumpy, pakowanie do `.vd` – kreator krok po kroku, wszystko w jednym oknie | `run_hub.bat` (Windows) / `run_hub.sh` (Linux, macOS) albo `NelderimHub.exe` |
+| **Nelderim Pipeline** | Dodawanie grafik, gumpów i animacji potworów do klienta gry (z receptury JSON) | `run_nelderim.bat` (Windows) / `run_nelderim.sh` (Linux, macOS) |
 
-That's the whole setup. Everything below is more detailed reference
-material for developers/CLI users - you don't need it to get started.
+Hub ma też zakładkę „Dodawanie do klienta", która robi to samo co Pipeline, więc do zwykłej pracy wystarczy sam Hub.
 
-> **Paths:** every path in this README (`C:\Nelderim\...`) is only an example.
-> Use your own client folder in `--client`. `CLAUDE.md` lists the maintainer's
-> local layout (drive `F:`); on any other machine Claude Code asks for your paths.
+### 1. Co musisz mieć
+- **Python 3.10 lub nowszy** – pobierz z <https://www.python.org/downloads/>. Przy instalacji zaznacz **„Add Python to PATH"**.
+- **Kopię klienta gry** (folder z plikami `anim.mul`, `tiledata.mul`, `*.def`). **Pracuj zawsze na kopii**, nigdy na jedynym egzemplarzu.
+- Dla Huba dodatkowo **SpriteMotion-UO-Toolkit** z wgraną paczką skryptów Levy'ego (`SpriteMotion_skrypty_Nelderim_1.zip` rozpakowana do folderu toolkitu, z nadpisaniem plików). W folderze toolkitu warto mieć środowisko `.venv` (`python -m venv .venv`, potem `.venv\Scripts\activate` i `python -m pip install -e ".[test]"` oraz `python -m pip install scipy`).
 
-## Hub (all tools in one window)
+### 2. Pobranie
+Na stronie repozytorium kliknij zielony przycisk **Code → Download ZIP** i rozpakuj do dowolnego folderu. (Albo `git clone`, jeśli wiesz jak.)
 
-`run_hub.bat` (Windows) / `./run_hub.sh` (Linux/macOS), or `python nelderim_hub.py`.
-On first run it asks where each tool lives (UO client, SpriteMotion toolkit,
-this pipeline, output, optional: vd-viewer, UOFiddler, ServUO) and saves the
-answers per user in `~/.nelderim_hub.json`. Beginner-friendly Polish UI: a Start screen with plain-language tasks
-(clothes, weapon, paperdoll gump, pack to .vd, preview/tools, sheet set, patch, settings, help), step-by-step
-wizards with explanations, hover tooltips, right-click menus, automatic work folders and plain-language hints
-for known errors (auto backup of .vd, converter self-check, dry run first). It only runs the
-existing scripts; no format logic lives in the hub.
+### 3. Uruchomienie Huba
+**Sposób A – plik `.exe` (Windows, bez instalowania czegokolwiek poza Pythonem):**
+1. Wejdź w zakładkę **Actions** tego repozytorium → workflow **build-exe** → ostatni zielony przebieg → na dole pobierz **NelderimHub-windows** (to zip w zipie, rozpakuj oba).
+2. Umieść `NelderimHub.exe` **w tym samym folderze co skrypty** (`nelderim_patch.py` itd. – w paczce leżą obok siebie).
+3. Dwuklik `NelderimHub.exe`. Jeśli Windows ostrzeże o nieznanym wydawcy: **Więcej informacji → Uruchom mimo to** (program nie jest podpisany).
 
-Windows .exe: run `build_exe.bat` (needs Python + internet once) or use the
-GitHub Actions workflow "build-exe" (Actions tab -> Run workflow -> download the
-`NelderimHub-windows` artifact). The exe is only a launcher: keep it in the same
-folder as the pipeline scripts, and have Python 3.10+ on PATH (the toolkit/pipeline
-scripts are run with it; the toolkit's own `.venv` is used when present).
+**Sposób B – bez `.exe`:** w folderze repozytorium dwuklik `run_hub.bat` (Windows) albo `./run_hub.sh` (Linux/macOS). Na Linuksie potrzebny jest jeszcze pakiet `tkinter` (`sudo apt install python3-tk`).
+
+**Pierwsze uruchomienie:** Hub zapyta o foldery: klient UO, toolkit SpriteMotion, folder wyników (i opcjonalnie UOFiddler, ServUO, `vd-viewer.html`). Możesz kliknąć **Wykryj automatycznie** albo wskazać ręcznie – zielone „OK" oznacza poprawny folder. Ustawienia zapisują się w `~/.nelderim_hub.json` (na Windowsie w Twoim folderze użytkownika), więc na innym komputerze zapyta od nowa.
+
+**Praca:** na ekranie **Start** wybierz zadanie (ubranie, broń, gump…) i idź po kolei od kroku 1. Każdy krok ma opis, a po najechaniu myszą na pole pojawia się podpowiedź. Najpierw buduj kilka akcji na próbę, oglądaj podgląd w przeglądarce, dopiero potem wszystkie 35. Wynik pakujesz do `.vd` i importujesz w UOFiddlerze (na kopii klienta).
+
+Przycisk **jasny / ciemny** na górze przełącza motyw. Pełny zapis działania programu jest pod przyciskiem **Szczegóły** na dole.
+
+### 4. Uruchomienie Nelderim Pipeline (samodzielnie)
+1. Dwuklik `run_nelderim.bat` (Windows) albo `./run_nelderim.sh` (Linux/macOS).
+2. Za pierwszym razem skrypt sprawdzi Pythona i sam doinstaluje bibliotekę Pillow. Gdy coś pójdzie źle, okno zostaje otwarte i wyświetla wyjaśnienie.
+3. W oknie wskaż folder klienta gry, dodaj pozycje do receptury i kliknij **Dry run** (na sucho – nic nie zapisuje). Dopiero po sprawdzeniu wyniku kliknij **Apply**.
+
+### 5. Gdy coś nie działa
+- Okno się nie otwiera / „Python not found" → zainstaluj Pythona z zaznaczonym „Add Python to PATH".
+- Komunikat o brakującym module (`numpy`, `PIL`, `scipy`) → w folderze toolkitu: `.venv\Scripts\activate`, potem `python -m pip install numpy pillow scipy`.
+- Hub pisze, że toolkit ma starą wersję skryptów → rozpakuj paczkę Levy'ego v2 do folderu toolkitu z nadpisaniem.
+- Cokolwiek innego → kliknij **Szczegóły** na dole okna Huba i wklej treść błędu osobie, która Ci pomaga.
+
+> **Ścieżki:** wszystkie ścieżki w dalszej części tego README (`C:\Nelderim\...`) to tylko przykłady –
+> użyj własnych. `CLAUDE.md` opisuje układ folderów autora (dysk `F:`); na innym komputerze Claude Code
+> zapyta Cię o ścieżki.
+
+### English summary
+Two entry points: **Nelderim Hub** (`run_hub.bat` / `./run_hub.sh` / `NelderimHub.exe`, all-in-one Polish wizard
+UI for clothes, weapons, paperdoll gumps and `.vd` export; asks for your folders on first run and stores them in
+`~/.nelderim_hub.json`) and **Nelderim Pipeline** (`run_nelderim.bat` / `./run_nelderim.sh`, patches a client
+copy from a JSON recipe; dry run first). Needs Python 3.10+; the Hub also needs SpriteMotion-UO-Toolkit with
+Levy's v2 overlay. The Windows exe is built by the `build-exe` GitHub Action (artifact `NelderimHub-windows`) or
+locally with `build_exe.bat`. Always work on a COPY of the client.
 
 ## Requirements
 
