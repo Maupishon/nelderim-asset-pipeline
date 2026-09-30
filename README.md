@@ -35,6 +35,10 @@ Never used a developer tool before? Start here:
 That's the whole setup. Everything below is more detailed reference
 material for developers/CLI users - you don't need it to get started.
 
+> **Paths:** every path in this README (`C:\Nelderim\...`) is only an example.
+> Use your own client folder in `--client`. `CLAUDE.md` lists the maintainer's
+> local layout (drive `F:`); on any other machine Claude Code asks for your paths.
+
 ## Requirements
 
 - Python 3.10+ (tested on the Windows client install)
