@@ -39,6 +39,15 @@ material for developers/CLI users - you don't need it to get started.
 > Use your own client folder in `--client`. `CLAUDE.md` lists the maintainer's
 > local layout (drive `F:`); on any other machine Claude Code asks for your paths.
 
+## Hub (all tools in one window)
+
+`run_hub.bat` (Windows) / `./run_hub.sh` (Linux/macOS), or `python nelderim_hub.py`.
+On first run it asks where each tool lives (UO client, SpriteMotion toolkit,
+this pipeline, output, optional: vd-viewer, UOFiddler, ServUO) and saves the
+answers per user in `~/.nelderim_hub.json`. Tabs: Paths, Outfit set, Single
+item, Pack to .vd, Viewers/tools, Pipeline (dry run first). It only runs the
+existing scripts; no format logic lives in the hub.
+
 ## Requirements
 
 - Python 3.10+ (tested on the Windows client install)

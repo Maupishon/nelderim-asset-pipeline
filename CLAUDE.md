@@ -104,3 +104,7 @@ Fakty techniczne z kodu nakładki:
 - Akcje i kierunki jak w `.vd`; podgląd klatek, odtwarzanie.
 - Kolory: oryginał / tint / UO hue (wczytaj `hues.mul` z `F:\Nelderim`), tylko szare piksele (hue częściowy), edycja palety (przemalowanie koloru we wszystkich klatkach modelu).
 - Parser: kolor 15-bit (1-5-5-5), paleta 256, ten sam format co `vdtool.py`.
+
+## Hub
+
+`nelderim_hub.py` (`run_hub.bat` / `run_hub.sh`): jedno okno, pyta o ścieżki, zapisuje w `~/.nelderim_hub.json`, uruchamia skrypty toolkitu i pipeline'u. Bez logiki formatów (tylko buduje komendy). Zmieniając argumenty skryptów Levy'ego, popraw też budowniczych `cmd_*` w hubie.
