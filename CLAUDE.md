@@ -6,7 +6,7 @@
 |---|---|
 | Klient UO (`anim*.idx/mul`, `*.uop`, `Body.def`, `Bodyconv.def`, `Equipconv.def`, `tiledata.mul`) | `F:\Nelderim` |
 | Ten pipeline | `F:\nelderim-asset-pipeline\nelderim-asset-pipeline` |
-| SpriteMotion-UO-Toolkit (+ nakładka Levy'ego) | `F:\SpriteMotion` |
+| SpriteMotion-UO-Toolkit (+ nakładka Levy'ego) | `F:\SpriteMotion-UO-Toolkit\SpriteMotion-UO-Toolkit` |
 | ServUO (C#) | `F:\ServUO-master\ServUO-master` |
 | vdtool | `F:\vdtool\vdtool` |
 | UO Fiddler | `F:\UO Fiddler\UOFiddler-4.24.0` |
@@ -14,7 +14,7 @@
 
 ## Instalacja
 
-SpriteMotion (Python 3.10+), w `F:\SpriteMotion` (tam gdzie `pyproject.toml`):
+SpriteMotion (Python 3.10+), w `F:\SpriteMotion-UO-Toolkit\SpriteMotion-UO-Toolkit` (tam gdzie `pyproject.toml`):
 ```
 python -m venv .venv
 .venv\Scripts\activate
@@ -33,7 +33,7 @@ python -m pip install -r requirements.txt
 
 ## Nakładka Levy'ego (`SpriteMotion_skrypty_Nelderim`) — przeczytać przed pracą nad animacjami
 
-Pliki (względem `F:\SpriteMotion`):
+Pliki (względem `F:\SpriteMotion-UO-Toolkit\SpriteMotion-UO-Toolkit`):
 - `games/ultima-online/region-masks/uo.py` — `UOReader`: dekoder MUL, obsługa `Bodyconv.def` → `anim2..5.mul`.
 - `games/ultima-online/outfit-lab/build.py` — zestaw z arkusza wzorów (`--config`).
 - `games/ultima-online/outfit-lab/build_item.py` — jeden przedmiot (`--graphic`, `--hide-labels`).
