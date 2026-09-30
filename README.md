@@ -35,6 +35,27 @@ Never used a developer tool before? Start here:
 That's the whole setup. Everything below is more detailed reference
 material for developers/CLI users - you don't need it to get started.
 
+> **Paths:** every path in this README (`C:\Nelderim\...`) is only an example.
+> Use your own client folder in `--client`. `CLAUDE.md` lists the maintainer's
+> local layout (drive `F:`); on any other machine Claude Code asks for your paths.
+
+## Hub (all tools in one window)
+
+`run_hub.bat` (Windows) / `./run_hub.sh` (Linux/macOS), or `python nelderim_hub.py`.
+On first run it asks where each tool lives (UO client, SpriteMotion toolkit,
+this pipeline, output, optional: vd-viewer, UOFiddler, ServUO) and saves the
+answers per user in `~/.nelderim_hub.json`. Beginner-friendly Polish UI: a Start screen with plain-language tasks
+(clothes, weapon, paperdoll gump, pack to .vd, preview/tools, sheet set, patch, settings, help), step-by-step
+wizards with explanations, hover tooltips, right-click menus, automatic work folders and plain-language hints
+for known errors (auto backup of .vd, converter self-check, dry run first). It only runs the
+existing scripts; no format logic lives in the hub.
+
+Windows .exe: run `build_exe.bat` (needs Python + internet once) or use the
+GitHub Actions workflow "build-exe" (Actions tab -> Run workflow -> download the
+`NelderimHub-windows` artifact). The exe is only a launcher: keep it in the same
+folder as the pipeline scripts, and have Python 3.10+ on PATH (the toolkit/pipeline
+scripts are run with it; the toolkit's own `.venv` is used when present).
+
 ## Requirements
 
 - Python 3.10+ (tested on the Windows client install)
