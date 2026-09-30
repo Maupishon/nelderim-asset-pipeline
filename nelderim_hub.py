@@ -138,7 +138,10 @@ def cmd_build_item(cfg, graphic, design, out, key, title, hide, actions):
 
 
 def cmd_verify(cfg, lab):
-    return _tk(cfg, "games/ultima-online/outfit-lab/verify.py", lab)
+    """Exit code 1 also happens when item pixels differ from the original (normal): read the JSON, not the code."""
+    c = _tk(cfg, "games/ultima-online/outfit-lab/verify.py", lab)
+    c["ok"] = (0, 1)
+    return c
 
 
 def cmd_mul2vd(cfg, anim_id):
@@ -207,6 +210,99 @@ def equip_target(cfg, anim_id: int) -> int:
     except (OSError, ValueError):
         pass
     return anim_id
+
+
+def noop() -> dict:
+    return {"argv": [sys.executable, "-c", "pass"], "cwd": str(HERE), "env": dict(os.environ)}
+
+
+def cmd_vd_verify(cfg, a, b):
+    """vdtool verify: expect 'OBRAZ IDENTYCZNY' for an --original round trip."""
+    return _tk(cfg, "tools/vd/vdtool.py", "verify", a, b)
+
+
+def cmd_atlas_roundtrip(cfg, lab, key, orig_vd, out_vd):
+    return _tk(cfg, "games/ultima-online/outfit-lab/atlas_to_vd.py", lab, key, orig_vd, out_vd, "--original")
+
+
+def cmd_item_lookup(cfg, graphic):
+    """ItemID -> animId / layer / label (tiledata) -> Equipconv target -> Bodyconv (anim2..5.mul?)."""
+    code = ("import sys;sys.path.insert(0,'games/ultima-online/region-masks');from uo import UOReader;"
+            "r=UOReader(sys.argv[1]);g=int(sys.argv[2],0);it=r.item(g);a=it['animId'];"
+            "t=r.equip.get((400,a),(a,0))[0];print('item %#x %r animId %d layer %d'%(g,it['label'],a,it['layer']));"
+            "print('animation used for body 400:',t,'| Equipconv hue:',r.equip.get((400,a),(a,0))[1]);"
+            "print('Bodyconv:',r.conv.get(t) or 'none -> anim.mul (mul2vd works)');"
+            "print('Body.def hard redirect (unsupported by reader):',t in r.unsupported)")
+    return _tk(cfg, "-c", code, cfg["client"], graphic)
+
+
+def gump_ids(anim_id: int) -> tuple[int, int]:
+    """Paperdoll gump: male = AnimID + 50000, female = male + 10000 (Levy's rule; check Equipconv for a literal one)."""
+    return anim_id + 50000, anim_id + 60000
+
+
+def backup_file(path: Path) -> Path | None:
+    """Copy an existing file to <name>_BACKUP_<timestamp>.vd before it is overwritten."""
+    import shutil
+    import time
+    if not path.is_file():
+        return None
+    dst = path.with_name(f"{path.stem}_BACKUP_{time.strftime('%Y%m%d-%H%M%S')}{path.suffix}")
+    shutil.copy2(path, dst)
+    return dst
+
+
+def write_json(path: Path, obj) -> None:
+    """UTF-8 without BOM (PowerShell 5.1 Set-Content would add one)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(obj, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def placeholder_png(path: Path, w: int = 16, h: int = 12) -> None:
+    """Opaque RGBA PNG (stdlib only). build.py insists on --design/--lightsaber even for axis-only weapons."""
+    import struct
+    import zlib
+    raw = b"".join(b"\x00" + b"\x80\x80\x80\xff" * w for _ in range(h))
+
+    def chunk(t, d):
+        c = struct.pack(">I", len(d)) + t + d
+        return c + struct.pack(">I", zlib.crc32(t + d) & 0xFFFFFFFF)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)) +
+                     chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+
+def weapon_config(key, graphic, image, thickness, hide, continuity, torso, title) -> dict:
+    """build.py --config for a narrow held weapon on the axis-fit path (Levy's newer build.py)."""
+    cfg = {"title": title or key, "items": [[key, graphic]], "cells": {key: 0}, "props": [],
+           "hide": {key: [int(x) for x in hide.split()]}, "drawOrder": [key], "defaultOff": [], "exclusive": [],
+           "axisFit": [key], "axisImages": {key: image}, "displayNames": {key: title or key}}
+    if str(thickness).strip():
+        cfg["axisThickness"] = {key: int(thickness)}
+    if continuity:
+        cfg["axisContinuity"] = [key]
+    if torso:
+        cfg["axisTorsoRule"] = True
+    return cfg
+
+
+def toolkit_has_axisfit(cfg) -> bool:
+    try:
+        return "axisFit" in (Path(cfg["toolkit"]) / "games/ultima-online/outfit-lab/build.py").read_text(
+            encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+
+
+CHECKLIST = """Checklist before hand-off:
+ [ ] verify: "errors": [] and missingSequences 0, ALL actions built (not just the pilot ones)
+ [ ] look at all 35 actions in 3 directions (ball/hilt on the right end, weapon not painted on the body)
+ [ ] vdtool info: type 2, 35 actions x 5 directions, frame counts equal to the original
+ [ ] backup of the previous .vd kept (done automatically as *_BACKUP_*.vd)
+ [ ] show the user the HTML preview; ask about thickness / orientation
+ Not verified by these tools: import into UOFiddler, in-game look, item icon, ItemData/bodyTable/C# scripts,
+ body 401, animations only in .uop."""
 
 
 def open_path(p: str) -> None:
@@ -279,7 +375,7 @@ def run_gui() -> None:
                         say("[STOPPED]")
                         return
                     rc = stream(cmd)
-                    if rc != 0:
+                    if rc not in cmd.get("ok", (0,)):
                         say(f"[FAILED] exit code {rc}")
                         return
                 say("[DONE]")
@@ -383,7 +479,7 @@ def run_gui() -> None:
     t1 = ttk.Frame(nb)
     nb.add(t1, text="Outfit set")
     v1 = {k: tk.StringVar() for k in ("design", "sword", "config", "out", "actions")}
-    v1["actions"].set("0 4 9 16")
+    v1["actions"].set("0 4 9 13 16")
     v1["out"].set("")
     field(t1, 0, "Design sheet PNG (4x3 cells, alpha)", v1["design"], "file")
     field(t1, 1, "Sword PNG (horizontal, hilt on the left)", v1["sword"], "file")
@@ -411,7 +507,8 @@ def run_gui() -> None:
     fr.grid(row=6, column=0, columnspan=3, pady=10)
     ttk.Button(fr, text="Fill Witcher example", command=use_example).pack(side="left", padx=6)
     ttk.Button(fr, text="Build", command=do_build_set).pack(side="left", padx=6)
-    ttk.Button(fr, text="Verify", command=lambda: run_steps([lambda: cmd_verify(cfg, v1["out"].get())])
+    ttk.Button(fr, text="Verify", command=lambda: (say('Check the JSON: "errors": [] and missingSequences 0.'),
+                                                        run_steps([lambda: cmd_verify(cfg, v1["out"].get())]))
                ).pack(side="left", padx=6)
     ttk.Button(fr, text="Preview in browser", command=lambda: start_preview(v1["out"].get())
                ).pack(side="left", padx=6)
@@ -460,7 +557,8 @@ def run_gui() -> None:
             return
         items_cache.clear()
         for k, a in its:
-            items_cache[f"{k}  (animId {a})"] = (k, a)
+            gm, gf = gump_ids(equip_target(cfg, a))
+            items_cache[f"{k}  (animId {a}, gump M {gm} / F {gf})"] = (k, a)
         combo["values"] = list(items_cache)
         if items_cache:
             combo.current(0)
@@ -505,11 +603,94 @@ def run_gui() -> None:
         def pack():
             return cmd_atlas_to_vd(cfg, v3["lab"].get(), key, str(orig), out, str(body), v3["outline"].get().strip())
 
-        run_steps([check, extract_orig, extract_body, pack, lambda: cmd_vd_info(cfg, out)])
+        def backup():
+            b = backup_file(Path(out))
+            if b:
+                say(f"Backup of previous result: {b}")
+            return noop()
 
-    ttk.Button(t3, text="Extract original + pack", command=do_pack).grid(row=5, column=1, pady=10, sticky="w")
+        def checklist():
+            say(CHECKLIST)
+            return noop()
+
+        run_steps([check, extract_orig, extract_body, backup, pack, lambda: cmd_vd_info(cfg, out), checklist])
+
+    def do_roundtrip():
+        sel = items_cache.get(v3["item"].get())
+        if not sel or not v3["lab"].get().strip():
+            messagebox.showwarning("Round trip", "Choose a lab folder and click Load items.")
+            return
+        key, aid = sel
+        target = equip_target(cfg, aid)
+        orig = vd_original(cfg, target)
+        tmp = workdir(cfg) / f"roundtrip_{target:04d}.vd"
+        run_steps([lambda: noop() if orig.exists() else cmd_mul2vd(cfg, target),
+                   lambda: cmd_atlas_roundtrip(cfg, v3["lab"].get(), key, str(orig), str(tmp)),
+                   lambda: cmd_vd_verify(cfg, str(orig), str(tmp))])
+        say('Expected at the end: "OBRAZ IDENTYCZNY" (converter self-check).')
+
+    fb = ttk.Frame(t3)
+    fb.grid(row=5, column=1, pady=10, sticky="w")
+    ttk.Button(fb, text="Extract original + pack", command=do_pack).pack(side="left", padx=(0, 8))
+    ttk.Button(fb, text="Converter self-check (--original)", command=do_roundtrip).pack(side="left")
     ttk.Label(t3, text="Import result: UOFiddler > Animations > Animation Edit > Import from VD > Save "
                        "(on a COPY of the client).", foreground="#555").grid(row=6, column=0, columnspan=3, padx=6)
+
+    # ---- tab: weapon (axis fit)
+    tw = ttk.Frame(nb)
+    nb.add(tw, text="Weapon (axis)")
+    vw = {k: tk.StringVar() for k in ("key", "graphic", "image", "thickness", "hide", "title", "out", "actions")}
+    vw["key"].set("staff")
+    vw["hide"].set("5")
+    vw["thickness"].set("")
+    vw["actions"].set("0 4 9 13")
+    cont = tk.BooleanVar(value=True)
+    torso = tk.BooleanVar(value=True)
+    field(tw, 0, "Key (e.g. staff, sword)", vw["key"])
+    field(tw, 1, "ItemID (e.g. 0xDF0 BlackStaff, 0xF5E sabre)", vw["graphic"])
+    field(tw, 2, "Weapon PNG (horizontal, hilt LEFT, tip RIGHT, alpha)", vw["image"], "file")
+    field(tw, 3, "Thickness px, constant (empty = default; original staff ~3 px)", vw["thickness"])
+    field(tw, 4, "Hide body regions (5 = hands, 1 = face)", vw["hide"])
+    field(tw, 5, "Title (optional)", vw["title"])
+    field(tw, 6, "Output lab folder", vw["out"], "dir")
+    field(tw, 7, "Actions (pilot: 0 4 9 13, then empty = all 35)", vw["actions"])
+    ttk.Checkbutton(tw, text="Keep the same end (axisContinuity)", variable=cont).grid(row=8, column=1, sticky="w")
+    ttk.Checkbutton(tw, text="Working end = farther from torso (axisTorsoRule)", variable=torso
+                    ).grid(row=9, column=1, sticky="w")
+
+    def do_weapon():
+        need = ("key", "graphic", "image", "out")
+        if not all(vw[k].get().strip() for k in need):
+            messagebox.showwarning("Weapon", "Fill key, ItemID, weapon PNG and output.")
+            return
+        if not ready(["toolkit", "client"]):
+            return
+        if not toolkit_has_axisfit(cfg):
+            messagebox.showwarning("Toolkit too old", "build.py in your toolkit has no axisFit support.\n"
+                                   "Ask Levy for the newer build.py, viewer.js, verify.py, uo.py and copy them over.")
+            return
+        out = Path(vw["out"].get())
+        work = out.parent / (vw["key"].get() + "_work")
+        conf, dz, sw = work / "config.json", work / "placeholder_design.png", work / "placeholder_sword.png"
+        try:
+            write_json(conf, weapon_config(vw["key"].get(), vw["graphic"].get(), vw["image"].get(),
+                                           vw["thickness"].get(), vw["hide"].get(), cont.get(), torso.get(),
+                                           vw["title"].get()))
+            placeholder_png(dz)
+            placeholder_png(sw)
+        except (OSError, ValueError) as e:
+            messagebox.showerror("Weapon", str(e))
+            return
+        say(f"Config: {conf}")
+        run_steps([lambda: cmd_build_set(cfg, str(out), str(dz), str(sw), str(conf), vw["actions"].get()),
+                   lambda: cmd_verify(cfg, str(out))])
+
+    fw = ttk.Frame(tw)
+    fw.grid(row=10, column=1, pady=10, sticky="w")
+    ttk.Button(fw, text="Write config + build + verify", command=do_weapon).pack(side="left", padx=(0, 8))
+    ttk.Button(fw, text="Preview in browser", command=lambda: start_preview(vw["out"].get())).pack(side="left")
+    ttk.Label(tw, text="Then use the 'Pack to .vd' tab with outline 1 for thin blades, 0 for outlined images.",
+              foreground="#555").grid(row=11, column=0, columnspan=3, padx=6)
 
     # ---- tab 4: viewers
     t4 = ttk.Frame(nb)
@@ -556,8 +737,13 @@ def run_gui() -> None:
         else:
             messagebox.showwarning("Open", f"Path '{key}' not set.")
 
-    for r, (txt, fn) in enumerate([
-        ("Stop preview server", stop_preview),
+    lv = tk.StringVar()
+    ttk.Label(t4, text="ItemID lookup (0x...)").grid(row=0, column=1, sticky="w", padx=10)
+    ttk.Entry(t4, textvariable=lv, width=16).grid(row=0, column=2, sticky="w")
+    ttk.Button(t4, text="Look up animation", command=lambda: run_steps([lambda: cmd_item_lookup(cfg, lv.get())])
+               ).grid(row=0, column=3, padx=6)
+
+    for r, (txt, fn) in enumerate([        ("Stop preview server", stop_preview),
         ("Open vd-viewer.html", open_viewer),
         ("Open UOFiddler", open_fiddler),
         ("Open output folder", lambda: open_dir("output")),
