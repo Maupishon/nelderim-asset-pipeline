@@ -952,7 +952,7 @@ class App:
                  "Stała grubość na ekranie. Oryginalna laska ma ok. 3 px. Za gruba? Zmniejsz. Za cienka? Zwiększ. "
                  "Pole puste = ustawienie domyślne.")
         self.row(adv, "Odsłoń części ciała", v["hide"], "5 = dłonie (żeby broń była w dłoni, a nie na niej). 1 = twarz.")
-        self.row(adv, "Które akcje zbudować", v["actions"], "0 chodzenie, 4 stanie, 9 cięcie, 13 cięcie 2h. Puste = wszystkie 35.")
+        self.row(adv, "Które akcje zbudować", v["actions"], "Numery ruchów oddzielone spacją: 0 chodzenie, 4 stanie, 9 cięcie, 13 cięcie 2h.\nJeśli zostawisz to pole PUSTE, program wygeneruje WSZYSTKIE 35 akcji (trwa dłużej).")
         for var, txt, h in ((cont, "Trzymaj ten sam koniec przez całą animację",
                              "Zapobiega „skakaniu” kuli/rękojeści z jednego końca na drugi."),
                             (torso, "Koniec roboczy = ten dalej od tułowia", "Pomaga wybrać, który koniec broni to czubek.")):
