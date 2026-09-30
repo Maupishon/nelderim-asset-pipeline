@@ -1,6 +1,8 @@
 # CLAUDE.md — Nelderim Asset Pipeline + SpriteMotion
 
-## Ścieżki (Windows, dysk F:)
+## Ścieżki
+
+Poniższe ścieżki to **lokalny laptop właściciela** (Windows, dysk F:). Na innym urządzeniu (inny komputer, chmura, Linux) NIE zakładaj ich: na początku sesji sprawdź, czy istnieją. Jeśli nie — zapytaj użytkownika o każdą potrzebną ścieżkę (klient UO, pipeline, toolkit, vdtool, ServUO, wyjście) i użyj podanych. Nie zgaduj i nie twórz własnych. W komendach poniżej podmień `F:\...` na ścieżki użytkownika.
 
 | Co | Ścieżka |
 |---|---|
