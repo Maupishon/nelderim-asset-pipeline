@@ -45,7 +45,7 @@ material for developers/CLI users - you don't need it to get started.
 On first run it asks where each tool lives (UO client, SpriteMotion toolkit,
 this pipeline, output, optional: vd-viewer, UOFiddler, ServUO) and saves the
 answers per user in `~/.nelderim_hub.json`. Tabs: Paths, Outfit set, Single
-item, Pack to .vd (auto backup, self-check), Weapon (axis fit), Viewers/tools
+item, Pack to .vd (auto backup, self-check), Weapon (axis fit), Gump (paperdoll), Viewers/tools
 (ItemID lookup), Pipeline (dry run first). It only runs the
 existing scripts; no format logic lives in the hub.
 

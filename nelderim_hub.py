@@ -282,9 +282,33 @@ def weapon_config(key, graphic, image, thickness, hide, continuity, torso, title
         cfg["axisThickness"] = {key: int(thickness)}
     if continuity:
         cfg["axisContinuity"] = [key]
-    if torso:
-        cfg["axisTorsoRule"] = True
+    cfg["axisTorsoRule"] = bool(torso)     # build.py defaults to True when the key is missing
     return cfg
+
+
+def cmd_make_gump(cfg, anim, image, out, thickness, ratio, butt, shift, front_below, outline, gump_id):
+    """Paperdoll gump for a hand-held item (make_gump.py from Levy's v2 package)."""
+    a = ["games/ultima-online/outfit-lab/make_gump.py", "--client", cfg["client"], "--anim", anim,
+         "--image", image, "--out", out]
+    if str(thickness).strip():
+        a += ["--thickness", thickness]
+    elif str(ratio).strip():
+        a += ["--ratio", ratio]
+    if butt:
+        a += ["--butt", butt]
+    if str(shift).strip():
+        a += ["--shift", shift]
+    if str(front_below).strip():
+        a += ["--front-below", front_below]
+    if outline:
+        a.append("--outline")
+    if str(gump_id).strip():
+        a += ["--gump-id", gump_id]
+    return _tk(cfg, *a)
+
+
+def toolkit_has_gump(cfg) -> bool:
+    return (Path(cfg["toolkit"]) / "games/ultima-online/outfit-lab/make_gump.py").is_file()
 
 
 def toolkit_has_axisfit(cfg) -> bool:
@@ -667,7 +691,7 @@ def run_gui() -> None:
             return
         if not toolkit_has_axisfit(cfg):
             messagebox.showwarning("Toolkit too old", "build.py in your toolkit has no axisFit support.\n"
-                                   "Ask Levy for the newer build.py, viewer.js, verify.py, uo.py and copy them over.")
+                                   "Copy Levy's v2 package (SpriteMotion_skrypty_Nelderim_1.zip) over the toolkit.")
             return
         out = Path(vw["out"].get())
         work = out.parent / (vw["key"].get() + "_work")
@@ -682,6 +706,8 @@ def run_gui() -> None:
             messagebox.showerror("Weapon", str(e))
             return
         say(f"Config: {conf}")
+        if vw["key"].get().strip() == "sword":      # build.py takes the 'sword' key from --lightsaber, not axisImages
+            sw = Path(vw["image"].get())
         run_steps([lambda: cmd_build_set(cfg, str(out), str(dz), str(sw), str(conf), vw["actions"].get()),
                    lambda: cmd_verify(cfg, str(out))])
 
@@ -690,6 +716,52 @@ def run_gui() -> None:
     ttk.Button(fw, text="Write config + build + verify", command=do_weapon).pack(side="left", padx=(0, 8))
     ttk.Button(fw, text="Preview in browser", command=lambda: start_preview(vw["out"].get())).pack(side="left")
     ttk.Label(tw, text="Then use the 'Pack to .vd' tab with outline 1 for thin blades, 0 for outlined images.",
+              foreground="#555").grid(row=11, column=0, columnspan=3, padx=6)
+
+    # ---- tab: paperdoll gump
+    tg = ttk.Frame(nb)
+    nb.add(tg, text="Gump (paperdoll)")
+    vg = {k: tk.StringVar() for k in ("anim", "image", "out", "thickness", "ratio", "shift", "front", "gid")}
+    vg["ratio"].set("0.15")
+    vg["shift"].set("0,0")
+    butt = tk.StringVar(value="bottom")
+    outl = tk.BooleanVar(value=False)
+    field(tg, 0, "Item animation id (gump = anim + 50000; e.g. 617 staff, 618 sabre)", vg["anim"])
+    field(tg, 1, "Item PNG (horizontal, hilt LEFT, tip RIGHT)", vg["image"], "file")
+    field(tg, 2, "Output folder", vg["out"], "dir")
+    field(tg, 3, "Thickness px (staff ~26; empty = use ratio)", vg["thickness"])
+    field(tg, 4, "Ratio (thickness / length, sabre 0.15)", vg["ratio"])
+    ttk.Label(tg, text="Hilt end of the ORIGINAL gump").grid(row=5, column=0, sticky="w", padx=6)
+    ttk.Combobox(tg, textvariable=butt, values=["bottom", "top", "left", "right"], state="readonly", width=10
+                 ).grid(row=5, column=1, sticky="w", padx=6)
+    field(tg, 6, "Shift dx,dy after fitting (sabre 3,-9)", vg["shift"])
+    field(tg, 7, "Front-below row (hand in front of the item; sabre 106)", vg["front"])
+    field(tg, 8, "Male gump id override (empty = anim + 50000)", vg["gid"])
+    ttk.Checkbutton(tg, text="1 px dark outline", variable=outl).grid(row=9, column=1, sticky="w")
+
+    def do_gump():
+        if not all(vg[k].get().strip() for k in ("anim", "image", "out")):
+            messagebox.showwarning("Gump", "Fill animation id, image and output.")
+            return
+        if not ready(["toolkit", "client"]):
+            return
+        if not toolkit_has_gump(cfg):
+            messagebox.showwarning("Toolkit too old", "make_gump.py not found in the toolkit.\n"
+                                   "Copy Levy's v2 package (SpriteMotion_skrypty_Nelderim_1.zip) over the toolkit.")
+            return
+        out = vg["out"].get()
+        run_steps([lambda: cmd_make_gump(cfg, vg["anim"].get(), vg["image"].get(), out, vg["thickness"].get(),
+                                         vg["ratio"].get(), butt.get(), vg["shift"].get(), vg["front"].get(),
+                                         outl.get(), vg["gid"].get()),
+                   lambda: (say(f"Look at {Path(out) / 'porownanie.png'} (orig | male | female). "
+                                "Female gump missing in the client -> Insert in UOFiddler, not Replace."), noop())[1]])
+
+    fg = ttk.Frame(tg)
+    fg.grid(row=10, column=1, pady=10, sticky="w")
+    ttk.Button(fg, text="Make gump", command=do_gump).pack(side="left", padx=(0, 8))
+    ttk.Button(fg, text="Open comparison image", command=lambda: (Path(vg["out"].get()) / "porownanie.png").is_file()
+               and open_path(str(Path(vg["out"].get()) / "porownanie.png"))).pack(side="left")
+    ttk.Label(tg, text="Import: UOFiddler > Gumps > Replace / Insert. Gump ids are shown on the 'Pack to .vd' tab.",
               foreground="#555").grid(row=11, column=0, columnspan=3, padx=6)
 
     # ---- tab 4: viewers

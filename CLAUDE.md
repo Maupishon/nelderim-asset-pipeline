@@ -23,7 +23,7 @@ python -m venv .venv
 python -m pip install -e ".[test]"
 python -m pip install scipy
 ```
-Nakładkę `SpriteMotion_skrypty_Nelderim.zip` rozpakować w root toolkitu z nadpisaniem.
+Nakładkę (aktualnie v2: `SpriteMotion_skrypty_Nelderim_1.zip`) rozpakować w root toolkitu z nadpisaniem.
 Blender i Godot instalowane osobno.
 
 Pipeline:
@@ -42,6 +42,8 @@ Pliki (względem `F:\SpriteMotion-UO-Toolkit\SpriteMotion-UO-Toolkit`):
 - `games/ultima-online/outfit-lab/atlas_to_vd.py` — atlas → `.vd` (`--body`, `--outline`, `--original` = round-trip).
 - `games/ultima-online/outfit-lab/uo_vd_writer.py`, `vd.py` — zapis/odczyt `.vd`.
 - `games/ultima-online/outfit-lab/verify.py`, `viewer.js` — walidacja, podgląd.
+- `games/ultima-online/outfit-lab/make_gump.py` — gump paperdolla (v2). `build_spartan.py`, `build_tracksuit.py` — wzorce (hełm z widokami, łańcuch).
+- `docs/NELDERIM_PRZEDMIOTY_INSTRUKCJA.md` — pełna instrukcja Levy'ego (v2 paczki; ma pierwszeństwo nad skrótem poniżej).
 - `tools/vd/mul2vd.py` — wyciąg animacji z `anim.mul` do `.vd`.
 - `tools/vd/vdtool.py` — `info | extract | pack | verify` dla `.vd`.
 - `workspace/ultima-online/witcher-lab/` — przykład (`witcher.json`, wzór, miecz).
@@ -118,13 +120,16 @@ Zasady: odpowiedzi po polsku, krótko. Przed wyborem „której starej wersji" z
 1. **Animacja przedmiotu**: ItemID → `tiledata` (`animId`, `layer`, `label`) → `Equipconv.def` (`400 <id> <conv> <gump> <hue>`) → `Bodyconv.def`. Hub: Viewers/tools → „Look up animation". Animacje tylko w `.uop` nieobsługiwane.
 2. **Metoda**: ubranie/szata/pancerz (zmiana materiału) → `build_item.py` lub `build.py` (`fit_texture`). Wąska broń trzymana w dłoni (miecz, laska, włócznia) → `build.py --config` z `axisFit` (`fit_lightsaber`). Hełm z widokami → wzór `build_spartan.py`. Kusza/tarcza/łuk: ścieżka osi nietestowana.
 3. **Grafika**: PNG RGBA. Białe tło wyciąć flood-fillem od krawędzi; `.webp` często ma już alfę (sprawdź `Image.mode`). Alfa: piksel = `>=128`, kadruj po `>=64`. Broń dla `axisFit`: POZIOMO, rękojeść LEWO, czubek PRAWO (obraz pionowy `build.py` obraca sam). Ubranie: front, płaskie światło. Arkusz: 4×3, pusta komórka = `Empty design`. `.vd`: bez półprzezroczystości, jedna paleta 256 (15-bit) na blok akcja+kierunek.
-4. **Config JSON (UTF-8 bez BOM)**: `title`, `items` [[klucz, ItemID]], `cells`, `props`, `hide` (5 = dłonie, 1 = twarz), `drawOrder`, `defaultOff`, `exclusive`, `displayNames`, oraz dla broni: `axisFit`, `axisImages`, `axisRatio`, `axisThickness` (px, stała), `axisContinuity`, `axisTorsoRule`. PowerShell 5.1 `Set-Content -Encoding utf8` dopisuje BOM: użyj `[IO.File]::WriteAllText(path, text, (New-Object Text.UTF8Encoding($false)))`. Uwaga: klucze `axis*` wymagają nowszego `build.py` Levy'ego (paczka z zipa ich nie ma); hub sprawdza to przed budową broni.
+4. **Config JSON (UTF-8 bez BOM)**: `title`, `items` [[klucz, ItemID]], `cells`, `props`, `hide` (5 = dłonie, 1 = twarz), `drawOrder`, `defaultOff`, `exclusive`, `displayNames`, oraz dla broni: `axisFit`, `axisImages`, `axisRatio`, `axisThickness` (px, stała), `axisContinuity`, `axisTorsoRule`. PowerShell 5.1 `Set-Content -Encoding utf8` dopisuje BOM: użyj `[IO.File]::WriteAllText(path, text, (New-Object Text.UTF8Encoding($false)))`. Klucze `axis*` są w paczce v2 (`SpriteMotion_skrypty_Nelderim_1.zip`); hub sprawdza to przed budową broni. Uwaga: klucz `sword` bierze obraz z `--lightsaber` (nie z `axisImages`); `axisTorsoRule` domyślnie `true` gdy brak klucza (hub zapisuje go zawsze jawnie).
 5. **Budowa**: najpierw pilot `--actions 0 4 9 13 16`, potem wszystkie 35. `verify.py` → `"errors": []`, `missingSequences: 0` (kod wyjścia 1 jest normalny, gdy piksele przedmiotu różnią się od oryginału). `--design` i `--lightsaber` wymagane nawet bez miecza (dowolne istniejące pliki; hub podstawia placeholdery).
 6. **Strojenie broni**: grubość stała w px (`axisThickness`), nie % długości (oryginalna laska ≈3 px; mierz medianę szerokości wierszy i bbox na klatce idle z pionową bronią, porównaj z oryginałem). Kula skacze między końcami → `axisContinuity` + `axisTorsoRule`; sprawdź akcje 7, 10, 14, 18, 22. `--body anim_0400.vd` przycina do ciała (widoczne poza ciałem lub ≤2 px od oryginału). `--outline 1` dla cienkiej klingi; nie dodawaj, gdy obraz ma już ciemny kontur.
 7. **Zapis `.vd`**: `mul2vd.py` (oryginał + ciało 400) → `atlas_to_vd.py <lab> <klucz> anim_<id>.vd <wynik>.vd --body anim_0400.vd [--outline 1]` → `vdtool.py info`. Self-check: `atlas_to_vd.py ... --original` + `vdtool verify` musi dać `OBRAZ IDENTYCZNY`. Widoki atlasu 3..7 = `dir0..dir4`; kotwica (128,192). `anim3/4/5.mul` → UOFiddler (Animation Edit → Export to VD). Import: typ pliku = typ celu (ludzie/broń: typ 2, 35 akcji).
-8. **Gump paperdolla**: męski = AnimID + 50000, damski = męski + 10000 (zawsze wg formuły, nie wg Fiddlera; sprawdź `Equipconv.def` pod literalny gump). Ciało: gumpy 12 (M) i 13 (F), 260×237, RLE, RGB555, 0 = przezroczysty. Damskiego często brak w kliencie → w UOFiddlerze Insert, nie Replace. Broń dopasuj do osi gumpu przez `build.fit_lightsaber` (laska ≈26 px, szabla `width_ratio 0.15`, alfa 0/1); przytnij do ciała jak w animacji, dla szabli wyłącz tolerancję poniżej jelca. Narzędzia gumpów: `uop_gump_patch.py` / pipeline, nie skrypty outfit-lab.
+8. **Gump paperdolla**: męski = AnimID + 50000, damski = męski + 10000 (zawsze wg formuły, nie wg Fiddlera; sprawdź `Equipconv.def` pod literalny gump). Ciało: gumpy 12 (M) i 13 (F), 260×237, RLE, RGB555, 0 = przezroczysty. Damskiego często brak w kliencie → w UOFiddlerze Insert, nie Replace. Skrypt `make_gump.py` (v2) wyciąga gump z `Gumpidx/Gumpart.mul`, dopasowuje broń do osi, przycina do ciał 12/13, zapisuje `gump_<id>_meski.png`, `gump_<id+10000>_damski.png`, `orig_<id>.png`, `porownanie.png`:
+   - laska (617): `make_gump.py --client <klient> --anim 617 --image laska.png --thickness 26 --out <katalog>` (obraz poziomo, kula po prawej)
+   - szabla (618): `... --anim 618 --image szabla.png --ratio 0.15 --shift 3,-9 --front-below 106 --outline --out <katalog>`
+   - opcje: `--thickness` px lub `--ratio`, `--butt bottom|top|left|right` (koniec-rękojeść oryginalnego gumpu), `--shift dx,dy`, `--front-below Y`, `--outline`, `--gump-id`. Oceniaj na `porownanie.png`, przesunięcie stroj na powiększeniu dłoni. Alfa 0/1. Czyta `Gumpidx/Gumpart.mul` (nie UOP: gump w `gumpartLegacyMUL.uop` → `uop_gump_patch.py`).
 9. **Przed oddaniem**: verify czysty na wszystkich akcjach; obejrzeć 35 akcji w 3 kierunkach; `vdtool info` = typ 2, 35×5, liczby klatek jak oryginał; backup; pokazać użytkownikowi podgląd HTML i zapytać o grubość/orientację.
 10. **Nie sprawdzono**: import do UOFiddlera i wygląd w grze, ikona przedmiotu (art), `ItemData.csv`/`bodyTable.cfg`/skrypty C#, `.uop`.
 11. **Pułapki**: pusta komórka → `Empty design`; półprzezroczysty szum w komórce → kadruj po `alfa>=64`; po zmianie `build.py` stare paczki są nieaktualne (`build.py`, `viewer.js`, `verify.py`, `uo.py`); `Remove-Item` z `C:\` w jednym poleceniu bywa blokowane.
 
-Hub (`nelderim_hub.py`) pokrywa: lookup, budowę zestawu/przedmiotu/broni (config + placeholdery), verify, pakowanie z backupem i self-checkiem, listę kontrolną. Nie pokrywa: gumpów paperdolla.
+Hub (`nelderim_hub.py`) pokrywa: lookup, budowę zestawu/przedmiotu/broni (config + placeholdery), verify, pakowanie z backupem i self-checkiem, gump paperdolla (`make_gump.py`), listę kontrolną. Nie pokrywa: `build_spartan.py`, `build_tracksuit.py` (wzorce, ścieżki zaszyte w skrypcie).
