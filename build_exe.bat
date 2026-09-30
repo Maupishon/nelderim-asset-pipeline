@@ -2,7 +2,7 @@
 REM Builds dist\NelderimHub\ (NelderimHub.exe + pipeline scripts) with PyInstaller. Run on Windows.
 cd /d "%~dp0"
 python -m pip install pyinstaller pillow || goto :fail
-python -m PyInstaller --onefile --windowed --noconfirm --name NelderimHub nelderim_hub.py || goto :fail
+python -m PyInstaller --onefile --windowed --noconfirm --name NelderimHub --hidden-import nelderim_hub_ui nelderim_hub.py || goto :fail
 if exist dist\NelderimHub rmdir /s /q dist\NelderimHub
 mkdir dist\NelderimHub
 move /y dist\NelderimHub.exe dist\NelderimHub\ >nul

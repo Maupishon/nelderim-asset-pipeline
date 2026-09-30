@@ -109,7 +109,7 @@ Fakty techniczne z kodu nakładki:
 
 ## Hub
 
-`nelderim_hub.py` (`run_hub.bat` / `run_hub.sh`): jedno okno, pyta o ścieżki, zapisuje w `~/.nelderim_hub.json`, uruchamia skrypty toolkitu i pipeline'u. Bez logiki formatów (tylko buduje komendy). Zmieniając argumenty skryptów Levy'ego, popraw też budowniczych `cmd_*` w hubie.
+`nelderim_hub.py` (logika, budowniczowie komend) + `nelderim_hub_ui.py` (okno dla żółtodzioba, po polsku: ekran Start, kreatory krok po kroku, podpowiedzi po najechaniu, menu prawego przycisku, automatyczne foldery, podpowiedzi przy znanych błędach). Uruchamianie `run_hub.bat` / `run_hub.sh`: jedno okno, pyta o ścieżki, zapisuje w `~/.nelderim_hub.json`, uruchamia skrypty toolkitu i pipeline'u. Bez logiki formatów (tylko buduje komendy). Zmieniając argumenty skryptów Levy'ego, popraw też budowniczych `cmd_*` w hubie.
 
 ## Przedmioty i broń — instrukcja Levy'ego (NELDERIM_PRZEDMIOTY_INSTRUKCJA)
 
