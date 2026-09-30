@@ -49,6 +49,12 @@ item, Pack to .vd (auto backup, self-check), Weapon (axis fit), Gump (paperdoll)
 (ItemID lookup), Pipeline (dry run first). It only runs the
 existing scripts; no format logic lives in the hub.
 
+Windows .exe: run `build_exe.bat` (needs Python + internet once) or use the
+GitHub Actions workflow "build-exe" (Actions tab -> Run workflow -> download the
+`NelderimHub-windows` artifact). The exe is only a launcher: keep it in the same
+folder as the pipeline scripts, and have Python 3.10+ on PATH (the toolkit/pipeline
+scripts are run with it; the toolkit's own `.venv` is used when present).
+
 ## Requirements
 
 - Python 3.10+ (tested on the Windows client install)

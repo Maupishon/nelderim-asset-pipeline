@@ -27,7 +27,9 @@ import threading
 import webbrowser
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+FROZEN = bool(getattr(sys, "frozen", False))
+# frozen (PyInstaller) exe: the pipeline scripts sit next to the exe, __file__ points to a temp dir
+HERE = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent
 CONFIG_FILE = Path.home() / ".nelderim_hub.json"
 PORT = 8772
 
@@ -90,12 +92,24 @@ def guesses(key: str) -> list[str]:
 
 
 # --------------------------------------------------------- command builders
+def system_python() -> str:
+    """Interpreter for helper scripts. In the frozen exe sys.executable is the exe itself, so look for a real Python."""
+    if not FROZEN:
+        return sys.executable
+    import shutil
+    for name in ("python", "python3", "py"):
+        p = shutil.which(name)
+        if p:
+            return p
+    raise SystemExit("Python 3.10+ not found on PATH (needed to run the toolkit / pipeline scripts).")
+
+
 def toolkit_python(cfg: dict) -> str:
     tk = Path(cfg["toolkit"])
     for rel in (".venv/Scripts/python.exe", ".venv/bin/python", ".venvs/spritemotion/Scripts/python.exe"):
         if (tk / rel).is_file():
             return str(tk / rel)
-    return sys.executable
+    return system_python()
 
 
 def tk_env(cfg: dict) -> dict:
@@ -175,7 +189,7 @@ def cmd_serve(cfg, lab):
 
 
 def _pl(cfg, script, *args):
-    return {"argv": [sys.executable, str(Path(cfg["pipeline"]) / script), *map(str, args)],
+    return {"argv": [system_python(), str(Path(cfg["pipeline"]) / script), *map(str, args)],
             "cwd": cfg["pipeline"], "env": dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")}
 
 
@@ -213,7 +227,7 @@ def equip_target(cfg, anim_id: int) -> int:
 
 
 def noop() -> dict:
-    return {"argv": [sys.executable, "-c", "pass"], "cwd": str(HERE), "env": dict(os.environ)}
+    return {"noop": True, "argv": ["noop"], "cwd": str(HERE), "env": dict(os.environ)}
 
 
 def cmd_vd_verify(cfg, a, b):
@@ -369,6 +383,8 @@ def run_gui() -> None:
         root.after(80, pump)
 
     def stream(cmd, capture=None) -> int:
+        if cmd.get("noop"):
+            return 0
         say("$ " + " ".join(f'"{a}"' if " " in a else a for a in cmd["argv"]))
         try:
             p = subprocess.Popen(cmd["argv"], cwd=cmd["cwd"], env=cmd["env"], stdout=subprocess.PIPE,
@@ -609,19 +625,18 @@ def run_gui() -> None:
             if rc != 0 or "INMUL" not in txt:
                 say(f"[!] Animation {target} is not in anim.mul (Bodyconv -> anim2..5.mul). "
                     f"Extract it with UOFiddler to {orig}, then run again.")
-                return None if not orig.exists() else {"argv": [sys.executable, "-c", "pass"],
-                                                       "cwd": str(HERE), "env": dict(os.environ)}
-            return {"argv": [sys.executable, "-c", "pass"], "cwd": str(HERE), "env": dict(os.environ)}
+                return None if not orig.exists() else noop()
+            return noop()
 
         def extract_orig():
             if orig.exists():
                 say(f"Using existing {orig}")
-                return {"argv": [sys.executable, "-c", "pass"], "cwd": str(HERE), "env": dict(os.environ)}
+                return noop()
             return cmd_mul2vd(cfg, target)
 
         def extract_body():
             if body.exists():
-                return {"argv": [sys.executable, "-c", "pass"], "cwd": str(HERE), "env": dict(os.environ)}
+                return noop()
             return cmd_mul2vd(cfg, 400)
 
         def pack():
