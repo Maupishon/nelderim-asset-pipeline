@@ -94,3 +94,11 @@ Fakty techniczne z kodu nakładki:
 - Nie edytuj ręcznie plików generowanych.
 - Licencja MIT toolkitu nie daje praw do grafik gry; zachowaj `ASSET-SCOPE.md`, `LICENSE`.
 - SpriteMotion: 1680 póz szacowanych ≠ zatwierdzonych. Zatwierdzonych 6 (akcja 22, SE).
+
+## Podgląd `.vd` — `F:\anim_browser\anim_browser`
+
+`vd-viewer.html` (VD Animation Viewer): jeden plik HTML, otwierany w przeglądarce, offline (poza fontami Google). Używać do sprawdzania `.vd` po `atlas_to_vd.py` / `vdtool.py pack` / `mul2vd.py`.
+- Przeciągnij `.vd` na okno → warstwa. Wiele warstw naraz (np. ciało `anim_0400.vd` + nowy przedmiot); góra listy = wierzch, przesuwanie myszą lub offset w px.
+- Akcje i kierunki jak w `.vd`; podgląd klatek, odtwarzanie.
+- Kolory: oryginał / tint / UO hue (wczytaj `hues.mul` z `F:\Nelderim`), tylko szare piksele (hue częściowy), edycja palety (przemalowanie koloru we wszystkich klatkach modelu).
+- Parser: kolor 15-bit (1-5-5-5), paleta 256, ten sam format co `vdtool.py`.
