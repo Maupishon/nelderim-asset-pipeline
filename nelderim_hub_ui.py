@@ -33,6 +33,20 @@ REG = {"canvas": [], "menu": [], "tk": []}       # widgets that ttk styles canno
 NOWIN = {"creationflags": 0x08000000} if os.name == "nt" else {}      # no flashing console windows from the exe
 
 
+def norm_item(text: str):
+    """ItemID typed by a human -> '0x2683' (hex with 0x, or a plain decimal number). None when it is neither."""
+    t = text.strip()
+    if re.fullmatch(r"0[xX][0-9a-fA-F]+", t):
+        return "0x" + t[2:].upper()
+    if re.fullmatch(r"\d+", t):
+        return hex(int(t))
+    return None
+
+
+BAD_ITEM = ("Numer przedmiotu wygląda nieprawidłowo.\n\nWpisz go tak: 0x2683 (zero, mały iks, potem cyfry/litery A–F) "
+            "albo zwykłą liczbą (np. 9859). Skopiuj go z UOFiddlera (Items → ID).")
+
+
 def sty(level):
     return {"muted": "Muted.TLabel", "ok": "Ok.TLabel", "bad": "Bad.TLabel", "acc": "Acc.TLabel"}.get(level, "Status.TLabel")
 
@@ -56,6 +70,7 @@ def pick_font(root, names, default):
 
 # known error text -> plain-language advice
 HINTS = [
+    (r"invalid literal for int\(\) with base 0", "Numer przedmiotu jest zapisany błędnie. Poprawny zapis: 0x2683 (zero, iks, cyfry)."),
     (r"Empty design", "Któraś komórka arkusza wzoru jest pusta (albo obrazek jest w całości przezroczysty). "
                       "Każdy przedmiot musi leżeć na środku swojej komórki."),
     (r"unrecognized arguments: --config", "Masz starą wersję build.py w toolkicie. Skopiuj paczkę Levy'ego v2 "
@@ -630,10 +645,11 @@ class App:
         H = self.H
 
         def go():
-            g = graphic_var.get().strip()
+            g = norm_item(graphic_var.get())
             if not g:
-                messagebox.showinfo("Numer przedmiotu", "Wpisz ItemID, np. 0x2684.")
+                messagebox.showwarning("Numer przedmiotu", BAD_ITEM)
                 return
+            graphic_var.set(g)
             step.info("Sprawdzam…")
 
             def ok(lines):
@@ -948,6 +964,11 @@ class App:
             if not all(v[k].get().strip() for k in ("graphic", "image", "name")):
                 messagebox.showinfo("Brakuje danych", "Uzupełnij kroki 1–3 (ItemID, obrazek, nazwa pracy).")
                 return False
+            g = norm_item(v["graphic"].get())
+            if not g:
+                messagebox.showwarning("Numer przedmiotu", BAD_ITEM)
+                return False
+            v["graphic"].set(g)
             return True
 
         def build(actions):
@@ -1031,6 +1052,11 @@ class App:
             if not all(v[k].get().strip() for k in ("graphic", "image", "name")):
                 messagebox.showinfo("Brakuje danych", "Uzupełnij kroki 1–3 (ItemID, obrazek, nazwa pracy).")
                 return False
+            g = norm_item(v["graphic"].get())
+            if not g:
+                messagebox.showwarning("Numer przedmiotu", BAD_ITEM)
+                return False
+            v["graphic"].set(g)
             if not H.path_ok("toolkit", self.cfg.get("toolkit")):
                 self.ready(["toolkit"])
                 return False
@@ -1120,6 +1146,10 @@ class App:
         def make():
             if not all(v[k].get().strip() for k in ("anim", "image", "name")):
                 messagebox.showinfo("Brakuje danych", "Uzupełnij numer animacji (krok 1), obrazek (2) i nazwę (3).")
+                return
+            if not v["anim"].get().strip().isdigit():
+                messagebox.showwarning("Numer animacji", "Numer animacji to zwykła liczba, np. 617. "
+                                       "Kliknij „Sprawdź przedmiot”, a wpisze się sam.")
                 return
             if not H.path_ok("toolkit", self.cfg.get("toolkit")):
                 self.ready(["toolkit"])
