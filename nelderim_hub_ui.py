@@ -30,6 +30,9 @@ T = dict(THEMES["light"])
 REG = {"canvas": [], "menu": [], "tk": []}       # widgets that ttk styles cannot reach: recolored on theme change
 
 
+NOWIN = {"creationflags": 0x08000000} if os.name == "nt" else {}      # no flashing console windows from the exe
+
+
 def sty(level):
     return {"muted": "Muted.TLabel", "ok": "Ok.TLabel", "bad": "Bad.TLabel", "acc": "Acc.TLabel"}.get(level, "Status.TLabel")
 
@@ -57,8 +60,8 @@ HINTS = [
                       "Każdy przedmiot musi leżeć na środku swojej komórki."),
     (r"unrecognized arguments: --config", "Masz starą wersję build.py w toolkicie. Skopiuj paczkę Levy'ego v2 "
                                           "(SpriteMotion_skrypty_Nelderim_1.zip) do folderu toolkitu, z nadpisaniem."),
-    (r"No module named '?(numpy|PIL|scipy)", "Brakuje bibliotek w środowisku toolkitu. W PowerShellu, w folderze toolkitu: "
-                                             ".venv\\Scripts\\activate  a potem  python -m pip install numpy pillow scipy"),
+    (r"No module named '?(numpy|PIL|scipy)", "Brakuje bibliotek Pythona (numpy / Pillow). Program zaraz zaproponuje ich "
+                                             "automatyczną instalację. Możesz też kliknąć Ustawienia → „Zainstaluj biblioteki”."),
     (r"FileNotFoundError.*(anim\.idx|anim\.mul|tiledata|Gumpidx|Gumpart|Equipconv|Bodyconv|Body\.def)",
      "Nie znaleziono pliku klienta UO. W Ustawieniach wskaż folder, w którym leżą pliki .mul i .def klienta."),
     (r"region_ids\.png", "Brakuje masek regionów ciała w toolkicie (workspace/ultima-online/region-audit/...). "
@@ -211,6 +214,7 @@ class App:
         self.pages: dict[str, tuple] = {}
         self.current = None
         self.current_key = "start"
+        self.offer_deps = False
         self.navbtns: dict[str, ttk.Button] = {}
         pref = self.cfg.get("theme", "auto")
         self.theme = system_theme() if pref == "auto" else pref
@@ -430,6 +434,8 @@ class App:
         for pat, msg in HINTS:
             if re.search(pat, line) and msg not in shown:
                 shown.add(msg)
+                if "numpy" in pat:
+                    self.offer_deps = True
                 self.say("💡 PODPOWIEDŹ: " + msg)
                 self.set_status("Coś poszło nie tak – zobacz podpowiedź w szczegółach.", BADC)
                 self.ui(lambda: self._toggle_log(True))
@@ -440,7 +446,7 @@ class App:
         self.say("$ " + " ".join(f'"{a}"' if " " in a else a for a in cmd["argv"]))
         try:
             p = subprocess.Popen(cmd["argv"], cwd=cmd["cwd"], env=cmd["env"], stdout=subprocess.PIPE,
-                                 stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+                                 stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", **NOWIN)
         except OSError as e:
             self.say(f"[BŁĄD] {e}")
             capture.append(str(e))
@@ -494,6 +500,9 @@ class App:
                     self._toggle_log(True)
                     if on_fail:
                         on_fail(out)
+                    if self.offer_deps:
+                        self.offer_deps = False
+                        self.offer_install()
             self.ui(done)
 
         threading.Thread(target=work, daemon=True).start()
@@ -575,6 +584,46 @@ class App:
             self.H.open_path(str(p if p.is_dir() else p.parent))
         else:
             messagebox.showinfo("Folder", f"Nie ma jeszcze: {p}")
+
+    # ---- python libraries
+    def deps_ok(self) -> bool:
+        H = self.H
+        try:
+            c = H.cmd_deps_check(self.cfg)
+            r = subprocess.run(c["argv"], cwd=c["cwd"], env=c["env"], capture_output=True, text=True, timeout=60,
+                               **NOWIN)
+            return "DEPS_OK" in r.stdout
+        except (OSError, subprocess.SubprocessError):
+            return False
+
+    def offer_install(self):
+        if messagebox.askyesno("Brakuje bibliotek", "Do pracy potrzebne są biblioteki Pythona (numpy, Pillow, scipy), "
+                                                    "a ten komputer ich nie ma.\n\nZainstalować je teraz? "
+                                                    "(wymaga internetu, trwa chwilę)"):
+            self.install_deps()
+
+    def install_deps(self):
+        H = self.H
+        self.run([lambda: H.cmd_pip_install(self.cfg)], "Instalacja bibliotek",
+                 on_ok=lambda o: (self.set_status("✓ Biblioteki zainstalowane. Możesz ponowić poprzednią akcję.", OKC),
+                                  self.refresh_start()),
+                 on_fail=lambda o: messagebox.showwarning("Instalacja", "Nie udało się zainstalować. Zobacz Szczegóły "
+                                                          "(brak internetu? brak uprawnień?)."),
+                 keys=["toolkit"])
+
+    def check_deps_async(self, label, button):
+        def work():
+            ok = self.deps_ok()
+
+            def upd():
+                if not label.winfo_exists():
+                    return
+                label.configure(text=("✓ " if ok else "✗ ") + "Biblioteki Pythona (numpy, Pillow)",
+                                style=sty(OKC if ok else BADC))
+                if not ok:
+                    button.pack(side="left")
+            self.ui(upd)
+        threading.Thread(target=work, daemon=True).start()
 
     # ---- shared step logic
     def lookup_step(self, step, graphic_var, on_anim=None):
@@ -664,7 +713,7 @@ class App:
         self.stop_preview()
         c = H.cmd_serve(self.cfg, lab)
         self.server = subprocess.Popen(c["argv"], cwd=c["cwd"], env=c["env"], stdout=subprocess.DEVNULL,
-                                       stderr=subprocess.DEVNULL)
+                                       stderr=subprocess.DEVNULL, **NOWIN)
         self.set_status(f"Podgląd działa: http://127.0.0.1:{H.PORT}", OKC)
         self.root.after(700, lambda: webbrowser.open(f"http://127.0.0.1:{H.PORT}"))
 
@@ -772,11 +821,17 @@ class App:
                       width=48).pack(side="left")
             if not ok:
                 ttk.Button(r, text="Ustaw", command=lambda: self.show("settings")).pack(side="left")
+        if H.path_ok("toolkit", self.cfg.get("toolkit")):
+            r = ttk.Frame(self.pre)
+            r.pack(fill="x")
+            lab = ttk.Label(r, text="… sprawdzam biblioteki Pythona", style=sty(MUTED), width=48)
+            lab.pack(side="left")
+            self.check_deps_async(lab, ttk.Button(r, text="Zainstaluj", command=self.install_deps))
         if H.path_ok("toolkit", self.cfg.get("toolkit")) and not H.toolkit_has_axisfit(self.cfg):
             ttk.Label(self.pre, text="⚠ Toolkit ma starą wersję skryptów (bez obsługi broni). Skopiuj paczkę Levy'ego v2.",
                       style=sty(BADC), wraplength=700).pack(anchor="w")
         if allok:
-            ttk.Label(self.pre, text="Wszystko gotowe. Wybierz zadanie poniżej. 👇", style=sty(OKC)).pack(anchor="w")
+            ttk.Label(self.pre, text="Foldery są ustawione. Wybierz zadanie poniżej. 👇", style=sty(OKC)).pack(anchor="w")
 
     def page_settings(self, p):
         H = self.H
@@ -805,6 +860,8 @@ class App:
         self.button(b, "💾 Zapisz", self._save_paths, "Zapisuje ustawienia.", big=True)
         self.button(b, "🔍 Wykryj automatycznie", self._autodetect,
                     "Szuka folderów obok tego programu i w katalogu domowym.")
+        self.button(b, "Zainstaluj biblioteki Pythona", lambda: self.ready(["toolkit"]) and self.install_deps(),
+                    "Instaluje numpy, Pillow i scipy (potrzebne skryptom toolkitu), jeśli ich brakuje.")
         self.button(b, "Pokaż, gdzie zapisano ustawienia",
                     lambda: messagebox.showinfo("Plik ustawień", str(H.CONFIG_FILE)))
         self.st_note = ttk.Label(p, text="", style=sty(MUTED), wraplength=700)

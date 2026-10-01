@@ -363,6 +363,16 @@ def slugify(name: str) -> str:
     return s or "praca"
 
 
+def cmd_deps_check(cfg):
+    """Prints DEPS_OK when the toolkit's python can import numpy and PIL."""
+    return _tk(cfg, "-c", "import numpy, PIL; print('DEPS_OK')")
+
+
+def cmd_pip_install(cfg):
+    """Installs what the toolkit scripts import into the python the hub uses for the toolkit."""
+    return _tk(cfg, "-m", "pip", "install", "numpy", "pillow", "scipy")
+
+
 def cmd_image_check(cfg, image):
     """Prints SIZE w h / ALPHA min max / BBOX (bounding box of pixels with alpha >= 64)."""
     code = ("import sys;from PIL import Image;im=Image.open(sys.argv[1]).convert('RGBA');a=im.getchannel('A');"
