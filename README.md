@@ -50,7 +50,7 @@ Przycisk **jasny / ciemny** na górze przełącza motyw. Pełny zapis działania
 
 ### 5. Gdy coś nie działa
 - Okno się nie otwiera / „Python not found" → zainstaluj Pythona z zaznaczonym „Add Python to PATH".
-- Komunikat o brakującym module (`numpy`, `PIL`, `scipy`) → w folderze toolkitu: `.venv\Scripts\activate`, potem `python -m pip install numpy pillow scipy`.
+- Komunikat o brakującym module (`numpy`, `PIL`, `scipy`) → Hub sam zaproponuje instalację (zgódź się). Możesz też kliknąć **Ustawienia → Zainstaluj biblioteki Pythona**. Ręcznie: `python -m pip install numpy pillow scipy` (w `.venv` toolkitu, jeśli go używasz).
 - Hub pisze, że toolkit ma starą wersję skryptów → rozpakuj paczkę Levy'ego v2 do folderu toolkitu z nadpisaniem.
 - Cokolwiek innego → kliknij **Szczegóły** na dole okna Huba i wklej treść błędu osobie, która Ci pomaga.
 
