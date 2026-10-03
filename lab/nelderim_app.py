@@ -3,7 +3,7 @@ nelderim_app.py - Nelderim Lab: ONE local web app for the whole pipeline (hub + 
 
 Runs a small HTTP server on 127.0.0.1 and opens the browser. The page (app/index.html) talks to this server only.
 No format logic lives here either: tasks are the command builders of nelderim_hub.py (toolkit scripts, pipeline scripts,
-uo3d_py.py), and the live 3D fit uses the uo3d package in-process.
+uo3d/cli_render.py), and the live 3D fit uses the uo3d package in-process.
 
     python nelderim.py            (or run_nelderim.bat / run_nelderim.sh / Nelderim.exe)
 """

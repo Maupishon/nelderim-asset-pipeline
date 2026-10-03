@@ -41,3 +41,4 @@ Thumbs.db
 /uo3d/vdread.py
 /uo3d/vdwrite.py
 /uo3d/weapons.py
+.pytest_cache/

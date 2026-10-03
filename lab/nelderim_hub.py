@@ -8,7 +8,7 @@ scripts exactly as you would in a terminal:
                                           mul2vd.py, atlas_to_vd.py, vdtool.py
     Nelderim pipeline (next to this file): nelderim_search.py, nelderim_patch.py, vd_inject.py,
                                           anim_wire.py (dry run first)
-    3D route                            : uo3d_py.py, uo3d_vd2glb.py
+    3D route                            : uo3d/cli_render.py, uo3d/cli_vd2glb.py
 
 No format logic here. The UI is nelderim_app.py + app/ (started by nelderim.py).
     python nelderim_hub.py --show-config     prints the saved folders
@@ -23,7 +23,8 @@ from pathlib import Path
 
 FROZEN = bool(getattr(sys, "frozen", False))
 # frozen (PyInstaller) exe: the pipeline scripts sit next to the exe, __file__ points to a temp dir
-HERE = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent
+HERE = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent   # program root
+PIPELINE = HERE / "pipeline"
 CONFIG_FILE = Path.home() / ".nelderim_hub.json"
 PORT = 8772
 
@@ -309,8 +310,8 @@ def cmd_serve(cfg, lab):
 
 def _pl(cfg, script, *args):
     """pipeline script that ships next to this program (never a separate folder)."""
-    return {"argv": self_script_cmd(HERE / script, *args),
-            "cwd": str(HERE), "env": dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")}
+    return {"argv": self_script_cmd(PIPELINE / script, *args),
+            "cwd": str(PIPELINE), "env": dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")}
 
 
 def cmd_search(cfg, query, mode="item", limit=None):
@@ -553,7 +554,7 @@ def cmd_pip_install(cfg):
     return _tk(cfg, "-m", "pip", "install", "numpy", "pillow", "scipy")
 
 
-# ---- 3D model route without Blender (uo3d_py.py): label, kind (uo3d engine), note
+# ---- 3D model route without Blender (uo3d/cli_render.py): label, kind (uo3d engine), note
 KINDS3D = [
     ("Koszula / tunika", "shirt", ""),
     ("Zbroja piersiowa", "plate", ""),
@@ -596,7 +597,7 @@ def action_ids(text: str) -> list[str]:
 
 
 def uo3d_script() -> Path:
-    return HERE / "uo3d_py.py"
+    return HERE / "uo3d" / "cli_render.py"
 
 
 def pipeline_file(cfg, name):
@@ -627,8 +628,8 @@ def model3d_problems(cfg) -> list[str]:
 
 
 def cmd_vd2glb(cfg, vd, out, kind="", action=4, voxel=0.02):
-    """uo3d_vd2glb.py: item .vd (UO sprites) -> .glb already placed on the body (for the Fit Lab). Prints RESULT_GLB."""
-    a = [str(HERE / "uo3d_vd2glb.py"), "--body", cfg["bodyglb"], "--vd", vd, "--out", out, "--action", str(action),
+    """uo3d/cli_vd2glb.py: item .vd (UO sprites) -> .glb already placed on the body (for the Fit Lab). Prints RESULT_GLB."""
+    a = [str(HERE / "uo3d" / "cli_vd2glb.py"), "--body", cfg["bodyglb"], "--vd", vd, "--out", out, "--action", str(action),
          "--voxel", str(voxel)]
     if kind:
         a += ["--kind", kind]
@@ -637,7 +638,7 @@ def cmd_vd2glb(cfg, vd, out, kind="", action=4, voxel=0.02):
 
 
 def cmd_uo3d(cfg, spec: dict):
-    """uo3d_py.py (no Blender): spec keys item, kind, out, name, actions [ints], turn, scale, skip [..], saturation, outline."""
+    """uo3d/cli_render.py (no Blender): spec keys item, kind, out, name, actions [ints], turn, scale, skip [..], saturation, outline."""
     a = [str(uo3d_script()), "--body", cfg["bodyglb"], "--item", spec["item"], "--kind", spec["kind"], "--out", spec["out"],
          "--name", spec["name"], "--turn", str(spec.get("turn", 0)), "--scale", str(spec.get("scale", 0)),
          "--saturation", str(spec.get("saturation", 1.0)), "--outline", str(spec.get("outline", 0.38))]

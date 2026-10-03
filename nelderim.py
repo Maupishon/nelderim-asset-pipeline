@@ -12,13 +12,13 @@ Tools from the command line (same scripts the app runs; `<tool> --help` for opti
     python nelderim.py inject  --client <klient> --vd potwor.vd [--apply]               (vd_inject.py)
     python nelderim.py wire    --client <klient> --file 5 [--apply]                      (anim_wire.py)
     python nelderim.py uopatch | gumppatch ...                                          (uopatch.py, uop_gump_patch.py)
-    python nelderim.py uo3d    --body ... --item ... --kind ...                          (uo3d_py.py)
-    python nelderim.py vd2glb  --body ... --vd ... --out ...                             (uo3d_vd2glb.py)
+    python nelderim.py uo3d    --body ... --item ... --kind ...                          (uo3d/cli_render.py)
+    python nelderim.py vd2glb  --body ... --vd ... --out ...                             (uo3d/cli_vd2glb.py)
 The same works with Nelderim.exe instead of `python nelderim.py`.
 
 Helper modes (used by the app itself, also inside the frozen exe):
-    --run-script FILE.py [args]   run one of the pipeline's .py tools (nelderim_patch.py, uo3d_py.py, ...)
-    --uo3d [args]                 the 3D renderer (uo3d_py.py)
+    --run-script FILE.py [args]   run one of the pipeline's .py tools (pipeline/nelderim_patch.py, uo3d/cli_render.py, ...)
+    --uo3d [args]                 the 3D renderer (uo3d/cli_render.py)
     --pick file|dir|save TITLE [FILTER]   native file dialog, prints the chosen path
     --deps-ok                     prints DEPS_OK when numpy and Pillow import
     --py [-c CODE | SCRIPT.py] [args]   acts as `python` for Levy's toolkit scripts (exe without Python installed)
@@ -29,7 +29,8 @@ import sys
 from pathlib import Path
 
 HERE = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
+for _p in (HERE, HERE / "lab", HERE / "pipeline"):          # program root, app server, client tools
+    sys.path.insert(0, str(_p))
 
 
 def pick(kind, title, filt=""):
@@ -62,8 +63,9 @@ def _utf8_console():
             pass
 
 
-TOOLS = {"search": "nelderim_search.py", "patch": "nelderim_patch.py", "inject": "vd_inject.py", "wire": "anim_wire.py",
-         "uopatch": "uopatch.py", "gumppatch": "uop_gump_patch.py", "uo3d": "uo3d_py.py", "vd2glb": "uo3d_vd2glb.py"}
+TOOLS = {"search": "pipeline/nelderim_search.py", "patch": "pipeline/nelderim_patch.py", "inject": "pipeline/vd_inject.py",
+         "wire": "pipeline/anim_wire.py", "uopatch": "pipeline/uopatch.py", "gumppatch": "pipeline/uop_gump_patch.py",
+         "uo3d": "uo3d/cli_render.py", "vd2glb": "uo3d/cli_vd2glb.py"}
 
 
 def main(argv):
@@ -88,8 +90,8 @@ def main(argv):
             return 1
         return main(["--run-script", *rest])
     if argv[:1] == ["--uo3d"]:
-        import uo3d_py
-        uo3d_py.main(argv[1:])
+        from uo3d import cli_render
+        cli_render.main(argv[1:])
         return 0
     if argv[:1] == ["--pick"]:
         pick(argv[1] if len(argv) > 1 else "file", argv[2] if len(argv) > 2 else "Wybierz", argv[3] if len(argv) > 3 else "")

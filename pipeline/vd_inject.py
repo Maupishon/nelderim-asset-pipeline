@@ -52,6 +52,11 @@ SAFETY (same discipline as uopatch.py / uop_gump_patch.py):
 from __future__ import annotations
 import argparse, hashlib, os, shutil, struct, sys, time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# shared, proven building blocks (one copy, in nelderim_core): collision sources, offsets, idx access
+from nelderim_core import (Problem, find, need, load_mobtypes, monster_record_offset, AnimIdxFile,  # noqa: E402
+                           load_bodyconv_bodies, load_bodydef_bodies, animframe_uop_bodies)
+
 IDX_REC = 12
 VD_RECORDS = 110                                   # 22 actions * 5 directions
 VD_HEADER = 4
@@ -60,24 +65,6 @@ VD_DATA_START = VD_HEADER + VD_RECORDS * IDX_REC   # 1324
 GROUP = {"MONSTER": 22, "SEA_MONSTER": 22, "HUMAN": 35,
          "EQUIPMENT": 35, "ANIMAL": 13}
 DIRS = 5
-
-
-class Problem(Exception):
-    pass
-
-
-def find(directory, name):
-    for e in os.listdir(directory):
-        if e.lower() == name.lower():
-            return os.path.join(directory, e)
-    return None
-
-
-def need(directory, name):
-    p = find(directory, name)
-    if not p:
-        raise Problem(f"missing required file: {name} in {directory}")
-    return p
 
 
 # --- .vd reader -------------------------------------------------------
@@ -104,23 +91,6 @@ def vd_populated_count(recs):
 
 
 # --- mobtypes / cumulative offset model --------------------------------
-
-def load_mobtypes(path):
-    d = {}
-    if not path or not os.path.exists(path):
-        return d
-    for line in open(path, encoding="latin-1"):
-        s = line.split("#")[0].strip()
-        if not s:
-            continue
-        p = s.split()
-        if len(p) < 2:
-            continue
-        try:
-            d[int(p[0])] = p[1].upper()
-        except ValueError:
-            pass
-    return d
 
 
 def default_type(b):
@@ -158,10 +128,6 @@ def default_type(b):
 HIGH_GROUP_ACTIONS = 22  # HighAnimationGroup.AnimationCount in the client
 
 
-def monster_record_offset(graphic):
-    return graphic * HIGH_GROUP_ACTIONS * DIRS
-
-
 def cumulative_offsets(mob):
     """Kept for reference/compat only - this is the EQUIPMENT/People-group
     model (uopatch.py), NOT valid for MONSTER bodies. Do not use this for
@@ -176,94 +142,8 @@ def cumulative_offsets(mob):
 
 # --- anim.idx read/write --------------------------------------------------
 
-class AnimIdxFile:
-    def __init__(self, path):
-        self.path = path
-        self.idx = bytearray(open(path, "rb").read())
-        self.count = len(self.idx) // IDX_REC
-
-    def span_free(self, start, length):
-        """True if every record in [start, start+length) is either beyond
-        the current file (nothing written there yet) or explicitly empty
-        (lookup == -1)."""
-        for i in range(start, start + length):
-            if i < self.count:
-                lk = struct.unpack_from("<i", self.idx, i * IDX_REC)[0]
-                if lk != -1:
-                    return False
-        return True
-
-    def record(self, i):
-        if i >= self.count:
-            return (-1, -1, 0)
-        return struct.unpack_from("<iii", self.idx, i * IDX_REC)
-
-    def set_record(self, i, lookup, length, extra):
-        need_len = (i + 1) * IDX_REC
-        if len(self.idx) < need_len:
-            grow_from = self.count
-            self.idx.extend(b"\x00" * (need_len - len(self.idx)))
-            for j in range(grow_from, i + 1):
-                struct.pack_into("<iii", self.idx, j * IDX_REC, -1, -1, 0)
-            self.count = i + 1
-        struct.pack_into("<iii", self.idx, i * IDX_REC, lookup, length, extra)
-
-    def write(self, path):
-        open(path, "wb").write(bytes(self.idx))
-
 
 # --- collision sources: body.def, Bodyconv.def, AnimationFrame*.uop -------
-
-def load_bodyconv_bodies(path):
-    out = set()
-    for line in open(path, encoding="latin-1"):
-        s = line.split("#")[0].strip()
-        if not s:
-            continue
-        p = s.split()
-        try:
-            out.add(int(p[0]))
-        except ValueError:
-            pass
-    return out
-
-
-def load_bodydef_bodies(path):
-    """body.def rewrites a body id to a DIFFERENT one before the client ever
-    looks at anim.idx (resolution order: body.def -> UOP -> Bodyconv.def ->
-    anim.mul). Format per line: `original {newBody} newHue`. Any original id
-    listed here is unusable - the client always resolves to newBody instead."""
-    out = set()
-    for line in open(path, encoding="latin-1"):
-        s = line.strip()
-        if not s or s.startswith("#"):
-            continue
-        try:
-            i1 = s.index("{")
-            out.add(int(s[:i1].strip()))
-        except (ValueError, IndexError):
-            continue
-    return out
-
-
-def animframe_uop_bodies(client, lo, hi):
-    sys.path.insert(0, client)
-    try:
-        from uop_probe import read_uop_hashes, uop_hash
-    except ImportError:
-        return set()
-    import glob
-    out = set()
-    hs = set()
-    for p in glob.glob(os.path.join(client, "AnimationFrame*.uop")):
-        hs |= read_uop_hashes(p)
-    if hs:
-        for body in range(lo, hi):
-            for g in range(100):   # every action group, not only 0-4
-                if uop_hash(f"build/animationlegacyframe/{body:06d}/{g:02d}.bin") in hs:
-                    out.add(body)
-                    break
-    return out
 
 
 # --- centralized collision check, used by BOTH the auto-pick loop and

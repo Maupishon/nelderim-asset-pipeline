@@ -31,7 +31,7 @@ Pipeline:
 cd /d F:\nelderim-asset-pipeline\nelderim-asset-pipeline
 python -m pip install -r requirements.txt
 ```
-`uop_probe.py` musi leżeć obok skryptów (kolizje w `AnimationFrame*.uop`).
+Układ: `nelderim.py` (wejście), `app/` (UI), `lab/` (serwer + `cmd_*`), `pipeline/` (narzędzia klienta: `nelderim_core`, `nelderim_patch`, `nelderim_search`, `uopatch`, `uop_gump_patch`, `uop_probe`, `vd_inject`, `anim_wire`), `uo3d/` (3D + `cli_render.py`, `cli_vd2glb.py`), `tests/` (pytest, sztuczny klient), `docs/PIPELINE.md` (szczegóły techniczne). `uop_probe.py` leży w `pipeline/` obok skryptów; `vd_inject.py` korzysta z `nelderim_core` (nie szuka już `uop_probe.py` w folderze klienta).
 
 ## Nakładka Levy'ego (`SpriteMotion_skrypty_Nelderim`) — przeczytać przed pracą nad animacjami
 
@@ -78,11 +78,11 @@ Fakty techniczne z kodu nakładki:
 
 1. Przeczytaj nakładkę Levy'ego (wyżej) — reguły konwersji, rig, klipy.
 2. Wolne ID / kolizje:
-   `python nelderim_search.py --client "F:\Nelderim" --item "<nazwa_lub_id>"`
+   `python nelderim.py search --client "F:\Nelderim" --item "<nazwa_lub_id>"` (albo `--anim N` / `--body N`)
    Sprawdź `body.def`, `Bodyconv.def`, `AnimationFrame*.uop`, `gump.def`, `art.def`, `mobtypes.txt`.
 3. Klatki: SpriteMotion / outfit-lab → `.vd` (`atlas_to_vd.py` lub `vdtool.py pack`). Zawsze PNG (BMP gubi alfę).
 4. Dry-run:
-   `python nelderim_patch.py --client "F:\Nelderim" --recipe "<receptura.json>" --out "F:\OUTPUT FIDDLERA"`
+   `python nelderim.py patch --client "F:\Nelderim" --recipe "<receptura.json>" --out "F:\OUTPUT FIDDLERA"`
 5. Raport wyniku + `WARN`. Pytaj przy niejasnościach. `--apply` tylko po wyraźnej zgodzie.
 6. Zmiany serwerowe → C# w `F:\ServUO-master\ServUO-master`.
 
@@ -110,9 +110,9 @@ Fakty techniczne z kodu nakładki:
 
 ## Nelderim Lab (hub + pipeline w jednym)
 
-Jedno wejście: `nelderim.py` (`run_nelderim.bat/.sh`, `Nelderim.exe`). Narzędzia z linii poleceń: `nelderim.py search|patch|inject|wire|uopatch|gumppatch|uo3d|vd2glb …` (= odpowiednie skrypty `.py`, które nadal działają też bezpośrednio). Stare okna Tk (`nelderim_gui.py`, `nelderim_hub_ui.py`, `--classic`) usunięte; skrypty pipeline'u leżą zawsze obok programu (bez ustawienia „pipeline”); ustawienia: klient, toolkit, wyjście, UO_Body_0x190.glb. Uruchamia `nelderim_app.py`: serwer stdlib na 127.0.0.1 (port 8774+) i UI w przeglądarce (`app/index.html`, `app/app.js`, `app/style.css`; three.js 0.160 w `app/vendor`, MIT). Styl ciemny „Fit Lab": lewa lista stron i prac, środek widok 3D + pasek (akcja, kierunki 0–7, klatka, Play, kamera UO) + podglądy na żywo z „poke px", prawy panel (historia Cofnij/Ponów, Slot fit: offset/rotate/skala, opcje, Mierz, Zbuduj .vd, Zapisz/Reset). Pozostałe strony: Ubranie 2D, Broń 2D, Gump, Spakuj do .vd, Zestaw, Podgląd .vd, Dodawanie do klienta (receptura, szukanie, wolne ID, na sucho / zastosuj z potwierdzeniem), Ustawienia, Pomoc.
-- `nelderim_hub.py`: logika i budowniczowie komend `cmd_*` (wspólne z UI), ścieżki w `~/.nelderim_hub.json`. Zmieniając argumenty skryptów Levy'ego, popraw `cmd_*`.
-- `nelderim_app.py`: zadania (`task()` → Job z krokami-podprocesami, log w `/api/job`), sesja 3D (`M3D`: `/api/m3d/load|static|pose|preview|measure|save`), podgląd `.vd` (`/api/vd/*`). Bez logiki formatów.
+Jedno wejście: `nelderim.py` (`run_nelderim.bat/.sh`, `Nelderim.exe`). Narzędzia z linii poleceń: `nelderim.py search|patch|inject|wire|uopatch|gumppatch|uo3d|vd2glb …` (= odpowiednie skrypty `.py`, które nadal działają też bezpośrednio). Stare okna Tk (`nelderim_gui.py`, `nelderim_hub_ui.py`, `--classic`) usunięte; skrypty pipeline'u leżą zawsze obok programu (bez ustawienia „pipeline”); ustawienia: klient, toolkit, wyjście, UO_Body_0x190.glb. Uruchamia `lab/nelderim_app.py`: serwer stdlib na 127.0.0.1 (port 8774+) i UI w przeglądarce (`app/index.html`, `app/app.js`, `app/style.css`; three.js 0.160 w `app/vendor`, MIT). Styl ciemny „Fit Lab": lewa lista stron i prac, środek widok 3D + pasek (akcja, kierunki 0–7, klatka, Play, kamera UO) + podglądy na żywo z „poke px", prawy panel (historia Cofnij/Ponów, Slot fit: offset/rotate/skala, opcje, Mierz, Zbuduj .vd, Zapisz/Reset). Pozostałe strony: Ubranie 2D, Broń 2D, Gump, Spakuj do .vd, Zestaw, Podgląd .vd, Dodawanie do klienta (receptura, szukanie, wolne ID, na sucho / zastosuj z potwierdzeniem), Ustawienia, Pomoc.
+- `lab/nelderim_hub.py`: logika i budowniczowie komend `cmd_*` (wspólne z UI), ścieżki w `~/.nelderim_hub.json`. Zmieniając argumenty skryptów Levy'ego, popraw `cmd_*`.
+- `lab/nelderim_app.py`: zadania (`task()` → Job z krokami-podprocesami, log w `/api/job`), sesja 3D (`M3D`: `/api/m3d/load|static|pose|preview|measure|save`), podgląd `.vd` (`/api/vd/*`). Bez logiki formatów.
 - Tryby pomocnicze `nelderim.py` (też w exe): `--run-script PLIK.py`, `--py [-c KOD | SKRYPT.py]` (exe udaje `python` dla skryptów Levy'ego: potrzebują tylko numpy + Pillow + stdlib), `--uo3d`, `--pick`, `--deps-ok`.
 - Python dla toolkitu (`toolkit_argv`): `.venv` toolkitu → systemowy Python z numpy+Pillow (pomija atrapę WindowsApps) → exe `--py`.
 - „Wykryj automatycznie” (`scan_paths`): Pulpit/Pobrane/Dokumenty, folder obok programu, wszystkie dyski, do 4 poziomów; rozpoznaje po zawartości (`_MARKS`), max ~8 s.
@@ -122,13 +122,13 @@ Jedno wejście: `nelderim.py` (`run_nelderim.bat/.sh`, `Nelderim.exe`). Narzędz
 
 ## Nieprzypisane animacje anim2–5.mul → Bodyconv.def + mobtypes.txt (`anim_wire.py`)
 
-`python anim_wire.py --client <KOPIA> --file 5 [--slots 32 33] [--names '{"32":"Smok"}'] [--range lo-hi] [--out DIR] [--apply] [--json]`; w aplikacji: Dodawanie do klienta → krok 4 (miniatury, nazwy, „Podepnij zaznaczone”).
+`python nelderim.py wire --client <KOPIA> --file 5 [--slots 32 33] [--names '{"32":"Smok"}'] [--range lo-hi] [--out DIR] [--apply] [--json]`; w aplikacji: Dodawanie do klienta → krok 4 (miniatury, nazwy, „Podepnij zaznaczone”).
 - Sloty z danymi wg układu `UOReader._base` (wyżej); typ z grupy: 110 → MONSTER, 65 → ANIMAL, 175 → HUMAN.
 - „Nieprzypisany” = żadna niezakomentowana linia `Bodyconv.def` nie wskazuje go w kolumnie animN (kolumny: body, anim2, anim3, anim4, anim5).
 - Wolne body: nie w body.def / Bodyconv.def / mobtypes.txt / AnimationFrame*.uop (akcje 0–99, nie tylko 0–4) / AnimationSequence.uop (pierwszy uint32 wpisu = animId, zlib przy flag 1), nie `animId` w tiledata.mul ani w Equipconv.def, ≠ 0, pusty zakres w anim.mul; najpierw pasmo typu (MONSTER 1–199, ANIMAL 200–399, HUMAN 400+), poza nim tylko powyżej najwyższego id w mobtypes.txt (model `AnimIdx` się nie przesuwa).
 - Zapis tylko do `--out` (w aplikacji `<wyjście>/anim_wire`): kopia + blok `# --- added by anim_wire.py ---` w Bodyconv.def (`body -1 -1 -1 slot -1 # opis`) i mobtypes.txt (`body TYP 0`), backup, manifest, weryfikacja ponownym odczytem.
 - `--check-body N` (w aplikacji „🩺 Sprawdź”): co już używa body N. Lekcja z gry: body 32 przypięte do anim5 slot 196 (wilkołak) pokazało smoka z UOP — UOP ma pierwszeństwo, a stara wersja sprawdzała w UOP tylko akcje 0–4.
-- NIESPRAWDZONE w grze: wcześniej Bodyconv.def był tylko do odczytu (`nelderim_core`); przed hurtowym podpinaniem sprawdzić jedno body. Testowane na sztucznym kliencie (anim5 z blokami z horse200.vd).
+- NIESPRAWDZONE w grze: wcześniej Bodyconv.def był tylko do odczytu (`nelderim_core`); przed hurtowym podpinaniem sprawdzić jedno body. Testowane na sztucznym kliencie (`tests/`) i w grze (wilkołak, anim5 slot 196, po poprawce UOP).
 
 ## Przedmioty i broń — instrukcja Levy'ego (NELDERIM_PRZEDMIOTY_INSTRUKCJA)
 
@@ -153,15 +153,15 @@ Zasady: odpowiedzi po polsku, krótko. Przed wyborem „której starej wersji" z
 
 Nelderim Lab pokrywa: lookup, budowę zestawu/przedmiotu/broni (config + placeholdery), verify, pakowanie z backupem i self-checkiem, gump paperdolla (`make_gump.py`), listę kontrolną. Nie pokrywa: `build_spartan.py`, `build_tracksuit.py` (wzorce, ścieżki zaszyte w skrypcie).
 
-## Model 3D bez Blendera — zakładka „Model 3D" w hubie (`uo3d_py.py` + pakiet `uo3d/`)
+## Model 3D bez Blendera — zakładka „Model 3D" w hubie (`uo3d/cli_render.py` + pakiet `uo3d/`)
 
 Źródło: projekt `UO_Model3D` (MakeHuman, szkielet 107 kości, 35 akcji × 5 kierunków dopasowanych do klatek oryginału). Hub NIE używa Blendera: czyta `model/UO_Body_0x190.glb` (ciało + szkielet + animacje) własnym kodem (numpy + Pillow) i renderuje kamerą UO.
 Zmierzone na `body400.vd` (oryginał): kamera ortogonalna, elewacja 28,45°, 36 px/m, kotwica w świecie (0,0,0.07 m) na pikselu (128.5, 192) płótna 256×256; kierunek d=0..4 = obrót modelu o −45°·d wokół Z; klatka UO k = czas (1+3k)/24 s (24 fps, 3 klatki sceny na klatkę UO); IoU sylwetki 0,879 (zgodne z README projektu).
 Liczba klatek akcji (anim 400): `[10,10,10,10,1,5,5,1,1,7,7,7,7,7,7,10,7,7,7,7,5,6,6,5,5,1,5,5,7,5,5,7,5,5,5]`; w pętlach (chód/bieg) `.glb` ma 3 klatki więcej, niebędące klatkami UO.
 Moduły: `uo3d/glbmodel.py` (glTF + skinning + animacje), `uo3d/raster.py` (kamera + z-bufor numpy), `uo3d/statmesh.py` (model przedmiotu: .glb/.gltf/.obj; .fbx nieobsługiwany), `uo3d/engine.py` (dopasowanie rozmiaru z `EXTENTS`, wypchnięcie z ciała, wagi z najbliższej skóry z ograniczeniem do kości `PARTS`, łańcuchy tkaniny dla skirt/cloak/robe, światło UO 0,08+0,92·N·L, kontur, hold-out ciała), `uo3d/vdwrite.py` (zapis `.vd`, skopiowany z overlayu Levy'ego, MIT).
-Rodzaje: shirt, plate, arms, pants, legs, boots, gloves, helm, robe, skirt, cloak, hair, beard, hat. CLI: `python uo3d_py.py --body UO_Body_0x190.glb --item model.glb --kind shirt --out DIR --name NAZWA [--actions 0 4 9] [--turn] [--scale] [--skip a,b]`.
+Rodzaje: shirt, plate, arms, pants, legs, boots, gloves, helm, robe, skirt, cloak, hair, beard, hat. CLI: `python nelderim.py uo3d --body UO_Body_0x190.glb --item model.glb --kind shirt --out DIR --name NAZWA [--actions 0 4 9] [--turn] [--scale] [--skip a,b]`.
 Dodatki (dane z folderu `pipeline/` obok modelu ciała, wykrywane automatycznie): `body400.vd` → EXACT_BODY (ciało zasłania przedmiot dokładnie wzdłuż oryginalnych sylwetek; `uo3d/vdread.py`), `horse200.vd` → akcje konne 23–29 (koń z oryginalnych klatek; mapowanie 23→0 chód, 24→1 bieg, 25–29→2 stanie; część przedmiotu za osią miednicy i pod sylwetką konia jest ukrywana, heurystyka), `weapon_motion.json` → broń (`uo3d/weapons.py`: klasy weapon1h.R / polearm.L / axe2h.L / bow.L; macierz skinningu = `W_dłoń_poza @ C @ basis @ C⁻¹ @ IBM_dłoń`, basis = T(shift)·R(turn)·R_roll; model broni pionowo wzdłuż +Y, tył na dole; skala domyślna = mediana długości klasy), `uo_shield_keys.py` → tarcza (kość shield.L założona na tarczy kalibracyjnej z `uo_place_shield.py`: CENTRE/NORMAL na przedramieniu; spoczynek kości w `.blend` nie jest w `.glb`, więc położenie NIEZWERYFIKOWANE).
 Tkanina: `uo3d/cloth.py` (PBD: grawitacja, więzy długości krawędzi, przyciąganie do łańcuchów GOAL=0,35, kolizje z ciałem, PREROLL, pętle ×2); włączana `--cloth` (hub: domyślnie dla szaty/spódnicy/peleryny). Wczytywanie modeli: `.glb/.gltf/.obj/.fbx` (binarny FBX: geometria, transformacje węzłów, kolor Diffuse; bez tekstur; ASCII FBX nie). Test: `UO_Body_0x190.fbx` wczytuje się do 14 517 wierzchołków / 26 756 trójkątów, jak `.glb`.
 Rodzaje: shirt, plate, arms, pants, legs, boots, gloves, helm, robe, skirt, cloak, hair, beard, hat, weapon1h, polearm, axe2h, bow, shield.
-`.vd` → `.glb` (`uo3d/fromvd.py`, CLI `uo3d_vd2glb.py --body --vd --out [--action 4] [--voxel 0.02] [--dilate 0] [--no-mirror]`; w aplikacji: Fit Lab „Z pliku .vd…”, Podgląd .vd „Przymierz w 3D”): ciało w pozie akcji 4 klatka 0; bryła z sylwetek (wizualny kadłub) z kierunków 0–4 + lustrzanych 5–7 (= odbicie 3,2,1 wokół kolumny 128); woksel zostaje, gdy trafia w piksel przedmiotu ALBO zasłania go ciało; wnętrze ciała usuwane; potrzebny co najmniej jeden widok, który go naprawdę widzi; małe wyspy (<2%) usuwane; powierzchnia wokseli → wygładzanie Taubina; kolory z klatek z podzielonym światłem UO; powrót do pozy spoczynkowej odwrotnym skinningiem najbliższego wierzchołka ciała; zapis `.glb` z `asset.extras.uo3d_rest = true` (Item pomija wtedy automatyczne skalowanie/położenie) i `COLOR_0` (statmesh czyta, shade mnoży). Test pętli (render własnego silnika → `.glb` → render): IoU sylwetek 0,75–0,91 (akcje 4, 0, 9, 16). Na prawdziwych `.vd` z klienta NIESPRAWDZONE (rejestracja ciała IoU 0,879).
+`.vd` → `.glb` (`uo3d/fromvd.py`, CLI `python nelderim.py vd2glb --body --vd --out [--action 4] [--voxel 0.02] [--dilate 0] [--no-mirror]`; w aplikacji: Fit Lab „Z pliku .vd…”, Podgląd .vd „Przymierz w 3D”): ciało w pozie akcji 4 klatka 0; bryła z sylwetek (wizualny kadłub) z kierunków 0–4 + lustrzanych 5–7 (= odbicie 3,2,1 wokół kolumny 128); woksel zostaje, gdy trafia w piksel przedmiotu ALBO zasłania go ciało; wnętrze ciała usuwane; potrzebny co najmniej jeden widok, który go naprawdę widzi; małe wyspy (<2%) usuwane; powierzchnia wokseli → wygładzanie Taubina; kolory z klatek z podzielonym światłem UO; powrót do pozy spoczynkowej odwrotnym skinningiem najbliższego wierzchołka ciała; zapis `.glb` z `asset.extras.uo3d_rest = true` (Item pomija wtedy automatyczne skalowanie/położenie) i `COLOR_0` (statmesh czyta, shade mnoży). Test pętli (render własnego silnika → `.glb` → render): IoU sylwetek 0,75–0,91 (akcje 4, 0, 9, 16). Na prawdziwych `.vd` z klienta NIESPRAWDZONE (rejestracja ciała IoU 0,879).
 Ograniczenia: nie porównano z żadnym prawdziwym przedmiotem z klienta ani z wynikiem Blendera; broń/tarcza/koń/tkanina sprawdzone tylko wizualnie na syntetycznych kształtach (pudełko, tuba, skorupa z ciała); nie importowano do UOFiddlera/gry.
