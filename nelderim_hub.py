@@ -44,6 +44,9 @@ PATHS = {
     "fiddler":  ("UOFiddler folder (has UOFiddler.exe)", "dir", None, False),
     "serv":     ("ServUO folder (C# scripts)", "dir", None, False),
     "vdtool":   ("vdtool folder (optional; the toolkit's tools/vd is used otherwise)", "dir", None, False),
+    "blender":  ("Blender executable (blender.exe; for the 3D model, Blender 4.2 - 5.2)", "file", None, False),
+    "model3d":  ("UO_Model3D folder (has pipeline/render_uo_layer.py and model/UO_Body_0x190.blend)", "dir",
+                 "pipeline/render_uo_layer.py", False),
 }
 
 
@@ -80,7 +83,9 @@ def guesses(key: str) -> list[str]:
     """Where to open the folder dialog first: siblings of this repo, never assumed to exist."""
     if key == "pipeline":
         return [str(HERE)]
-    names = {"client": ["Nelderim"], "toolkit": ["SpriteMotion-UO-Toolkit", "SpriteMotion"],
+    if key == "blender":
+        return find_blender()
+    names = {"model3d": ["UO_Model3D-main", "UO_Model3D"], "client": ["Nelderim"], "toolkit": ["SpriteMotion-UO-Toolkit", "SpriteMotion"],
              "fiddler": ["UO Fiddler"], "serv": ["ServUO-master"], "vdtool": ["vdtool"]}.get(key, [])
     out = []
     for base in (HERE.parent, HERE.parent.parent, Path.home()):
@@ -89,6 +94,22 @@ def guesses(key: str) -> list[str]:
                 if cand.is_dir():
                     out.append(str(cand))
     return out
+
+
+def find_blender() -> list[str]:
+    """Plausible Blender executables on this machine (never assumed: the user confirms in Settings)."""
+    import glob
+    import shutil
+    out = []
+    w = shutil.which("blender")
+    if w:
+        out.append(w)
+    pats = [r"C:\Program Files\Blender Foundation\Blender*\blender.exe",
+            r"C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe",
+            "/Applications/Blender.app/Contents/MacOS/Blender", "/usr/bin/blender", "/snap/bin/blender"]
+    for pat in pats:
+        out += sorted(glob.glob(pat), reverse=True)
+    return [p for p in out if os.path.isfile(p)]
 
 
 # --------------------------------------------------------- command builders
@@ -371,6 +392,78 @@ def cmd_deps_check(cfg):
 def cmd_pip_install(cfg):
     """Installs what the toolkit scripts import into the python the hub uses for the toolkit."""
     return _tk(cfg, "-m", "pip", "install", "numpy", "pillow", "scipy")
+
+
+# ---- 3D model route (UO_Model3D in Blender); label, uo_import_item KIND, uo_bind_item PART, place, fit, needs SCALE, note
+KINDS3D = [
+    ("Koszula / tunika", "shirt", "chest", "", True, False, ""),
+    ("Zbroja piersiowa", "plate", "chest", "", True, False, ""),
+    ("Rękawy / naramienniki", "arms", "arms", "", True, False, ""),
+    ("Spodnie", "pants", "legs", "", True, False, ""),
+    ("Nogawice / pancerz nóg", "legs", "legs", "", True, False, ""),
+    ("Buty", "boots", "boots", "", True, False, ""),
+    ("Rękawice", "gloves", "gloves", "", True, False, ""),
+    ("Hełm", "helm", "helm", "", True, False, ""),
+    ("Szata / suknia", "robe", "robe", "", False, False, "Tkanina bez symulacji (symulacja 30-60 min: robi się ją ręcznie w Blenderze, uo_cloth_bake.py)."),
+    ("Spódnica", "skirt", "skirt", "", False, False, ""),
+    ("Peleryna", "cloak", "cloak", "", False, False, ""),
+    ("Włosy", "hair", "hair", "", False, False, "Długie fryzury: podaj skalę ręcznie."),
+    ("Broda", "beard", "beard", "", False, False, ""),
+    ("Czapka / kaptur", "hat", "hat", "", False, False, ""),
+    ("Miecz / maczuga / topór jednoręczny", "", "weapon1h", "weapon", False, True, "Model ustaw pionowo: trzon wzdłuż osi Z, czubek w górę."),
+    ("Laska / włócznia / halabarda", "", "polearm", "weapon", False, True, "Model ustaw pionowo: trzon wzdłuż osi Z, czubek w górę."),
+    ("Topór dwuręczny", "", "axe2h", "weapon", False, True, "Model ustaw pionowo: trzon wzdłuż osi Z, czubek w górę."),
+    ("Łuk / kusza", "", "bow", "weapon", False, True, "Model ustaw pionowo: trzon wzdłuż osi Z, czubek w górę."),
+    ("Tarcza", "", "shield", "shield", False, True, "Przodem do widoku z przodu, górą do góry."),
+]
+ACTION_NAMES = ["walk_unarmed", "walk_armed", "run_unarmed", "run_armed", "stand", "fidget_1", "fidget_2",
+                "combat_idle_1h", "combat_idle_2h", "attack_1h_slash", "attack_1h_pierce", "attack_1h_bash",
+                "attack_2h_bash", "attack_2h_slash", "attack_2h_pierce", "combat_advance", "spell_directed",
+                "spell_area", "attack_bow", "attack_crossbow", "get_hit", "die_forward", "die_backward",
+                "mounted_walk", "mounted_run", "mounted_stand", "mounted_attack_1h", "mounted_attack_bow",
+                "mounted_attack_crossbow", "mounted_attack_2h", "block", "punch", "bow", "salute", "eat"]
+
+
+def action_ids(text: str) -> list[str]:
+    """'0 4 9' -> ['00_walk_unarmed', '04_stand', '09_attack_1h_slash'] (render_uo_layer.py ONLY names). Raises ValueError."""
+    out = []
+    for t in text.split():
+        n = int(t)
+        if not 0 <= n < len(ACTION_NAMES):
+            raise ValueError(f"akcja {n} (dozwolone 0-34)")
+        out.append(f"{n:02d}_{ACTION_NAMES[n]}")
+    return out
+
+
+def blend_path(cfg) -> Path:
+    return Path(cfg["model3d"]) / "model" / "UO_Body_0x190.blend"
+
+
+def job3d_script() -> Path:
+    return HERE / "uo3d_job.py"
+
+
+def model3d_problems(cfg) -> list[str]:
+    """What is missing for the 3D route (empty list = ready)."""
+    out = []
+    if not path_ok("blender", cfg.get("blender")):
+        out.append("Nie wskazano Blendera (Ustawienia → Blender).")
+    if not path_ok("model3d", cfg.get("model3d")):
+        out.append("Nie wskazano folderu UO_Model3D (Ustawienia).")
+    elif not blend_path(cfg).is_file():
+        out.append(f"Brak pliku {blend_path(cfg)}.")
+    if not job3d_script().is_file():
+        out.append(f"Brak pliku {job3d_script().name} obok programu.")
+    return out
+
+
+def cmd_blender_job(cfg, spec: dict):
+    """Headless Blender run of uo3d_job.py with a spec.json written next to the output."""
+    out = Path(spec["out"])
+    out.mkdir(parents=True, exist_ok=True)
+    write_json(out / "spec.json", spec)
+    return {"argv": [cfg["blender"], "-b", "--python", str(job3d_script()), "--", str(out / "spec.json")],
+            "cwd": cfg["model3d"], "env": dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")}
 
 
 def cmd_image_check(cfg, image):

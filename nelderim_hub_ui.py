@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import queue
 import re
+import shutil
 import subprocess
 import threading
 import webbrowser
@@ -71,6 +72,8 @@ def pick_font(root, names, default):
 # known error text -> plain-language advice
 HINTS = [
     (r"invalid literal for int\(\) with base 0", "Numer przedmiotu jest zapisany błędnie. Poprawny zapis: 0x2683 (zero, iks, cyfry)."),
+    (r"\[uo3d\] script not found|setting \w+ not found", "Folder UO_Model3D ma inną wersję skryptów, niż ten program zakłada. Wskaż właściwy folder."),
+    (r"Error: Cannot read file|Unable to open|Cannot open", "Blender nie mógł otworzyć pliku. Sprawdź ścieżki w Ustawieniach."),
     (r"Empty design", "Któraś komórka arkusza wzoru jest pusta (albo obrazek jest w całości przezroczysty). "
                       "Każdy przedmiot musi leżeć na środku swojej komórki."),
     (r"unrecognized arguments: --config", "Masz starą wersję build.py w toolkicie. Skopiuj paczkę Levy'ego v2 "
@@ -90,7 +93,8 @@ HINTS = [
 
 PL = {"client": "Folder klienta UO (kopia!)", "toolkit": "Folder toolkitu SpriteMotion",
       "pipeline": "Folder tego programu (pipeline)", "output": "Folder na wyniki dodawania",
-      "vdviewer": "Plik vd-viewer.html", "fiddler": "Folder UOFiddlera", "serv": "Folder ServUO", "vdtool": "Folder vdtool"}
+      "vdviewer": "Plik vd-viewer.html", "fiddler": "Folder UOFiddlera", "serv": "Folder ServUO", "vdtool": "Folder vdtool",
+      "blender": "Blender (blender.exe)", "model3d": "Folder UO_Model3D"}
 
 HELP = """SŁOWNICZEK
 
@@ -351,7 +355,8 @@ class App:
         self.content.columnconfigure(0, weight=1)
         self.content.rowconfigure(0, weight=1)
         for key, label in [("start", "🏠  Start"), ("cloth", "👕  Ubranie / szata"), ("weapon", "⚔  Broń"),
-                           ("gump", "🖼  Obrazek na lalce (gump)"), ("pack", "📦  Spakuj do .vd"),
+                           ("gump", "🖼  Obrazek na lalce (gump)"), ("m3d", "🧊  Model 3D (Blender)"),
+                           ("pack", "📦  Spakuj do .vd"),
                            ("tools", "🔎  Podgląd i narzędzia"), ("set", "🧩  Zestaw z arkusza"),
                            ("patch", "🛠  Dodawanie do klienta"), ("settings", "⚙  Ustawienia"), ("help", "❓  Pomoc")]:
             b = ttk.Button(nav, text=label, style="Nav.TButton", width=26, command=lambda k=key: self.show(k))
@@ -437,7 +442,7 @@ class App:
     # ------------------------------------------------------------ helpers
     def ready(self, keys=None) -> bool:
         H = self.H
-        bad = [k for k in (keys or H.missing(self.cfg)) if not H.path_ok(k, self.cfg.get(k))]
+        bad = [k for k in (keys if keys is not None else H.missing(self.cfg)) if not H.path_ok(k, self.cfg.get(k))]
         if bad:
             messagebox.showwarning("Brakuje ustawień", "Najpierw uzupełnij w Ustawieniach:\n\n" +
                                    "\n".join("• " + PL[k] for k in bad))
@@ -798,6 +803,8 @@ class App:
                   "Masz obrazek szaty, koszuli, spodni, butów… Program dopasuje go do animacji chodzenia, walki itd.", "cloth"),
                  ("⚔  Zmienić wygląd broni",
                   "Miecz, laska, włócznia. Wystarczy obrazek broni ułożony poziomo.", "weapon"),
+                 ("🧊  Przerobić model 3D na animację (Blender)",
+                  "Masz gotowy model 3D (.glb, .fbx, .obj). Zostanie dopasowany do ciała i wyrenderowany do .vd.", "m3d"),
                  ("🖼  Zrobić obrazek broni na lalce postaci",
                   "Ten, który widać w oknie Paperdoll (gump). Męski i damski.", "gump"),
                  ("📦  Spakować gotową pracę do pliku .vd",
@@ -863,7 +870,9 @@ class App:
             "vdviewer": "Plik vd-viewer.html – przeglądarka plików .vd (opcjonalnie).",
             "fiddler": "Folder programu UOFiddler (opcjonalnie, do szybkiego uruchamiania).",
             "serv": "Folder serwera ServUO z skryptami C# (opcjonalnie).",
-            "vdtool": "Osobny folder vdtool (opcjonalnie; inaczej używam narzędzi z toolkitu)."}
+            "vdtool": "Osobny folder vdtool (opcjonalnie; inaczej używam narzędzi z toolkitu).",
+            "blender": "Program Blender 4.2 – 5.2 (blender.exe). Potrzebny tylko do ścieżki z modelem 3D.",
+            "model3d": "Folder UO_Model3D (z podfolderami pipeline i model). Potrzebny tylko do ścieżki z modelem 3D."}
         box = ttk.Frame(p, padding=10)
         box.pack(fill="x")
         for k, (label, kind, _, req) in H.PATHS.items():
@@ -1183,6 +1192,147 @@ class App:
         ttk.Label(s4.body, text="").pack()
         ttk.Label(p, text="Import: UOFiddler → Gumps → Replace (lub Insert, jeśli gumpu nie ma).", style=sty(MUTED)
                   ).pack(anchor="w", padx=14, pady=4)
+
+    # ---- 3D model (Blender)
+    def page_m3d(self, p):
+        H = self.H
+        self.head(p, "🧊 Model 3D (Blender)", "Masz model 3D przedmiotu (.glb, .fbx, .obj…)? Program wstawi go na model ciała UO, dopasuje "
+                                                "do szkieletu i wyrenderuje wszystkie klatki animacji do pliku .vd. Działa w tle, Blender "
+                                                "nie pokazuje okna. To wolniejsza, ale w pełni trójwymiarowa metoda.")
+        v = {k: tk.StringVar() for k in ("kind", "file", "name", "skip", "turn", "scale", "sat", "actions", "graphic")}
+        v["kind"].set(H.KINDS3D[0][0])
+        v["turn"].set("0")
+        v["sat"].set("1.0")
+        v["actions"].set("0 4 9 16")
+        names = [k[0] for k in H.KINDS3D]
+        s0 = Step(p, 1, "Czy wszystko jest gotowe?", "Potrzebne: Blender (4.2 – 5.2) i folder UO_Model3D. Wskaż je w Ustawieniach.")
+
+        def recheck():
+            probs = H.model3d_problems(self.cfg)
+            if probs:
+                s0.bad("\n".join(probs))
+            else:
+                s0.ok("Blender i model są wskazane. Kontynuuj.")
+
+        self.button(s0.body, "Sprawdź ponownie", recheck)
+        self.button(s0.body, "Otwórz Ustawienia", lambda: self.show("settings"))
+        s1 = Step(p, 2, "Co to za przedmiot?", "Rodzaj decyduje o rozmiarze, miejscu na ciele i wiązaniu z kośćmi (ubranie wygina się razem z ciałem, "
+                                              "broń siedzi w dłoni). Pod listą pojawia się podpowiedź.")
+        f = ttk.Frame(s1.body)
+        f.pack(fill="x", pady=2)
+        ttk.Label(f, text="Rodzaj przedmiotu", width=30).pack(side="left")
+        cb = ttk.Combobox(f, textvariable=v["kind"], state="readonly", width=44, values=names)
+        cb.pack(side="left")
+        Tip(cb, "Od rodzaju zależy rozmiar i sposób dopasowania modelu do ciała.")
+        note = ttk.Label(s1.body, text="", style=sty(MUTED), wraplength=700, justify="left")
+        note.pack(anchor="w")
+
+        def kind_info(*_a):
+            k = next((x for x in H.KINDS3D if x[0] == v["kind"].get()), H.KINDS3D[0])
+            txt = k[6]
+            if k[5]:
+                txt = (txt + "\n" if txt else "") + "Dla broni/tarczy podaj skalę (krok 3): model nie jest dopasowywany automatycznie do wysokości."
+            note.configure(text=txt)
+
+        cb.bind("<<ComboboxSelected>>", kind_info)
+        kind_info()
+        self.row(s1.body, "Numer przedmiotu (ItemID)", v["graphic"], "Opcjonalnie: ItemID przedmiotu, który zastępujesz (np. 0x2683). Podpowiem, pod "
+                                                                       "którym numerem animacji zapisać wynik.")
+        self.button(s1.body, "Sprawdź przedmiot", self.lookup_step(s1, v["graphic"]))
+        s2 = Step(p, 3, "Wskaż model 3D", "Plik .glb / .gltf / .fbx / .obj / .dae. Sprawdź licencję modelu. Model może mieć własny szkielet – zostanie pominięty "
+                                          "(ciało UO daje własne wagi).")
+        self.row(s2.body, "Plik modelu 3D", v["file"], "Najlepiej .glb. Do ok. 20 tys. wierzchołków (więcej = wolniej).", kind="file",
+                 ftypes=[("Modele 3D", "*.glb *.gltf *.fbx *.obj *.dae"), ("Wszystkie", "*.*")])
+        self.row(s2.body, "Nazwa pracy", v["name"], "Np. nekro-szata. Wynik trafi do folderu o tej nazwie.")
+        adv = self.advanced(s2.body)
+        self.row(adv, "Pomiń elementy (nazwy, po przecinku)", v["skip"], "Plik często zawiera coś jeszcze: oczy, ciało modelu, elementy pomocnicze. "
+                                                                         "Wpisz fragmenty ich nazw, np. eyes,body,collision.")
+        self.row(adv, "Obrót (stopnie)", v["turn"], "Wpisz 180, jeśli przedmiot wchodzi tyłem do przodu.")
+        self.row(adv, "Skala (0 = automatycznie)", v["scale"], "Mnożnik rozmiaru. 0 = z wysokości rodzaju przedmiotu. Dla broni i tarczy wpisz skalę tak, "
+                                                              "aby model miał rozmiar w metrach.")
+        self.row(adv, "Nasycenie kolorów (0–1)", v["sat"], "1 = kolory modelu, 0 = tylko szarości (przedmiot farbowany w grze).")
+        self.row(adv, "Akcje do wyrenderowania", v["actions"], "Numery ruchów, np. 0 4 9 16. Puste = wszystkie 35 (15–30 min).")
+        saveb = tk.BooleanVar(value=False)
+        c = ttk.Checkbutton(adv, text="Zapisz też plik .blend z przedmiotem (do ręcznych poprawek w Blenderze)", variable=saveb)
+        c.pack(anchor="w")
+        Tip(c, "Plik .blend zawiera oryginalne klatki klienta – tylko do własnego użytku, nie udostępniaj go.")
+        s3 = Step(p, 4, "Zbuduj", "Najpierw kilka akcji na próbę (stanie, chodzenie, cięcie, czar). Blender pracuje w tle – szczegóły są pod przyciskiem „Szczegóły”.")
+        s4 = Step(p, 5, "Obejrzyj i zapisz", "Wynik to plik .vd. Obejrzyj go w przeglądarce .vd (razem z ciałem), potem zaimportuj w UOFiddlerze na KOPII klienta.")
+        res = {"vd": None}
+
+        def out_dir():
+            return H.workroot(self.cfg) / H.slugify(v["name"].get()) / "model3d"
+
+        def build(actions_text):
+            probs = H.model3d_problems(self.cfg)
+            if probs:
+                messagebox.showwarning("Brakuje ustawień", "\n".join(probs))
+                recheck()
+                return
+            if not all(v[k].get().strip() for k in ("file", "name")):
+                messagebox.showinfo("Brakuje danych", "Wskaż plik modelu (krok 3) i podaj nazwę pracy.")
+                return
+            if not Path(v["file"].get().strip()).is_file():
+                messagebox.showwarning("Model", "Nie ma takiego pliku modelu.")
+                return
+            k = next((x for x in H.KINDS3D if x[0] == v["kind"].get()), H.KINDS3D[0])
+            try:
+                only = H.action_ids(actions_text)
+                scale = float(v["scale"].get().replace(",", ".") or 0)
+                turn = int(v["turn"].get() or 0)
+                sat = float(v["sat"].get().replace(",", ".") or 1)
+            except ValueError as e:
+                messagebox.showwarning("Złe dane", f"Sprawdź liczby w polach: {e}")
+                return
+            if k[5] and scale <= 0:
+                messagebox.showwarning("Skala", "Dla broni i tarczy podaj skalę (ustawienia zaawansowane w kroku 3). "
+                                                "Model ma mieć w Blenderze rozmiar w metrach (np. miecz ok. 1 m).")
+                return
+            spec = dict(blend=str(H.blend_path(self.cfg)), pipeline=str(Path(self.cfg["model3d"]) / "pipeline"),
+                        out=str(out_dir()), name=H.slugify(v["name"].get()), file=v["file"].get().strip(), kind=k[1],
+                        part=k[2], place=k[3], weapon_part=k[2] if k[3] == "weapon" else "", fit=k[4], scale=scale, turn=turn,
+                        skip=[x.strip() for x in v["skip"].get().split(",") if x.strip()], saturation=sat, only=only,
+                        outline=0.38, body_gap=0 if k[3] == "shield" else None, save_blend=saveb.get(), metal=None)
+            out = out_dir()
+
+            def ok(lines):
+                m = [x for x in lines if "RESULT_VD" in x]
+                vd = Path(m[-1].split("RESULT_VD", 1)[1].strip()) if m else out / (spec["name"] + ".vd")
+                if vd.is_file():
+                    res["vd"] = vd
+                    s3.ok(f"Gotowe. Plik .vd: {vd}")
+                else:
+                    s3.bad("Blender skończył, ale nie powstał plik .vd. Zobacz Szczegóły.")
+
+            self.run([lambda: H.cmd_blender_job(self.cfg, spec)], "Render modelu 3D", on_ok=ok,
+                     on_fail=lambda o: s3.bad("Nie udało się (zobacz podpowiedź i Szczegóły)."), keys=[])
+
+        self.button(s3.body, "▶ Zbuduj (kilka akcji na próbę)", lambda: build(v["actions"].get().strip() or "0 4 9 16"), big=True)
+        self.button(s3.body, "Zbuduj wszystkie 35 akcji", lambda: build(" ".join(str(i) for i in range(35))),
+                    "Pełny render, trwa 15–30 minut.")
+        self.button(s3.body, "Otwórz folder wyniku", lambda: self.open_folder(out_dir()))
+
+        def to_toolkit():
+            vd = res["vd"]
+            if not vd or not vd.is_file():
+                messagebox.showinfo("Plik .vd", "Najpierw zbuduj (krok 4).")
+                return
+            if not self.ready(["toolkit"]):
+                return
+            dst = H.workdir(self.cfg) / f"nowy3d_{H.slugify(v['name'].get())}.vd"
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            b = H.backup_file(dst)
+            shutil.copy2(vd, dst)
+            s4.ok(f"Skopiowano do folderu roboczego toolkitu:\n{dst}" + (f"\n(kopia poprzedniego: {b})" if b else ""))
+            self.run([lambda: H.cmd_vd_info(self.cfg, str(dst))], "Sprawdzanie pliku .vd", keys=["toolkit"])
+
+        self.button(s4.body, "Sprawdź plik .vd", to_toolkit, "Kopiuje .vd do folderu roboczego toolkitu (z kopią starego) i pokazuje typ i liczbę klatek.", big=True)
+        self.button(s4.body, "Przeglądarka plików .vd", lambda: self.cfg.get("vdviewer") and Path(self.cfg["vdviewer"]).is_file()
+                    and webbrowser.open(Path(self.cfg["vdviewer"]).as_uri()) or messagebox.showinfo(
+                        "Przeglądarka .vd", "Wskaż plik vd-viewer.html w Ustawieniach."))
+        ttk.Label(p, text="Import: UOFiddler → Animations → Animation Edit → ID animacji przedmiotu → Import from VD → Save. Typ pliku = typ celu (ludzie: typ 2).",
+                  style=sty(MUTED), wraplength=700).pack(anchor="w", padx=14, pady=4)
+        recheck()
 
     # ---- pack (any lab)
     def page_pack(self, p):

@@ -48,6 +48,9 @@ Przycisk **jasny / ciemny** na górze przełącza motyw. Pełny zapis działania
 2. Za pierwszym razem skrypt sprawdzi Pythona i sam doinstaluje bibliotekę Pillow. Gdy coś pójdzie źle, okno zostaje otwarte i wyświetla wyjaśnienie.
 3. W oknie wskaż folder klienta gry, dodaj pozycje do receptury i kliknij **Dry run** (na sucho – nic nie zapisuje). Dopiero po sprawdzeniu wyniku kliknij **Apply**.
 
+### Model 3D (opcjonalnie, Blender)
+Zakładka **🧊 Model 3D (Blender)**: masz model 3D przedmiotu (`.glb`, `.fbx`, `.obj`), a program wstawia go na model ciała UO (projekt **UO_Model3D**), dopasowuje do szkieletu i renderuje klatki do pliku `.vd`. Potrzebujesz **Blendera 4.2–5.2** i folderu **UO_Model3D** (z plikiem `model/UO_Body_0x190.blend`); oba wskaż w **Ustawieniach**. Blender pracuje w tle. Najpierw zbuduj kilka akcji na próbę, potem wszystkie 35 (15–30 min). Wymaga pliku `uo3d_job.py` obok programu.
+
 ### 5. Gdy coś nie działa
 - Okno się nie otwiera / „Python not found" → zainstaluj Pythona z zaznaczonym „Add Python to PATH".
 - Komunikat o brakującym module (`numpy`, `PIL`, `scipy`) → Hub sam zaproponuje instalację (zgódź się). Możesz też kliknąć **Ustawienia → Zainstaluj biblioteki Pythona**. Ręcznie: `python -m pip install numpy pillow scipy` (w `.venv` toolkitu, jeśli go używasz).
