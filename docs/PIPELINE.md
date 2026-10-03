@@ -128,3 +128,15 @@ use in `nelderim_core.py`, but worth having in one place:
    position in the resolution order isn't as thoroughly verified as
    `body.def`'s - a WARN here means "check this one in-game," not "this
    is definitely broken."
+
+## Security notes
+
+- The app server listens on 127.0.0.1 only. `Handler.guard()` (lab/nelderim_app.py) additionally requires Host `127.0.0.1`/`localhost`,
+  no foreign `Origin`, and `Content-Type: application/json` on every POST, so no other web page (CSRF, DNS rebinding) can drive the tools
+  while the app is running. Files are served/opened only from the configured folders (`allowed()` = real path containment).
+- Nothing in the repo is secret: no tokens, keys or credentials (history scanned). Game data (`*.mul`, `*.uop`, `*.idx`, `*.vd`) is
+  git-ignored and tests use a synthetic client; `UO_Body_0x190.glb` / `body400.vd` of UO_Model3D contain original client frames and
+  must never be committed.
+- CI: read-only token by default; only the exe job has `contents: write` (to publish the release).
+- Report security problems privately to the repository owner, not in a public issue.
+

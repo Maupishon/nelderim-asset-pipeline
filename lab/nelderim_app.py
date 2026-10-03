@@ -539,16 +539,47 @@ class Handler(BaseHTTPRequestHandler):
             rp = p.resolve()
         except OSError:
             return False
-        return any(r and (str(rp).lower().startswith(str(Path(r).resolve()).lower())) for r in roots)
+        for r in roots:
+            if not r:
+                continue
+            try:
+                rp.relative_to(Path(r).resolve())            # real containment (not a string prefix: /out vs /out-evil)
+                return True
+            except ValueError:
+                if os.name == "nt" and str(rp).lower().startswith(str(Path(r).resolve()).lower() + os.sep):
+                    return True                              # Windows paths are case-insensitive
+        return False
+
+    # --- protection of the local server against other web pages (CSRF / DNS rebinding) ---
+    def guard(self, post=False) -> bool:
+        """Only this app's own page may talk to the server. Blocks: a Host header that is not 127.0.0.1/localhost
+        (DNS rebinding), a foreign Origin, and POSTs that are not JSON (a plain cross-site form / text/plain POST
+        needs no CORS preflight, so without this any website open in the browser could drive the tools)."""
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
+        origin = self.headers.get("Origin")
+        ok = host in ("127.0.0.1", "localhost")
+        if ok and origin and origin != "null":
+            ok = urllib.parse.urlparse(origin).hostname in ("127.0.0.1", "localhost")
+        elif ok and origin == "null":
+            ok = False
+        if ok and post:
+            ok = (self.headers.get("Content-Type") or "").lower().startswith("application/json")
+        if not ok:
+            self.send(403, {"error": "Zabronione: to API jest tylko dla strony Nelderim Lab otwartej z tego komputera."})
+        return ok
 
     # routing
     def do_GET(self):
+        if not self.guard():
+            return
         try:
             self.route_get()
         except Exception as e:  # noqa: BLE001
             self.send(500, {"error": str(e), "trace": traceback.format_exc()[-1500:]})
 
     def do_POST(self):
+        if not self.guard(post=True):
+            return
         try:
             self.route_post()
         except ValueError as e:
@@ -652,6 +683,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"ok": True})
         if path == "/api/lab/open":
             p = str(Path(data["path"]).resolve())
+            if not self.allowed(Path(p)):
+                return self.send(403, {"error": "Ten folder jest poza folderami aplikacji."})
             if not (Path(p) / "index.html").is_file():
                 raise ValueError("W tym folderze nie ma podglądu (index.html). Najpierw zbuduj przymiarkę.")
             if p not in LAB_ROOTS:
@@ -659,6 +692,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"url": f"/lab/{LAB_ROOTS.index(p)}/"})
         if path == "/api/open":
             p = Path(data["path"])
+            if not data.get("folder") and not self.allowed(p):          # showing a FOLDER is harmless; opening a FILE is not
+                return self.send(403, {"error": "Ten plik jest poza folderami aplikacji."})
             if p.exists():
                 H.open_path(str(p if p.is_dir() else p.parent) if data.get("folder") else str(p))
             return self.send(200, {"ok": p.exists()})
