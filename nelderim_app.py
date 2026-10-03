@@ -385,6 +385,17 @@ def task(cfg, name, p):
         if p.get("apply"):
             a.append("--apply")
         return run_job("Zastosowanie zmian" if p.get("apply") else "Przebieg na sucho", [lambda j: H._pl(cfg, "nelderim_patch.py", *a)])
+    if name == "anim_wire":
+        require("pipeline", "client", "output")
+        names = {int(k): str(v) for k, v in (p.get("names") or {}).items() if str(v).strip()}
+        c = H.cmd_anim_wire(cfg, int(p.get("file", 5)), [int(x) for x in p.get("slots") or []], names, bool(p.get("apply")))
+
+        def parse(j, cap):
+            m = [x for x in cap if x.startswith("RESULT_JSON ")]
+            if m:
+                j.result.update(json.loads(m[-1][len("RESULT_JSON "):]))
+        c["on_output"] = parse
+        return run_job("Podpinanie animacji" if p.get("apply") else "Szukanie nieprzypisanych animacji", [lambda j: c])
     if name == "uo3d_render":
         probs = H.model3d_problems(cfg)
         if probs:
@@ -586,6 +597,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"type": at, "actions": n, "frames": acts})
         if path == "/api/vd/frame":
             return self.vd_frame(cfg, q)
+        if path == "/api/animslot/thumb":
+            import anim_wire
+            png = anim_wire.thumbnail(cfg["client"], int(q["file"]), int(q["slot"]), int(q.get("size", 96)))
+            if not png:
+                return self.send(404, {"error": "brak klatek"})
+            return self.send(200, png, "image/png")
         if path == "/api/recipe":
             p = Path(q["path"])
             return self.send(200, json.loads(p.read_text(encoding="utf-8")) if p.is_file() else {"items": []})

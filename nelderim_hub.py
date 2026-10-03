@@ -341,6 +341,18 @@ def cmd_patch(cfg, recipe, apply):
     return _pl(cfg, "nelderim_patch.py", *a)
 
 
+def cmd_anim_wire(cfg, n, slots=None, names=None, apply=False):
+    """anim_wire.py: unassigned slots of anim<n>.mul -> Bodyconv.def + mobtypes.txt (dry run unless apply). Prints RESULT_JSON."""
+    a = ["--client", cfg["client"], "--file", str(n), "--out", str(Path(cfg["output"]) / "anim_wire"), "--json"]
+    if slots:
+        a += ["--slots", *map(str, slots)]
+    if names:
+        a += ["--names", json.dumps({str(k): v for k, v in names.items()}, ensure_ascii=False)]
+    if apply:
+        a.append("--apply")
+    return _pl(cfg, "anim_wire.py", *a)
+
+
 def cmd_pipeline_gui(cfg):
     return _pl(cfg, "nelderim_gui.py")
 
