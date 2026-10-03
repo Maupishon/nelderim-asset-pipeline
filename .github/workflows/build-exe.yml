@@ -6,10 +6,24 @@ on:
     branches: [main]
     tags: ['v*']
 permissions:
-  contents: write
+  contents: read
 jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Tests (synthetic client, no game files)
+        run: |
+          python -m pip install numpy pillow pytest
+          python -m pytest -q tests
   windows:
+    needs: tests
     runs-on: windows-latest
+    permissions:
+      contents: write          # only this job publishes the release
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,6 +41,10 @@ jobs:
           if ($out -notmatch 'PY_OK') { throw "exe --py failed ($out)" }
           $out = & dist\Nelderim\Nelderim.exe --uo3d --help
           if ($LASTEXITCODE -ne 0) { throw "exe --uo3d failed" }
+          $out = & dist\Nelderim\Nelderim.exe wire --help
+          if ($LASTEXITCODE -ne 0) { throw "exe wire failed" }
+          $out = & dist\Nelderim\Nelderim.exe search --help
+          if ($LASTEXITCODE -ne 0) { throw "exe search failed" }
       - name: Zip
         shell: pwsh
         run: Compress-Archive -Path dist\Nelderim -DestinationPath Nelderim-windows.zip

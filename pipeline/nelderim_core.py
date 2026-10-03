@@ -825,17 +825,24 @@ def gump_uop_bodies(client, gids):
     return {g for g in gids if uop_hash(gump_path(g)) in hs}
 
 
+UOP_ACTION_GROUPS = 100   # AnimationFrame*.uop holds one file per body per ACTION group (0..99), not per direction
+
+
 def animframe_uop_bodies(client, lo=0, hi=2048):
-    """Bodies present in AnimationFrame*.uop (any of the 5 direction
-    groups) within [lo,hi)."""
-    out = set()
+    """Bodies present in AnimationFrame*.uop (any action group 0..UOP_ACTION_GROUPS-1) within [lo,hi).
+    Earlier versions probed only groups 0-4 and missed bodies whose UOP data starts later (2026-10: body 32
+    passed as free, then showed a UOP dragon in game instead of the Bodyconv.def animation)."""
+    hs = set()
     for p in glob.glob(os.path.join(client, "AnimationFrame*.uop")):
-        hs = read_uop_hashes(p)
-        for body in range(lo, hi):
-            for g in range(5):
-                if uop_hash(animframe_path(body, g)) in hs:
-                    out.add(body)
-                    break
+        hs |= read_uop_hashes(p)
+    if not hs:
+        return set()
+    out = set()
+    for body in range(lo, hi):
+        for g in range(UOP_ACTION_GROUPS):
+            if uop_hash(animframe_path(body, g)) in hs:
+                out.add(body)
+                break
     return out
 
 

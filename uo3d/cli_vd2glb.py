@@ -1,12 +1,12 @@
-"""uo3d_vd2glb.py - turn an item .vd (UO sprites) into a 3D model (.glb) for trying on in the Fit Lab.
+"""uo3d/cli_vd2glb.py - turn an item .vd (UO sprites) into a 3D model (.glb) for trying on in the Fit Lab.
 
-    python uo3d_vd2glb.py --body UO_Body_0x190.glb --vd anim_0469.vd --out szata.glb [--action 4] [--frame 0]
+    python nelderim.py vd2glb --body UO_Body_0x190.glb --vd anim_0469.vd --out szata.glb [--action 4] [--frame 0]
                           [--voxel 0.02] [--no-mirror] [--dilate 0] [--kind robe]
 
 Prints "RESULT_GLB <path>". The .glb is already placed on the body (rest pose); the Fit Lab loads it without auto-scaling.
 """
 import argparse, os, sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # program root (uo3d package)
 from uo3d import fromvd
 
 

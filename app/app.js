@@ -186,7 +186,7 @@ BUILD.settings = async () => {
   const card = el("div", { class: "card" }); p.append(card);
   const F = {};
   for (const x of S.paths) {
-    const f = field(card, { key: x.key, label: x.label + (x.req ? "" : " (opcjonalnie)"), help: x.help, type: x.kind === "file" ? "file" : "dir", filter: x.key === "bodyglb" ? ".glb" : x.key === "vdviewer" ? ".html" : "" }, x.value);
+    const f = field(card, { key: x.key, label: x.label + (x.req ? "" : " (opcjonalnie)"), help: x.help, type: x.kind === "file" ? "file" : "dir", filter: x.key === "bodyglb" ? ".glb" : "" }, x.value);
     f.row.prepend(el("span", { class: "dot " + (x.ok ? "ok" : x.req ? "bad" : "off"), style: "position:absolute;margin-left:-14px;margin-top:2px" }));
     f.row.style.position = "relative"; F[x.key] = f;
   }
@@ -373,10 +373,18 @@ BUILD.vd = () => {
 // ---- client: recipe editor + search + patch
 BUILD.client = () => {
   const p = page("client", "🛠 Dodawanie do klienta", "Nowe grafiki, gumpy i animacje potworów z receptury (JSON). Zawsze najpierw „na sucho”. Zapis tylko do KOPII klienta.");
-  const s1 = step(p, 1, "Szukaj / sprawdź kolizje", "Nazwa lub numer przedmiotu albo animacji.");
-  const f1 = form(s1.body, [{ key: "query", label: "Nazwa lub numer", help: "np. staff albo 0xDF0" }]);
-  btns(s1.body, ["Szukaj", () => f1.query.get() && runTask("search", { query: f1.query.get() }).then(() => showLog(true))],
-    ["Wolne ID animacji (5)", () => runTask("free_anim", { count: 5 }).then(() => showLog(true))]);
+  const s1 = step(p, 1, "Szukaj / sprawdź kolizje", "Przedmiot po nazwie lub numerze, jedna animacja albo jedno body – z kolizjami w body.def, Bodyconv.def, UOP i mobtypes.txt.");
+  const f1 = form(s1.body, [
+    { key: "mode", label: "Czego szukasz", type: "select", options: [["item", "Przedmiot (nazwa lub ItemID)"], ["anim", "Animacja (numer)"], ["body", "Body / stwór (numer)"]],
+      help: "Przedmiot: szuka w tiledata.mul po nazwie (np. staff) albo numerze (0xDF0). Animacja / body: opis jednego numeru i wszystkie kolizje." },
+    { key: "query", label: "Nazwa lub numer", placeholder: "np. staff, 0xDF0, 970", help: "Dla animacji i body wpisz sam numer (dziesiętnie albo 0x...)." }]);
+  const a1 = adv(s1.body);
+  const f1a = form(a1, [{ key: "limit", label: "Maks. wyników (przedmioty)", placeholder: "50", help: "Ile przedmiotów pokazać przy szukaniu po nazwie. Puste = 50." },
+    { key: "count", label: "Ile wolnych ID animacji", placeholder: "5", help: "Ile wolnych numerów animacji (z wolnym miejscem na gump) wyszukać." },
+    { key: "lo", label: "Szukaj wolnych od", placeholder: "auto", help: "Najniższy numer do sprawdzenia. Puste = powyżej najwyższego numeru w mobtypes.txt." },
+    { key: "hi", label: "Szukaj wolnych do", placeholder: "100000", help: "Najwyższy numer do sprawdzenia. Puste = 100000." }]);
+  btns(s1.body, ["🔍 Szukaj", () => f1.query.get() && runTask("search", { query: f1.query.get(), mode: f1.mode.get(), limit: f1a.limit.get() }).then(() => showLog(true)), "primary"],
+    ["Wolne ID animacji", () => runTask("free_anim", { count: f1a.count.get() || 5, lo: f1a.lo.get(), hi: f1a.hi.get() }).then(() => showLog(true)), "", "Numery animacji, których nic jeszcze nie używa (z wolnym gumpem). Ustawienia w „zaawansowanych”."]);
   const s2 = step(p, 2, "Receptura", "Lista przedmiotów do dodania. Ścieżki plików mogą być względne do pliku receptury.");
   const fpath = field(s2.body, { key: "recipe", label: "Plik receptury (.json)", type: "save", filter: ".json", help: "Nowy albo istniejący plik." }, restore("recipe", ""));
   const tbl = el("table", { class: "t" }); s2.body.append(tbl);
@@ -403,15 +411,18 @@ BUILD.client = () => {
   btns(s2.body, ["Wczytaj", async () => { const pth = fpath.get(); if (!pth) return; const r = await api.get("/api/recipe?path=" + encodeURIComponent(pth)); items = r.items || []; sel = items.length ? 0 : -1; drawT(); drawE(); store("recipe", pth); }],
     ["+ Przedmiot", () => { items.push({ name: "Nowy przedmiot" }); sel = items.length - 1; drawT(); drawE(); }], ["+ Potwór (.vd)", () => { items.push({ name: "Nowy potwór", vd: "" }); sel = items.length - 1; drawT(); drawE(); }],
     ["Usuń", () => { if (sel >= 0) { items.splice(sel, 1); sel = Math.min(sel, items.length - 1); drawT(); drawE(); } }],
+    ["{ } Pokaż JSON", () => { const w = window.open("", "_blank"); if (w) { w.document.title = "Receptura"; const pre = w.document.createElement("pre"); pre.textContent = JSON.stringify({ items }, null, 2); w.document.body.append(pre); } }, "", "Podgląd receptury w formacie JSON (tak jak zapisze się do pliku)."],
     ["💾 Zapisz recepturę", async () => { const pth = fpath.get(); if (!pth) return toast("Podaj plik receptury.", "bad"); await api.post("/api/recipe", { path: pth, items }); store("recipe", pth); toast("Zapisano.", "ok"); }, "primary"]);
   drawT(); drawE();
   const s3 = step(p, 3, "Na sucho, potem zastosuj", "„Na sucho” niczego nie zapisuje. Przeczytaj wynik i ostrzeżenia (WARN).");
-  const f3 = form(s3.body, [{ key: "missing", label: "Brakujące pliki", type: "select", options: [["stop", "zatrzymaj i pokaż listę"], ["skip", "pomiń brakujące pola"]], help: "Co zrobić, gdy receptura wskazuje plik, którego nie ma." }]);
+  const f3 = form(s3.body, [{ key: "missing", label: "Brakujące pliki", type: "select", options: [["stop", "zatrzymaj i pokaż listę"], ["skip", "pomiń brakujące pola"]], help: "Co zrobić, gdy receptura wskazuje plik, którego nie ma. „Zatrzymaj” wypisze wszystkie braki – popraw je w recepturze (krok 2, „Wybierz…”) i uruchom ponownie." }]);
+  const a3 = adv(s3.body);
+  const f3a = form(a3, [{ key: "range", label: "Zakres body dla potworów", placeholder: "900-2000", help: "Z jakiego zakresu dobierać wolne body dla potworów bez podanego „Body”. Puste = 900-2000." }]);
   const go = async (apply) => {
     const pth = fpath.get(); if (!pth) return toast("Podaj i zapisz recepturę.", "bad");
     await api.post("/api/recipe", { path: pth, items });
     if (apply && !confirm("To ZAPISZE zmiany w kliencie.\n\nTo jest KOPIA klienta i sprawdziłeś wynik „na sucho”?")) return;
-    runTask("patch", { recipe: pth, apply, missing: f3.missing.get() }).then(() => showLog(true));
+    runTask("patch", { recipe: pth, apply, missing: f3.missing.get(), range: f3a.range.get() }).then(() => showLog(true));
   };
   btns(s3.body, ["👁 Na sucho (bezpieczne)", () => go(false), "primary"], ["✍ Zastosuj…", () => go(true)]);
 

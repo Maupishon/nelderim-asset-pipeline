@@ -1,9 +1,9 @@
 @echo off
-REM Builds dist\Nelderim\ (Nelderim.exe + app\ + uo3d\ + pipeline scripts) with PyInstaller. Run on Windows.
+REM Builds dist\Nelderim\ (Nelderim.exe + app\ + lab\ + pipeline\ + uo3d\) with PyInstaller. Run on Windows.
 cd /d "%~dp0"
 python -m pip install pyinstaller pillow numpy || goto :fail
-python -m PyInstaller --onefile --noconfirm --name Nelderim ^
-  --hidden-import nelderim_app --hidden-import nelderim_hub --hidden-import nelderim_hub_ui --hidden-import uo3d_py --hidden-import uo3d_vd2glb ^
+python -m PyInstaller --onefile --noconfirm --name Nelderim --paths lab --paths pipeline ^
+  --hidden-import nelderim_app --hidden-import nelderim_hub ^
   --hidden-import nelderim_patch --hidden-import nelderim_search --hidden-import nelderim_core --hidden-import uopatch ^
   --hidden-import uop_gump_patch --hidden-import uop_probe --hidden-import vd_inject --hidden-import anim_wire ^
   --collect-submodules uo3d --hidden-import numpy --hidden-import PIL.Image ^
@@ -13,12 +13,9 @@ python -m PyInstaller --onefile --noconfirm --name Nelderim ^
 if exist dist\Nelderim rmdir /s /q dist\Nelderim
 mkdir dist\Nelderim
 move /y dist\Nelderim.exe dist\Nelderim\ >nul
-for %%f in (nelderim_app.py nelderim_hub.py nelderim_hub_ui.py uo3d_py.py uo3d_vd2glb.py nelderim_core.py nelderim_gui.py nelderim_patch.py nelderim_search.py uopatch.py uop_gump_patch.py uop_probe.py vd_inject.py anim_wire.py requirements.txt README.md CLAUDE.md) do copy /y %%f dist\Nelderim\ >nul
-xcopy /e /i /y app dist\Nelderim\app >nul
-xcopy /e /i /y client-config dist\Nelderim\client-config >nul
-xcopy /e /i /y examples dist\Nelderim\examples >nul
-xcopy /e /i /y uo3d dist\Nelderim\uo3d >nul
-if exist dist\Nelderim\uo3d\__pycache__ rmdir /s /q dist\Nelderim\uo3d\__pycache__
+for %%f in (nelderim.py requirements.txt README.md CLAUDE.md) do copy /y %%f dist\Nelderim\ >nul
+for %%d in (app lab pipeline uo3d client-config examples docs) do if exist %%d xcopy /e /i /y %%d dist\Nelderim\%%d >nul
+for /d /r dist\Nelderim %%p in (__pycache__) do if exist "%%p" rmdir /s /q "%%p"
 echo.
 echo Done: dist\Nelderim\Nelderim.exe
 exit /b 0
