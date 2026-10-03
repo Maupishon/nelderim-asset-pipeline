@@ -90,6 +90,32 @@ class Body:
         return P, N
 
 
+def _rot_xyz(deg):
+    rx, ry, rz = (math.radians(float(v)) for v in deg)
+    cx, sx, cy, sy, cz, sz = math.cos(rx), math.sin(rx), math.cos(ry), math.sin(ry), math.cos(rz), math.sin(rz)
+    Rx = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]]); Ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]])
+    Rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]])
+    return Rz @ Ry @ Rx
+
+
+def apply_adjust(P, N, adj):
+    """Manual slot fit after the automatic placement: rotate (deg, about the item's centre), scale (factor), offset (m).
+    Axes are glTF: X = character's left->right, Y = up, Z = towards the front."""
+    if not adj:
+        return P, N
+    rot = adj.get("rot") or (0, 0, 0)
+    scl = float(adj.get("scl", 1.0) or 1.0)
+    off = np.array(adj.get("off") or (0, 0, 0), float)
+    if not any(rot) and scl == 1.0 and not off.any():
+        return P, N
+    c = (P.min(0) + P.max(0)) / 2
+    R = _rot_xyz(rot)
+    P = (P - c) @ R.T * scl + c + off
+    if N is not None:
+        N = N @ R.T
+    return P, N
+
+
 def nearest(points, ref, chunk=2000):
     """index and distance of the nearest ref point for each point (brute force, chunked)."""
     out_i = np.zeros(len(points), int); out_d = np.zeros(len(points))
@@ -104,12 +130,13 @@ def nearest(points, ref, chunk=2000):
 
 class Item:
     def __init__(self, path, kind, body, turn=0, scale=0.0, skip=(), saturation=1.0, metal=None, shift=(0.0, 0.0, 0.0),
-                 motion=None, shield_keys=None, ref=None, roll_deg=None):
+                 motion=None, shield_keys=None, ref=None, roll_deg=None, adjust=None):
         self.kind = kind
         self.body = body
         self.rigid = None
         self.cloth = None
         self.cloth_t = None
+        self.adjust = adjust or {}
         m = statmesh.load(path, skip)
         self.mesh = m
         P = m.pos.copy()
@@ -137,10 +164,11 @@ class Item:
         P[:, 0] += cx - (P[:, 0].min() + P[:, 0].max()) / 2 + shift[0]
         P[:, 2] += cz - (P[:, 2].min() + P[:, 2].max()) / 2 + shift[2]
         P[:, 1] += shift[1]
+        P, N = apply_adjust(P, N, self.adjust)
         self.scale = sc
         self.pos = P; self.nrm = N
         self.tri = m.tri
-        if kind in FIT_KINDS:
+        if kind in FIT_KINDS and self.adjust.get("fit", True):
             self.fit(GAP_BY_KIND.get(kind, 0.015))
         self.bind_weights()
         self.prepare_materials(saturation, metal)
@@ -165,6 +193,7 @@ class Item:
             sc = float(scale) if scale and scale > 0 else self.rigid.class_length() / length
             P = P * sc
             Q = self.rigid.place(P, ref=ref, roll_deg=roll_deg)
+        Q, _ = apply_adjust(Q, None, self.adjust)
         self.scale = sc
         # normals follow the same rotation as the vertices (place() is rigid): recompute from the geometry
         self.pos = Q
@@ -425,62 +454,82 @@ def _dilate(m, n=1):
 HORSE_ACTION = {23: 0, 24: 1, 25: 2, 26: 2, 27: 2, 28: 2, 29: 2}      # rider action -> action of the horse sprite (walk, run, stand)
 
 
+class FrameRenderer:
+    """Renders single frames of the item layer (shared by the full render and the live previews of the app)."""
+
+    def __init__(self, body, item, margin=0.01, outline_f=0.38, body_masks=None, horse_masks=None):
+        self.body, self.item = body, item
+        self.margin, self.outline_f = margin, outline_f
+        self.body_masks, self.horse_masks = body_masks, horse_masks
+        g = body.g
+        occl = body.joint_mask(OCCLUDER_JOINTS)
+        worn = item.worn
+        occ_vert = np.array([jbase(body.names[j]) not in worn and occl[j] for j in body.dom])
+        torso_vert = np.array([body.names[j].split(".")[0] in TORSO_JOINTS for j in body.dom])
+        self.occ_tri = g.tri[occ_vert[g.tri].all(1)]
+        self.tors_tri = g.tri[torso_vert[g.tri].all(1)]
+        self.pelvis = body.names.index("pelvis")
+
+    def posed(self, a, k):
+        Wp, SM = self.body.pose_matrices(a, k)
+        Pb, Nb = self.body.skin_body(SM)
+        Pi, Ni = self.item.pose(a, k, Wp, SM)
+        return Wp, Pb, Nb, Pi, Ni
+
+    def frame(self, a, k, d, posed=None, poke=False):
+        """-> (RGBA canvas 256x256 uint8, poke pixel count or None)"""
+        W, H = CANVAS
+        g = self.body.g
+        Wp, Pb, Nb, Pi, Ni = posed or self.posed(a, k)
+        xyb, zb = R.camera(Pb, d, CANVAS, ANCHOR)
+        xyi, zi = R.camera(Pi, d, CANVAS, ANCHOR)
+        tid, dep = R.raster(xyi, zi, self.item.tri, W, H)
+        if not (tid >= 0).any():
+            return np.zeros((H, W, 4), np.uint8), (0 if poke else None)
+        img = shade(self.item, tid, W, H, xyi, R.rotate_normals(Ni, d))
+        _, bdep = R.raster(xyb, zb, self.occ_tri, W, H)
+        hide = bdep < dep - self.margin
+        if self.item.kind == "cloak":
+            _, tdep = R.raster(xyb, zb, self.tors_tri, W, H)
+            hide |= tdep < dep - 0.12
+        ob = self.body_masks.get((a, d)) if self.body_masks else None
+        if ob is not None and k < len(ob):
+            hide = _dilate(hide, 1) & ob[k]
+        if self.horse_masks and a in HORSE_ACTION:
+            hm = self.horse_masks.get((HORSE_ACTION[a], d))
+            if hm:
+                hmk = hm[min(k, len(hm) - 1)]
+                pel = Wp[g.joints[self.pelvis]][:3, 3]
+                pelz = float(R.camera(pel[None, :], d, CANVAS, ANCHOR)[1][0])
+                behind = hmk & (dep >= pelz - 0.02)
+                if ob is not None and k < len(ob):
+                    behind &= ~_dilate(ob[k], 2)
+                hide = hide | behind
+        npoke = None
+        if poke:                                                  # body (any part) poking through the item
+            _, adep = R.raster(xyb, zb, g.tri, W, H)
+            npoke = int(((adep < dep - 0.003) & (tid >= 0)).sum())
+        img[hide] = 0
+        img = clean(outline(img, self.outline_f))
+        return img, npoke
+
+
 def render_layer(body, item, actions, out_path, outline_f=0.38, margin=0.01, progress=None, body_masks=None, horse_masks=None,
                  cloth_sim=None):
     """Render the item layer of every (action, direction, frame) to a .vd.
     body_masks: {(action, dir): [bool mask]} silhouettes of the original body (anim 400): the body hides the item exactly along them (EXACT_BODY).
     horse_masks: same for the original horse (mounted actions): the horse hides the part of the item behind the saddle."""
     from .vdwrite import write_vd
-    W, H = CANVAS
+    fr = FrameRenderer(body, item, margin, outline_f, body_masks, horse_masks)
     blocks = {}
-    kind = item.kind
-    cloak = kind == "cloak"
-    occl = body.joint_mask(OCCLUDER_JOINTS)
-    worn = item.worn
-    occ_vert = np.array([jbase(body.names[j]) not in worn and occl[j] for j in body.dom])
-    torso_vert = np.array([body.names[j].split(".")[0] in TORSO_JOINTS for j in body.dom])
-    g = body.g
-    occ_tri = occ_vert[g.tri].all(1)
-    tors_tri = torso_vert[g.tri].all(1)
-    pelvis = body.names.index("pelvis")
     total = sum(5 * ACTION_FRAMES[a] for a in actions); done = 0; t0 = time.time()
     for a in actions:
         if cloth_sim is not None:
-            cloth_sim(a)                                    # fills item.cloth[(a, k)] for every frame of the action
+            cloth_sim(a)
         for k in range(ACTION_FRAMES[a]):
-            Wp, SM = body.pose_matrices(a, k)
-            Pb, Nb = body.skin_body(SM)
-            Pi, Ni = item.pose(a, k, Wp, SM)
-            pel = Wp[g.joints[pelvis]][:3, 3]
+            posed = fr.posed(a, k)
             for d in range(5):
-                xyb, zb = R.camera(Pb, d, CANVAS, ANCHOR)
-                xyi, zi = R.camera(Pi, d, CANVAS, ANCHOR)
-                tid, dep = R.raster(xyi, zi, item.tri, W, H)
-                if (tid >= 0).any():
-                    nv = R.rotate_normals(Ni, d)
-                    img = shade(item, tid, W, H, xyi, nv)
-                    # the body hides the item where it is clearly in front of it (arms, hands, head, legs; never the worn parts)
-                    _, bdep = R.raster(xyb, zb, g.tri[occ_tri], W, H)
-                    hide = bdep < dep - margin
-                    if cloak:
-                        _, tdep = R.raster(xyb, zb, g.tri[tors_tri], W, H)
-                        hide |= tdep < dep - 0.12
-                    ob = body_masks.get((a, d)) if body_masks else None
-                    if ob is not None and k < len(ob):
-                        hide = _dilate(hide, 1) & ob[k]                   # exact: only along the original body outline
-                    if horse_masks and a in HORSE_ACTION:
-                        hm = horse_masks.get((HORSE_ACTION[a], d))
-                        if hm:
-                            hmk = hm[min(k, len(hm) - 1)]
-                            pelz = float(R.camera(pel[None, :], d, CANVAS, ANCHOR)[1][0])
-                            behind = hmk & (dep >= pelz - 0.02)
-                            if ob is not None and k < len(ob):
-                                behind &= ~_dilate(ob[k], 2)                # the original rider's visible parts stay in front
-                            hide = hide | behind
-                    img[hide] = 0
-                    img = clean(outline(img, outline_f))
-                else:
-                    img = np.zeros((H, W, 4), np.uint8)
+                img, _ = fr.frame(a, k, d, posed)
                 blocks.setdefault((a, d), []).append(img)
                 done += 1
             if progress:

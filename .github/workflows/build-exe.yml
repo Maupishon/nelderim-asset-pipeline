@@ -17,8 +17,8 @@ jobs:
         run: build_exe.bat
       - name: Zip
         shell: pwsh
-        run: Compress-Archive -Path dist\NelderimHub -DestinationPath NelderimHub-windows.zip
+        run: Compress-Archive -Path dist\Nelderim -DestinationPath Nelderim-windows.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: NelderimHub-windows
-          path: NelderimHub-windows.zip
+          name: Nelderim-windows
+          path: Nelderim-windows.zip

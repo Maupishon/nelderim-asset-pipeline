@@ -12,67 +12,58 @@ in the code, not just in a commit message.
 
 ## Jak uruchomić (dla początkujących)
 
-Są dwa programy. Oba uruchamiasz dwuklikiem.
+Jeden program: **Nelderim Lab** (hub + pipeline razem). Otwiera się w przeglądarce, ale działa tylko na Twoim komputerze (nic nie wysyła do internetu).
 
-| Program | Do czego | Plik startowy |
-|---|---|---|
-| **Nelderim Hub** | Zmiana wyglądu ubrań i broni, gumpy, pakowanie do `.vd` – kreator krok po kroku, wszystko w jednym oknie | `run_hub.bat` (Windows) / `run_hub.sh` (Linux, macOS) albo `NelderimHub.exe` |
-| **Nelderim Pipeline** | Dodawanie grafik, gumpów i animacji potworów do klienta gry (z receptury JSON) | `run_nelderim.bat` (Windows) / `run_nelderim.sh` (Linux, macOS) |
+| Jak uruchomić | Plik |
+|---|---|
+| Windows, bez Pythona | `Nelderim.exe` (z zakładki Actions, patrz niżej) |
+| Windows, z Pythonem | dwuklik `run_nelderim.bat` |
+| Linux / macOS | `./run_nelderim.sh` |
 
-Hub ma też zakładkę „Dodawanie do klienta", która robi to samo co Pipeline, więc do zwykłej pracy wystarczy sam Hub.
+(`run_hub.bat` / `run_hub.sh` robią to samo. Stare okno Tk: `python nelderim.py --classic`.)
 
 ### 1. Co musisz mieć
-- **Python 3.10 lub nowszy** – pobierz z <https://www.python.org/downloads/>. Przy instalacji zaznacz **„Add Python to PATH"**.
-- **Kopię klienta gry** (folder z plikami `anim.mul`, `tiledata.mul`, `*.def`). **Pracuj zawsze na kopii**, nigdy na jedynym egzemplarzu.
-- Dla Huba dodatkowo **SpriteMotion-UO-Toolkit** z wgraną paczką skryptów Levy'ego (`SpriteMotion_skrypty_Nelderim_1.zip` rozpakowana do folderu toolkitu, z nadpisaniem plików). W folderze toolkitu warto mieć środowisko `.venv` (`python -m venv .venv`, potem `.venv\Scripts\activate` i `python -m pip install -e ".[test]"` oraz `python -m pip install scipy`).
+- **Python 3.10 lub nowszy** (nie dotyczy `Nelderim.exe`) – <https://www.python.org/downloads/>, przy instalacji zaznacz **„Add Python to PATH"**.
+- **Kopię klienta gry** (folder z `anim.mul`, `tiledata.mul`, `*.def`). **Zawsze kopia**, nigdy jedyny egzemplarz.
+- Do metod 2D (ubranie/broń z obrazka, gump, zestaw): **SpriteMotion-UO-Toolkit** z paczką Levy'ego (`SpriteMotion_skrypty_Nelderim_1.zip` rozpakowana do folderu toolkitu z nadpisaniem). Najlepiej z `.venv` (`python -m venv .venv`, `.venv\Scripts\activate`, `python -m pip install -e ".[test]"`, `python -m pip install scipy`).
+- Do modelu 3D: plik **`UO_Body_0x190.glb`** z projektu UO_Model3D (Blender niepotrzebny).
 
 ### 2. Pobranie
-Na stronie repozytorium kliknij zielony przycisk **Code → Download ZIP** i rozpakuj do dowolnego folderu. (Albo `git clone`, jeśli wiesz jak.)
+- **Exe:** zakładka **Actions** → workflow **build-exe** → ostatni zielony przebieg → pobierz **Nelderim-windows** (zip w zipie, rozpakuj oba). Wszystko z paczki trzymaj w jednym folderze (`Nelderim.exe` obok folderów `app`, `uo3d` i skryptów). Ostrzeżenie Windows: **Więcej informacji → Uruchom mimo to** (program niepodpisany).
+- **Bez exe:** zielony przycisk **Code → Download ZIP**, rozpakuj, dwuklik `run_nelderim.bat`. Za pierwszym razem sam doinstaluje Pillow i numpy.
 
-### 3. Uruchomienie Huba
-**Sposób A – plik `.exe` (Windows, bez instalowania czegokolwiek poza Pythonem):**
-1. Wejdź w zakładkę **Actions** tego repozytorium → workflow **build-exe** → ostatni zielony przebieg → na dole pobierz **NelderimHub-windows** (to zip w zipie, rozpakuj oba).
-2. Umieść `NelderimHub.exe` **w tym samym folderze co skrypty** (`nelderim_patch.py` itd. – w paczce leżą obok siebie).
-3. Dwuklik `NelderimHub.exe`. Jeśli Windows ostrzeże o nieznanym wydawcy: **Więcej informacji → Uruchom mimo to** (program nie jest podpisany).
+### 3. Praca
+1. Uruchom. Otworzy się karta przeglądarki **Nelderim Lab**. Czarne okno w tle = program; zamknięcie go (albo przycisk **⏻ zamknij**) wyłącza program.
+2. **Ustawienia**: wskaż foldery (klient, toolkit, folder wyników, `UO_Body_0x190.glb`) albo **Wykryj automatycznie**. Zielona kropka = OK. Zapis w `~/.nelderim_hub.json`, więc na innym komputerze zapyta od nowa.
+3. **Start** → wybierz zadanie i idź od kroku 1. Znak **?** i najechanie myszą pokazują podpowiedzi.
+   - **🧊 Model 3D (Fit Lab)**: wczytaj `.glb` / `.fbx` (binarny) / `.obj`, dopasuj suwakami (przesunięcie, obrót, skala), obejrzyj 3D i podglądy kamerą UO na żywo (z liczbą „poke px" – gdzie ciało przebija przez przedmiot), **Zmierz**, potem **▶ Próba** → **Wszystkie**. Cofnij/Ponów (Ctrl+Z / Ctrl+Y), **Zapisz ustawienia**. Obok modelu ciała folder `pipeline` z UO_Model3D daje: dokładną sylwetkę (`body400.vd`), konia (`horse200.vd`), broń (`weapon_motion.json`), tarczę (`uo_shield_keys.py`).
+   - **Ubranie 2D / Broń 2D / Gump / Zestaw**: metody Levy'ego (toolkit). Najpierw kilka akcji na próbę, potem 35.
+   - **Spakuj do .vd**: z kopią poprzedniej wersji i testem konwertera. **Podgląd .vd**: klatki z ciałem pod spodem.
+   - **Dodawanie do klienta**: receptura (przedmioty, potwory z `.vd`), szukanie, wolne ID. Zawsze **Na sucho** najpierw; **Zastosuj** pyta o potwierdzenie.
+4. Gotowy `.vd` importujesz w UOFiddlerze (Animations → Animation Edit → Import from VD), na kopii klienta.
 
-**Sposób B – bez `.exe`:** w folderze repozytorium dwuklik `run_hub.bat` (Windows) albo `./run_hub.sh` (Linux/macOS). Na Linuksie potrzebny jest jeszcze pakiet `tkinter` (`sudo apt install python3-tk`).
-
-**Pierwsze uruchomienie:** Hub zapyta o foldery: klient UO, toolkit SpriteMotion, folder wyników (i opcjonalnie UOFiddler, ServUO, `vd-viewer.html`). Możesz kliknąć **Wykryj automatycznie** albo wskazać ręcznie – zielone „OK" oznacza poprawny folder. Ustawienia zapisują się w `~/.nelderim_hub.json` (na Windowsie w Twoim folderze użytkownika), więc na innym komputerze zapyta od nowa.
-
-**Praca:** na ekranie **Start** wybierz zadanie (ubranie, broń, gump…) i idź po kolei od kroku 1. Każdy krok ma opis, a po najechaniu myszą na pole pojawia się podpowiedź. Najpierw buduj kilka akcji na próbę, oglądaj podgląd w przeglądarce, dopiero potem wszystkie 35. Wynik pakujesz do `.vd` i importujesz w UOFiddlerze (na kopii klienta).
-
-Przycisk **jasny / ciemny** na górze przełącza motyw. Pełny zapis działania programu jest pod przyciskiem **Szczegóły** na dole.
-
-### 4. Uruchomienie Nelderim Pipeline (samodzielnie)
-1. Dwuklik `run_nelderim.bat` (Windows) albo `./run_nelderim.sh` (Linux/macOS).
-2. Za pierwszym razem skrypt sprawdzi Pythona i sam doinstaluje bibliotekę Pillow. Gdy coś pójdzie źle, okno zostaje otwarte i wyświetla wyjaśnienie.
-3. W oknie wskaż folder klienta gry, dodaj pozycje do receptury i kliknij **Dry run** (na sucho – nic nie zapisuje). Dopiero po sprawdzeniu wyniku kliknij **Apply**.
-
-### Model 3D (opcjonalnie, bez Blendera)
-Zakładka **🧊 Model 3D**: masz model 3D przedmiotu (`.glb`, `.fbx` binarny albo `.obj`), a program wstawia go na model ciała UO (projekt **UO_Model3D**), przypina do szkieletu i renderuje klatki do pliku `.vd`. Obsługuje ubrania, zbroje, hełmy, włosy, szaty, spódnice, peleryny (z symulacją tkaniny), broń i tarcze. Potrzebujesz pliku **`UO_Body_0x190.glb`** (folder `model` projektu UO_Model3D; wskaż go w **Ustawieniach**) oraz bibliotek numpy i Pillow (Hub sam zaproponuje instalację). Blender nie jest potrzebny. Jeśli obok modelu ciała leży folder `pipeline` z projektu UO_Model3D, Hub sam użyje z niego: `body400.vd` (dokładna sylwetka ciała), `horse200.vd` (akcje konne), `weapon_motion.json` (broń), `uo_shield_keys.py` (tarcza). Najpierw zbuduj kilka akcji na próbę, potem pełną wersję (kilka minut).
-
-### 5. Gdy coś nie działa
-- Okno się nie otwiera / „Python not found" → zainstaluj Pythona z zaznaczonym „Add Python to PATH".
-- Komunikat o brakującym module (`numpy`, `PIL`, `scipy`) → Hub sam zaproponuje instalację (zgódź się). Możesz też kliknąć **Ustawienia → Zainstaluj biblioteki Pythona**. Ręcznie: `python -m pip install numpy pillow scipy` (w `.venv` toolkitu, jeśli go używasz).
-- Hub pisze, że toolkit ma starą wersję skryptów → rozpakuj paczkę Levy'ego v2 do folderu toolkitu z nadpisaniem.
-- Cokolwiek innego → kliknij **Szczegóły** na dole okna Huba i wklej treść błędu osobie, która Ci pomaga.
+### 4. Gdy coś nie działa
+- „Python not found" → zainstaluj Pythona z „Add Python to PATH" (albo użyj `Nelderim.exe`).
+- Brak modułu (`numpy`, `PIL`, `scipy`) → **Start** pokaże przycisk instalacji. Ręcznie: `python -m pip install numpy pillow scipy` (w `.venv` toolkitu, jeśli go używasz).
+- Toolkit ma starą wersję skryptów → rozpakuj paczkę Levy'ego v2 z nadpisaniem.
+- Inny błąd → **Szczegóły ▸** na dole strony i wklej treść osobie, która pomaga.
+- Przycisk **Wybierz…** nic nie otwiera (Linux) → `sudo apt install python3-tk` albo wpisz ścieżkę ręcznie.
 
 > **Ścieżki:** wszystkie ścieżki w dalszej części tego README (`C:\Nelderim\...`) to tylko przykłady –
 > użyj własnych. `CLAUDE.md` opisuje układ folderów autora (dysk `F:`); na innym komputerze Claude Code
 > zapyta Cię o ścieżki.
 
 ### English summary
-Two entry points: **Nelderim Hub** (`run_hub.bat` / `./run_hub.sh` / `NelderimHub.exe`, all-in-one Polish wizard
-UI for clothes, weapons, paperdoll gumps and `.vd` export; asks for your folders on first run and stores them in
-`~/.nelderim_hub.json`) and **Nelderim Pipeline** (`run_nelderim.bat` / `./run_nelderim.sh`, patches a client
-copy from a JSON recipe; dry run first). Needs Python 3.10+; the Hub also needs SpriteMotion-UO-Toolkit with
-Levy's v2 overlay. The Windows exe is built by the `build-exe` GitHub Action (artifact `NelderimHub-windows`) or
-locally with `build_exe.bat`. Always work on a COPY of the client.
+One app, **Nelderim Lab** (`Nelderim.exe`, `run_nelderim.bat`, `./run_nelderim.sh` or `python nelderim.py`): a local
+web UI (127.0.0.1 only) that merges the hub and the pipeline: 3D Fit Lab (no Blender), Levy's 2D methods, gumps,
+`.vd` packing and viewing, and client patching from a JSON recipe (dry run first). Folders are asked on first run
+and stored in `~/.nelderim_hub.json`. The Windows exe comes from the `build-exe` GitHub Action (artifact
+`Nelderim-windows`) or `build_exe.bat`. Always work on a COPY of the client.
 
 ## Requirements
 
 - Python 3.10+ (tested on the Windows client install)
-- Pillow (`pip install -r requirements.txt`)
+- Pillow + numpy (`pip install -r requirements.txt`)
 - Run everything from **inside your live client folder** (the one with
   `tiledata.mul`, `anim.idx`, `Gumpart.mul`, ...) - the tools read from
   `--client` and never assume a working directory.
@@ -93,7 +84,7 @@ back into the repo checkout - either works, but keeping `uop_probe.py`
 ## Quick start (GUI)
 
 ```bash
-python nelderim_gui.py
+python nelderim.py
 ```
 
 Pick your client folder, use Search to look up existing items/animations,
@@ -122,12 +113,16 @@ anything.
 | `nelderim_core.py` | Shared, proven building blocks - binary codecs, offset models, collision checks. Every other tool either calls into this or duplicates a piece of it under test. Read this file's section comments before touching format logic anywhere. |
 | `nelderim_patch.py` | Unified CLI - classifies recipe items and routes them to the three engines below as subprocesses. |
 | `nelderim_search.py` | Read-only lookup: search items by name/id, inspect an anim id's gump/UOP status, inspect a body id's collisions and type. |
-| `nelderim_gui.py` | Tkinter desktop front-end. No format logic - only builds a recipe and shells out to the CLI tools above. |
+| `nelderim.py` | The one entry point: starts Nelderim Lab (`nelderim_app.py` server + `app/` web UI); `--classic` opens the older Tk hub. |
+| `nelderim_app.py`, `app/` | Local web app (stdlib HTTP server on 127.0.0.1, three.js vendored in `app/vendor`, MIT). Only builds commands and calls the tools; no format logic. |
+| `nelderim_hub.py` | Command builders for Levy's toolkit scripts and the pipeline tools (shared by the app and the Tk hub). |
+| `uo3d/`, `uo3d_py.py` | 3D renderer without Blender (numpy + Pillow): glTF/FBX/OBJ, skinning, UO camera, `.vd` writer. |
+| `nelderim_gui.py` | Older Tkinter recipe front-end. No format logic - only builds a recipe and shells out to the CLI tools above. |
 | `uopatch.py` | Wearable/item patcher: art, gump (MUL side), tiledata, optional `mobtypes.txt`/`body.def` entries. |
 | `uop_gump_patch.py` | Patches a gump directly inside `gumpartLegacyMUL.uop` in place, for items whose gump id already lives there. |
 | `vd_inject.py` | Imports a `.vd` monster-animation container into `anim.mul`/`anim.idx`, auto-picking (or taking) a target body id. |
 | `uop_probe.py` | Thin compatibility shim - re-exports `uop_hash`/`read_uop_hashes` from `nelderim_core` under the name the other tools optionally import. Keep it alongside the other tools **in the client folder** so the `AnimationFrame*.uop` collision check is never silently skipped. |
-| `run_nelderim.bat` / `run_nelderim.sh` | Idiot-proof launchers for Windows / Linux+macOS - check Python/Pillow/tkinter, install what's missing, launch the GUI, and never let the window vanish before an error can be read. |
+| `run_nelderim.bat` / `run_nelderim.sh` | Idiot-proof launchers for Windows / Linux+macOS - check Python/Pillow/numpy, install what's missing, launch Nelderim Lab, and never let the window vanish before an error can be read. |
 | `client-config/` | Reference snapshot of this shard's live `.def`/`mobtypes.txt` files - see its own README. Not deployed automatically; a tool's own `--out` folder is always the real deploy source. |
 
 ## Recipe format

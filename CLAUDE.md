@@ -107,9 +107,14 @@ Fakty techniczne z kodu nakładki:
 - Kolory: oryginał / tint / UO hue (wczytaj `hues.mul` z `F:\Nelderim`), tylko szare piksele (hue częściowy), edycja palety (przemalowanie koloru we wszystkich klatkach modelu).
 - Parser: kolor 15-bit (1-5-5-5), paleta 256, ten sam format co `vdtool.py`.
 
-## Hub
+## Nelderim Lab (hub + pipeline w jednym)
 
-`nelderim_hub.py` (logika, budowniczowie komend) + `nelderim_hub_ui.py` (okno dla żółtodzioba, po polsku: ekran Start, kreatory krok po kroku, podpowiedzi po najechaniu, menu prawego przycisku, automatyczne foldery, podpowiedzi przy znanych błędach). Uruchamianie `run_hub.bat` / `run_hub.sh`: jedno okno, pyta o ścieżki, zapisuje w `~/.nelderim_hub.json`, uruchamia skrypty toolkitu i pipeline'u. Bez logiki formatów (tylko buduje komendy). Zmieniając argumenty skryptów Levy'ego, popraw też budowniczych `cmd_*` w hubie.
+Jedno wejście: `nelderim.py` (`run_nelderim.bat/.sh`, `run_hub.bat/.sh`, `Nelderim.exe`). Uruchamia `nelderim_app.py`: serwer stdlib na 127.0.0.1 (port 8774+) i UI w przeglądarce (`app/index.html`, `app/app.js`, `app/style.css`; three.js 0.160 w `app/vendor`, MIT). Styl ciemny „Fit Lab": lewa lista stron i prac, środek widok 3D + pasek (akcja, kierunki 0–7, klatka, Play, kamera UO) + podglądy na żywo z „poke px", prawy panel (historia Cofnij/Ponów, Slot fit: offset/rotate/skala, opcje, Mierz, Zbuduj .vd, Zapisz/Reset). Pozostałe strony: Ubranie 2D, Broń 2D, Gump, Spakuj do .vd, Zestaw, Podgląd .vd, Dodawanie do klienta (receptura, szukanie, wolne ID, na sucho / zastosuj z potwierdzeniem), Ustawienia, Pomoc.
+- `nelderim_hub.py`: logika i budowniczowie komend `cmd_*` (wspólne z UI), ścieżki w `~/.nelderim_hub.json`. Zmieniając argumenty skryptów Levy'ego, popraw `cmd_*`.
+- `nelderim_app.py`: zadania (`task()` → Job z krokami-podprocesami, log w `/api/job`), sesja 3D (`M3D`: `/api/m3d/load|static|pose|preview|measure|save`), podgląd `.vd` (`/api/vd/*`). Bez logiki formatów.
+- Tryby pomocnicze `nelderim.py` (też w exe): `--run-script PLIK.py`, `--uo3d`, `--pick`, `--deps-ok`; `--classic` = stare okno Tk (`nelderim_hub_ui.py`).
+- Prace 3D: `<toolkit>/workspace/ultima-online/<nazwa>/model3d/` (bez toolkitu: `<wyjście>/prace3d/`), `work.json` + 3 poprzednie wersje w `history/`.
+- Exe: `build_exe.bat` (PyInstaller, konsola) → `dist\Nelderim\` (exe + `app/`, `uo3d/`, skrypty); CI `build-exe` → artefakt `Nelderim-windows`.
 
 ## Przedmioty i broń — instrukcja Levy'ego (NELDERIM_PRZEDMIOTY_INSTRUKCJA)
 
@@ -132,7 +137,7 @@ Zasady: odpowiedzi po polsku, krótko. Przed wyborem „której starej wersji" z
 10. **Nie sprawdzono**: import do UOFiddlera i wygląd w grze, ikona przedmiotu (art), `ItemData.csv`/`bodyTable.cfg`/skrypty C#, `.uop`.
 11. **Pułapki**: pusta komórka → `Empty design`; półprzezroczysty szum w komórce → kadruj po `alfa>=64`; po zmianie `build.py` stare paczki są nieaktualne (`build.py`, `viewer.js`, `verify.py`, `uo.py`); `Remove-Item` z `C:\` w jednym poleceniu bywa blokowane.
 
-Hub (`nelderim_hub.py`) pokrywa: lookup, budowę zestawu/przedmiotu/broni (config + placeholdery), verify, pakowanie z backupem i self-checkiem, gump paperdolla (`make_gump.py`), listę kontrolną. Nie pokrywa: `build_spartan.py`, `build_tracksuit.py` (wzorce, ścieżki zaszyte w skrypcie).
+Nelderim Lab pokrywa: lookup, budowę zestawu/przedmiotu/broni (config + placeholdery), verify, pakowanie z backupem i self-checkiem, gump paperdolla (`make_gump.py`), listę kontrolną. Nie pokrywa: `build_spartan.py`, `build_tracksuit.py` (wzorce, ścieżki zaszyte w skrypcie).
 
 ## Model 3D bez Blendera — zakładka „Model 3D" w hubie (`uo3d_py.py` + pakiet `uo3d/`)
 

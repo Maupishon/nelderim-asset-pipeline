@@ -69,27 +69,7 @@ def pick_font(root, names, default):
             return have[n.lower()]
     return default
 
-# known error text -> plain-language advice
-HINTS = [
-    (r"invalid literal for int\(\) with base 0", "Numer przedmiotu jest zapisany błędnie. Poprawny zapis: 0x2683 (zero, iks, cyfry)."),
-    (r"Format \.\w+ nie jest obsługiwany", "Ten format modelu nie jest obsługiwany. Zamień model na .glb (np. darmowym konwerterem online) albo .obj."),
-    (r"Model nie zawiera żadnej siatki", "W pliku nie znalazłem żadnej siatki 3D (albo wszystko zostało pominięte w „Pomiń elementy”)."),
-    (r"Empty design", "Któraś komórka arkusza wzoru jest pusta (albo obrazek jest w całości przezroczysty). "
-                      "Każdy przedmiot musi leżeć na środku swojej komórki."),
-    (r"unrecognized arguments: --config", "Masz starą wersję build.py w toolkicie. Skopiuj paczkę Levy'ego v2 "
-                                          "(SpriteMotion_skrypty_Nelderim_1.zip) do folderu toolkitu, z nadpisaniem."),
-    (r"No module named '?(numpy|PIL|scipy)", "Brakuje bibliotek Pythona (numpy / Pillow). Program zaraz zaproponuje ich "
-                                             "automatyczną instalację. Możesz też kliknąć Ustawienia → „Zainstaluj biblioteki”."),
-    (r"FileNotFoundError.*(anim\.idx|anim\.mul|tiledata|Gumpidx|Gumpart|Equipconv|Bodyconv|Body\.def)",
-     "Nie znaleziono pliku klienta UO. W Ustawieniach wskaż folder, w którym leżą pliki .mul i .def klienta."),
-    (r"region_ids\.png", "Brakuje masek regionów ciała w toolkicie (workspace/ultima-online/region-audit/...). "
-                         "Rozpakuj kompletny toolkit SpriteMotion."),
-    (r"Only human/equipment animation IDs", "To nie jest animacja ubrania (ID poniżej 400). Wybierz inny przedmiot."),
-    (r"requires a DEF remapping", "Ta animacja jest przekierowana w Body.def. Ten program jej nie obsługuje."),
-    (r"Truncated animation record|Invalid frame|Animation run outside", "Dane animacji w kliencie są nietypowe lub uszkodzone."),
-    (r"PermissionError|Permission denied", "Brak uprawnień do zapisu. Zamknij programy używające pliku albo wybierz inny folder."),
-    (r"Original gump \d+ not found", "Tego gumpu nie ma w Gumpidx/Gumpart.mul (może leży w pliku .uop)."),
-]
+from nelderim_hub import HINTS  # noqa: E402  (shared with the web app)
 
 PL = {"client": "Folder klienta UO (kopia!)", "toolkit": "Folder toolkitu SpriteMotion",
       "pipeline": "Folder tego programu (pipeline)", "output": "Folder na wyniki dodawania",

@@ -26,6 +26,7 @@ def main(argv=None):
     ap.add_argument("--weapon-ref", type=int, default=None, help="original weapon whose head orientation to copy (anim id)")
     ap.add_argument("--roll", type=float, default=None, help="weapon roll offset in degrees (overrides --weapon-ref)")
     ap.add_argument("--cloth", action="store_true", help="simulate the cloth of robe / skirt / cloak (slower)")
+    ap.add_argument("--adjust", default="", help="manual slot fit JSON: {\"off\": [x,y,z] m, \"rot\": [rx,ry,rz] deg, \"scl\": factor, \"fit\": true}")
     a = ap.parse_args(argv)
     horse = os.path.isfile(a.horse_vd) if a.horse_vd else False
     acts = a.actions or [i for i in range(35) if horse or i not in engine.MOUNTED]
@@ -43,7 +44,7 @@ def main(argv=None):
     keys = engine.wp.load_shield_keys(a.shield_keys or engine.wp.find_shield_keys(a.body))
     item = engine.Item(a.item, a.kind, body, turn=a.turn, scale=a.scale, skip=[s for s in a.skip.split(",") if s],
                        saturation=a.saturation, metal={"auto": None, "yes": True, "no": False}[a.metal], motion=motion,
-                       shield_keys=keys, ref=a.weapon_ref, roll_deg=a.roll)
+                       shield_keys=keys, ref=a.weapon_ref, roll_deg=a.roll, adjust=json.loads(a.adjust) if a.adjust else None)
     body_masks = engine.vdread.alpha_masks(a.body_vd) if a.body_vd and os.path.isfile(a.body_vd) else None
     horse_masks = engine.vdread.alpha_masks(a.horse_vd) if horse else None
     engine.say("ciało: " + ("dokładna sylwetka z oryginału (EXACT_BODY)" if body_masks else "tylko model 3D") + "; koń: " + ("tak" if horse_masks else "nie"))
