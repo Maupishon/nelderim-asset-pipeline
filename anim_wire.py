@@ -213,13 +213,20 @@ def plan(client, n, slots=None, names=None, lo=None, hi=None):
 
 
 # ---------------------------------------------------------------- write
+def ascii_note(text):
+    """comments in .def / mobtypes.txt stay plain ASCII (the files are latin-1; Polish letters like ł do not fit)."""
+    import unicodedata
+    text = text.translate(str.maketrans({"ł": "l", "Ł": "L"}))
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+
+
 def _append(path_in, path_out, header, lines):
     if path_in:
         shutil.copyfile(path_in, path_out)
     else:
         open(path_out, "w", encoding="latin-1").close()
     with open(path_out, "a", encoding="latin-1", newline="") as f:
-        f.write(f"\r\n# --- added by anim_wire.py ({header}) ---\r\n")
+        f.write(f"\r\n# --- added by anim_wire.py ({ascii_note(header)}) ---\r\n")
         for ln in lines:
             f.write(ln + "\r\n")
 
@@ -235,7 +242,7 @@ def apply_plan(client, n, rows, out):
     for r in rows:
         cols = ["-1"] * 4
         cols[COL[n] - 1] = str(r["slot"])
-        note = f"anim{n} slot {r['slot']}" + (f" - {r['name']}" if r.get("name") else "")
+        note = ascii_note(f"anim{n} slot {r['slot']}" + (f" - {r['name']}" if r.get("name") else ""))
         bc_lines.append("\t".join([str(r["body"]), *cols, "-1"]) + f"\t# {note}")
         mob_lines.append(f"{r['body']}\t{r['type']}\t0\t# {note}")
     _append(C.find(client, "Bodyconv.def"), os.path.join(out, "Bodyconv.def"), f"anim{n}.mul, {stamp}", bc_lines)

@@ -44,7 +44,17 @@ def pick(kind, title, filt=""):
     print(p or "", flush=True)
 
 
+def _utf8_console():
+    """child output is read as UTF-8 by the app; the frozen exe ignores PYTHONIOENCODING, so set it here."""
+    for st in (sys.stdout, sys.stderr):
+        try:
+            st.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv):
+    _utf8_console()
     if argv[:1] == ["--run-script"]:
         script = Path(argv[1]).resolve()
         sys.argv = [str(script), *argv[2:]]
