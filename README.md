@@ -48,8 +48,8 @@ Przycisk **jasny / ciemny** na górze przełącza motyw. Pełny zapis działania
 2. Za pierwszym razem skrypt sprawdzi Pythona i sam doinstaluje bibliotekę Pillow. Gdy coś pójdzie źle, okno zostaje otwarte i wyświetla wyjaśnienie.
 3. W oknie wskaż folder klienta gry, dodaj pozycje do receptury i kliknij **Dry run** (na sucho – nic nie zapisuje). Dopiero po sprawdzeniu wyniku kliknij **Apply**.
 
-### Model 3D (opcjonalnie, Blender)
-Zakładka **🧊 Model 3D (Blender)**: masz model 3D przedmiotu (`.glb`, `.fbx`, `.obj`), a program wstawia go na model ciała UO (projekt **UO_Model3D**), dopasowuje do szkieletu i renderuje klatki do pliku `.vd`. Potrzebujesz **Blendera 4.2–5.2** i folderu **UO_Model3D** (z plikiem `model/UO_Body_0x190.blend`); oba wskaż w **Ustawieniach**. Blender pracuje w tle. Najpierw zbuduj kilka akcji na próbę, potem wszystkie 35 (15–30 min). Wymaga pliku `uo3d_job.py` obok programu.
+### Model 3D (opcjonalnie, bez Blendera)
+Zakładka **🧊 Model 3D**: masz model 3D ubrania, zbroi, hełmu, włosów, szaty, spódnicy lub peleryny (`.glb` albo `.obj`), a program wstawia go na model ciała UO (projekt **UO_Model3D**), przypina do szkieletu i renderuje klatki do pliku `.vd`. Potrzebujesz tylko pliku **`UO_Body_0x190.glb`** (leży w folderze `model` projektu UO_Model3D; wskaż go w **Ustawieniach**) oraz bibliotek Pythona numpy i Pillow (Hub sam zaproponuje instalację). Blender nie jest potrzebny. Najpierw zbuduj kilka akcji na próbę, potem pełną wersję (kilka minut). Nie ma jeszcze broni i tarcz, konia (akcje konne 23–29 są pomijane) ani symulacji tkaniny.
 
 ### 5. Gdy coś nie działa
 - Okno się nie otwiera / „Python not found" → zainstaluj Pythona z zaznaczonym „Add Python to PATH".

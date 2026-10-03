@@ -44,9 +44,7 @@ PATHS = {
     "fiddler":  ("UOFiddler folder (has UOFiddler.exe)", "dir", None, False),
     "serv":     ("ServUO folder (C# scripts)", "dir", None, False),
     "vdtool":   ("vdtool folder (optional; the toolkit's tools/vd is used otherwise)", "dir", None, False),
-    "blender":  ("Blender executable (blender.exe; for the 3D model, Blender 4.2 - 5.2)", "file", None, False),
-    "model3d":  ("UO_Model3D folder (has pipeline/render_uo_layer.py and model/UO_Body_0x190.blend)", "dir",
-                 "pipeline/render_uo_layer.py", False),
+    "bodyglb":  ("UO_Body_0x190.glb (3D body of UO_Model3D, folder model/)", "file", None, False),
 }
 
 
@@ -83,9 +81,9 @@ def guesses(key: str) -> list[str]:
     """Where to open the folder dialog first: siblings of this repo, never assumed to exist."""
     if key == "pipeline":
         return [str(HERE)]
-    if key == "blender":
-        return find_blender()
-    names = {"model3d": ["UO_Model3D-main", "UO_Model3D"], "client": ["Nelderim"], "toolkit": ["SpriteMotion-UO-Toolkit", "SpriteMotion"],
+    if key == "bodyglb":
+        return find_bodyglb()
+    names = {"client": ["Nelderim"], "toolkit": ["SpriteMotion-UO-Toolkit", "SpriteMotion"],
              "fiddler": ["UO Fiddler"], "serv": ["ServUO-master"], "vdtool": ["vdtool"]}.get(key, [])
     out = []
     for base in (HERE.parent, HERE.parent.parent, Path.home()):
@@ -96,20 +94,15 @@ def guesses(key: str) -> list[str]:
     return out
 
 
-def find_blender() -> list[str]:
-    """Plausible Blender executables on this machine (never assumed: the user confirms in Settings)."""
-    import glob
-    import shutil
+def find_bodyglb() -> list[str]:
+    """Plausible places of UO_Body_0x190.glb (siblings of this folder / home); the user confirms in Settings."""
     out = []
-    w = shutil.which("blender")
-    if w:
-        out.append(w)
-    pats = [r"C:\Program Files\Blender Foundation\Blender*\blender.exe",
-            r"C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe",
-            "/Applications/Blender.app/Contents/MacOS/Blender", "/usr/bin/blender", "/snap/bin/blender"]
-    for pat in pats:
-        out += sorted(glob.glob(pat), reverse=True)
-    return [p for p in out if os.path.isfile(p)]
+    for base in (HERE.parent, HERE.parent.parent, Path.home(), Path.home() / "Desktop", Path.home() / "Downloads"):
+        for n in ("UO_Model3D-main", "UO_Model3D"):
+            for cand in (base / n / "model" / "UO_Body_0x190.glb", base / n / n / "model" / "UO_Body_0x190.glb"):
+                if cand.is_file():
+                    out.append(str(cand))
+    return out
 
 
 # --------------------------------------------------------- command builders
@@ -394,27 +387,22 @@ def cmd_pip_install(cfg):
     return _tk(cfg, "-m", "pip", "install", "numpy", "pillow", "scipy")
 
 
-# ---- 3D model route (UO_Model3D in Blender); label, uo_import_item KIND, uo_bind_item PART, place, fit, needs SCALE, note
+# ---- 3D model route without Blender (uo3d_py.py): label, kind (uo3d engine), note
 KINDS3D = [
-    ("Koszula / tunika", "shirt", "chest", "", True, False, ""),
-    ("Zbroja piersiowa", "plate", "chest", "", True, False, ""),
-    ("Rękawy / naramienniki", "arms", "arms", "", True, False, ""),
-    ("Spodnie", "pants", "legs", "", True, False, ""),
-    ("Nogawice / pancerz nóg", "legs", "legs", "", True, False, ""),
-    ("Buty", "boots", "boots", "", True, False, ""),
-    ("Rękawice", "gloves", "gloves", "", True, False, ""),
-    ("Hełm", "helm", "helm", "", True, False, ""),
-    ("Szata / suknia", "robe", "robe", "", False, False, "Tkanina bez symulacji (symulacja 30-60 min: robi się ją ręcznie w Blenderze, uo_cloth_bake.py)."),
-    ("Spódnica", "skirt", "skirt", "", False, False, ""),
-    ("Peleryna", "cloak", "cloak", "", False, False, ""),
-    ("Włosy", "hair", "hair", "", False, False, "Długie fryzury: podaj skalę ręcznie."),
-    ("Broda", "beard", "beard", "", False, False, ""),
-    ("Czapka / kaptur", "hat", "hat", "", False, False, ""),
-    ("Miecz / maczuga / topór jednoręczny", "", "weapon1h", "weapon", False, True, "Model ustaw pionowo: trzon wzdłuż osi Z, czubek w górę."),
-    ("Laska / włócznia / halabarda", "", "polearm", "weapon", False, True, "Model ustaw pionowo: trzon wzdłuż osi Z, czubek w górę."),
-    ("Topór dwuręczny", "", "axe2h", "weapon", False, True, "Model ustaw pionowo: trzon wzdłuż osi Z, czubek w górę."),
-    ("Łuk / kusza", "", "bow", "weapon", False, True, "Model ustaw pionowo: trzon wzdłuż osi Z, czubek w górę."),
-    ("Tarcza", "", "shield", "shield", False, True, "Przodem do widoku z przodu, górą do góry."),
+    ("Koszula / tunika", "shirt", ""),
+    ("Zbroja piersiowa", "plate", ""),
+    ("Rękawy / naramienniki", "arms", ""),
+    ("Spodnie", "pants", ""),
+    ("Nogawice / pancerz nóg", "legs", ""),
+    ("Buty", "boots", ""),
+    ("Rękawice", "gloves", ""),
+    ("Hełm", "helm", "Hełm jest sztywno przypięty do głowy."),
+    ("Szata / suknia", "robe", "Dół szaty podąża za łańcuchami tkaniny modelu (bez symulacji)."),
+    ("Spódnica", "skirt", "Podąża za łańcuchami spódnicy modelu (bez symulacji)."),
+    ("Peleryna", "cloak", "Podąża za łańcuchami peleryny modelu (bez symulacji)."),
+    ("Włosy", "hair", "Długie fryzury: podaj skalę ręcznie."),
+    ("Broda", "beard", ""),
+    ("Czapka / kaptur", "hat", ""),
 ]
 ACTION_NAMES = ["walk_unarmed", "walk_armed", "run_unarmed", "run_armed", "stand", "fidget_1", "fidget_2",
                 "combat_idle_1h", "combat_idle_2h", "attack_1h_slash", "attack_1h_pierce", "attack_1h_bash",
@@ -435,35 +423,43 @@ def action_ids(text: str) -> list[str]:
     return out
 
 
-def blend_path(cfg) -> Path:
-    return Path(cfg["model3d"]) / "model" / "UO_Body_0x190.blend"
-
-
-def job3d_script() -> Path:
-    return HERE / "uo3d_job.py"
+def uo3d_script() -> Path:
+    return HERE / "uo3d_py.py"
 
 
 def model3d_problems(cfg) -> list[str]:
     """What is missing for the 3D route (empty list = ready)."""
     out = []
-    if not path_ok("blender", cfg.get("blender")):
-        out.append("Nie wskazano Blendera (Ustawienia → Blender).")
-    if not path_ok("model3d", cfg.get("model3d")):
-        out.append("Nie wskazano folderu UO_Model3D (Ustawienia).")
-    elif not blend_path(cfg).is_file():
-        out.append(f"Brak pliku {blend_path(cfg)}.")
-    if not job3d_script().is_file():
-        out.append(f"Brak pliku {job3d_script().name} obok programu.")
+    if not path_ok("bodyglb", cfg.get("bodyglb")):
+        out.append("Nie wskazano pliku UO_Body_0x190.glb (Ustawienia → UO_Body_0x190.glb; leży w folderze model projektu UO_Model3D).")
+    if not uo3d_script().is_file() or not (HERE / "uo3d").is_dir():
+        out.append(f"Brak {uo3d_script().name} lub folderu uo3d obok programu.")
     return out
 
 
-def cmd_blender_job(cfg, spec: dict):
-    """Headless Blender run of uo3d_job.py with a spec.json written next to the output."""
-    out = Path(spec["out"])
-    out.mkdir(parents=True, exist_ok=True)
-    write_json(out / "spec.json", spec)
-    return {"argv": [cfg["blender"], "-b", "--python", str(job3d_script()), "--", str(out / "spec.json")],
-            "cwd": cfg["model3d"], "env": dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")}
+def cmd_uo3d(cfg, spec: dict):
+    """uo3d_py.py (no Blender): spec keys item, kind, out, name, actions [ints], turn, scale, skip [..], saturation, outline."""
+    a = [str(uo3d_script()), "--body", cfg["bodyglb"], "--item", spec["item"], "--kind", spec["kind"], "--out", spec["out"],
+         "--name", spec["name"], "--turn", str(spec.get("turn", 0)), "--scale", str(spec.get("scale", 0)),
+         "--saturation", str(spec.get("saturation", 1.0)), "--outline", str(spec.get("outline", 0.38))]
+    if spec.get("skip"):
+        a += ["--skip", ",".join(spec["skip"])]
+    if spec.get("actions"):
+        a += ["--actions", *map(str, spec["actions"])]
+    if spec.get("metal"):
+        a += ["--metal", spec["metal"]]
+    return {"argv": [system_python(), *a], "cwd": str(HERE),
+            "env": dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")}
+
+
+def cmd_deps_check_sys(cfg):
+    return {"argv": [system_python(), "-c", "import numpy, PIL; print('DEPS_OK')"], "cwd": str(HERE),
+            "env": dict(os.environ, PYTHONIOENCODING="utf-8")}
+
+
+def cmd_pip_install_sys(cfg):
+    return {"argv": [system_python(), "-m", "pip", "install", "numpy", "pillow", "scipy"], "cwd": str(HERE),
+            "env": dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")}
 
 
 def cmd_image_check(cfg, image):
