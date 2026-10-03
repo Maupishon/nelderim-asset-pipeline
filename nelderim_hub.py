@@ -403,7 +403,13 @@ KINDS3D = [
     ("Włosy", "hair", "Długie fryzury: podaj skalę ręcznie."),
     ("Broda", "beard", ""),
     ("Czapka / kaptur", "hat", ""),
+    ("Miecz / maczuga / topór jednoręczny", "weapon1h", "Model ustaw pionowo: trzon wzdłuż osi Y (góra), czubek w górę, rękojeść na dole. Trzymany w prawej dłoni."),
+    ("Laska / włócznia / halabarda", "polearm", "Model ustaw pionowo (czubek w górę). Trzymany w lewej dłoni."),
+    ("Topór dwuręczny", "axe2h", "Model ustaw pionowo (głowica w górę). Trzymany w lewej dłoni."),
+    ("Łuk / kusza", "bow", "Model ustaw pionowo (środek łuku w połowie). Trzymany w lewej dłoni."),
+    ("Tarcza", "shield", "Tarcza przodem do widoku z przodu (+Z), górą do góry (+Y). Dane tarczy z UO_Model3D; położenie niezweryfikowane w grze."),
 ]
+HELD_KINDS = {"weapon1h", "polearm", "axe2h", "bow", "shield"}
 ACTION_NAMES = ["walk_unarmed", "walk_armed", "run_unarmed", "run_armed", "stand", "fidget_1", "fidget_2",
                 "combat_idle_1h", "combat_idle_2h", "attack_1h_slash", "attack_1h_pierce", "attack_1h_bash",
                 "attack_2h_bash", "attack_2h_slash", "attack_2h_pierce", "combat_advance", "spell_directed",
@@ -427,6 +433,23 @@ def uo3d_script() -> Path:
     return HERE / "uo3d_py.py"
 
 
+def pipeline_file(cfg, name):
+    """A data file of UO_Model3D's pipeline/ folder (found next to the .glb), or None."""
+    g = cfg.get("bodyglb")
+    if not g:
+        return None
+    for cand in (Path(g).parent.parent / "pipeline" / name, Path(g).parent / name):
+        if cand.is_file():
+            return cand
+    return None
+
+
+def model3d_extras(cfg) -> dict:
+    """Optional data found next to the body model: original body / horse frames, weapon motion, shield keys."""
+    return {"body_vd": pipeline_file(cfg, "body400.vd"), "horse_vd": pipeline_file(cfg, "horse200.vd"),
+            "motion": pipeline_file(cfg, "weapon_motion.json"), "shield": pipeline_file(cfg, "uo_shield_keys.py")}
+
+
 def model3d_problems(cfg) -> list[str]:
     """What is missing for the 3D route (empty list = ready)."""
     out = []
@@ -448,6 +471,14 @@ def cmd_uo3d(cfg, spec: dict):
         a += ["--actions", *map(str, spec["actions"])]
     if spec.get("metal"):
         a += ["--metal", spec["metal"]]
+    if spec.get("body_vd"):
+        a += ["--body-vd", str(spec["body_vd"])]
+    if spec.get("horse_vd"):
+        a += ["--horse-vd", str(spec["horse_vd"])]
+    if spec.get("cloth"):
+        a.append("--cloth")
+    if spec.get("roll") not in (None, ""):
+        a += ["--roll", str(spec["roll"])]
     return {"argv": [system_python(), *a], "cwd": str(HERE),
             "env": dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")}
 

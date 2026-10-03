@@ -1197,8 +1197,8 @@ class App:
         H = self.H
         self.head(p, "🧊 Model 3D", "Masz model 3D przedmiotu (.glb lub .obj)? Program wstawi go na model ciała UO, przypnie do szkieletu i "
                                     "wyrenderuje klatki wszystkich animacji do pliku .vd. Działa bez Blendera, w samym Pythonie. "
-                                    "Dla ubrań, zbroi, hełmów, włosów, szat, spódnic i peleryn. Broni i tarcz ta metoda jeszcze nie obsługuje.")
-        v = {k: tk.StringVar() for k in ("kind", "file", "name", "skip", "turn", "scale", "sat", "actions")}
+                                    "Dla ubrań, zbroi, hełmów, włosów, szat, spódnic, peleryn, broni i tarcz.")
+        v = {k: tk.StringVar() for k in ("kind", "file", "name", "skip", "turn", "scale", "sat", "actions", "roll")}
         v["kind"].set(H.KINDS3D[0][0])
         v["turn"].set("0")
         v["sat"].set("1.0")
@@ -1231,6 +1231,16 @@ class App:
         self.button(s0.body, "Sprawdź ponownie", recheck)
         self.button(s0.body, "Zainstaluj biblioteki", install, "Instaluje numpy, Pillow i scipy (wymaga internetu).")
         self.button(s0.body, "Otwórz Ustawienia", lambda: self.show("settings"))
+        extras_lbl = ttk.Label(s0.body, text="", style=sty(MUTED), wraplength=700, justify="left")
+        extras_lbl.pack(anchor="w")
+
+        def show_extras():
+            ex = H.model3d_extras(self.cfg)
+            txt = ["ciało z oryginału (dokładna sylwetka): " + ("jest" if ex["body_vd"] else "brak"),
+                   "koń (akcje konne): " + ("jest" if ex["horse_vd"] else "brak"),
+                   "dane broni: " + ("są" if ex["motion"] else "brak"), "dane tarczy: " + ("są" if ex["shield"] else "brak")]
+            extras_lbl.configure(text="Znalezione obok modelu ciała (folder pipeline): " + "; ".join(txt))
+
         s1 = Step(p, 2, "Co to za przedmiot?", "Rodzaj decyduje o rozmiarze, miejscu na ciele i sposobie przypięcia do kości (ubranie wygina się razem z ciałem).")
         f = ttk.Frame(s1.body)
         f.pack(fill="x", pady=2)
@@ -1247,20 +1257,31 @@ class App:
 
         cb.bind("<<ComboboxSelected>>", kind_info)
         kind_info()
-        s2 = Step(p, 3, "Wskaż model 3D", "Plik .glb (najlepiej) albo .obj. Sprawdź licencję modelu. Własny szkielet modelu zostanie pominięty "
-                                          "(ciało UO daje wagi). Plików .fbx nie czytam: zamień je na .glb.")
+        s2 = Step(p, 3, "Wskaż model 3D", "Plik .glb (najlepiej), .fbx (binarny) albo .obj. Sprawdź licencję modelu. Własny szkielet modelu zostanie pominięty "
+                                          "(ciało UO daje wagi). Broń i tarcza: ustaw model pionowo (czubek / góra w kierunku +Y).")
         self.row(s2.body, "Plik modelu 3D", v["file"], "Do ok. 20 tys. wierzchołków (więcej = wolniej).", kind="file",
-                 ftypes=[("Modele 3D", "*.glb *.gltf *.obj"), ("Wszystkie", "*.*")])
+                 ftypes=[("Modele 3D", "*.glb *.gltf *.fbx *.obj"), ("Wszystkie", "*.*")])
         self.row(s2.body, "Nazwa pracy", v["name"], "Np. nekro-szata. Wynik trafi do folderu o tej nazwie.")
         adv = self.advanced(s2.body)
         self.row(adv, "Pomiń elementy (nazwy, po przecinku)", v["skip"], "Plik często zawiera coś jeszcze: oczy, ciało modelu, elementy pomocnicze. "
                                                                          "Wpisz fragmenty ich nazw, np. eyes,body,collision.")
         self.row(adv, "Obrót (stopnie)", v["turn"], "Wpisz 180, jeśli przedmiot jest zwrócony tyłem do przodu.")
-        self.row(adv, "Skala (0 = automatycznie)", v["scale"], "Mnożnik rozmiaru. 0 = z wysokości rodzaju przedmiotu (tak jak w oryginalnych animacjach).")
+        self.row(adv, "Skala (0 = automatycznie)", v["scale"], "Mnożnik rozmiaru. 0 = z wysokości rodzaju przedmiotu (tak jak w oryginalnych animacjach); "
+                                                              "dla broni z typowej długości jej klasy, dla tarczy ok. 55 cm.")
+        self.row(adv, "Obrót broni wokół trzonu (stopnie)", v["roll"], "Tylko broń: obrót głowicy / ostrza wokół własnej osi. Puste = jak w oryginalnej broni klasy.")
+        exact = tk.BooleanVar(value=True)
+        horse = tk.BooleanVar(value=True)
+        cloth = tk.BooleanVar(value=True)
+        for var, txt, hlp in ((exact, "Dokładna sylwetka ciała z oryginału (EXACT_BODY)", "Ciało zasłania przedmiot dokładnie wzdłuż oryginalnych klatek ciała. Potrzebuje pliku body400.vd w folderze pipeline projektu UO_Model3D."),
+                              (horse, "Koń w akcjach konnych (23–29)", "Dodaje akcje konne: koń zasłania część przedmiotu. Potrzebuje pliku horse200.vd w folderze pipeline projektu UO_Model3D."),
+                              (cloth, "Symulacja tkaniny (szata, spódnica, peleryna)", "Dół szaty, spódnicy lub peleryny faluje i zderza się z ciałem. Wolniej (kilka–kilkanaście sekund na akcję).")):
+            c = ttk.Checkbutton(adv, text=txt, variable=var)
+            c.pack(anchor="w")
+            Tip(c, hlp)
         self.row(adv, "Nasycenie kolorów (0–1)", v["sat"], "1 = kolory modelu, 0 = tylko szarości (przedmiot farbowany w grze).")
         self.row(adv, "Akcje do wyrenderowania", v["actions"], "Numery ruchów, np. 0 4 9 16. Puste = wszystkie 35 poza konnymi (23–29).")
         s3 = Step(p, 4, "Zbuduj", "Najpierw kilka akcji na próbę (chodzenie, stanie, cięcie, czar). Postęp widać w „Szczegółach”. Akcje konne (23–29) "
-                                  "nie mają konia, więc pomijam je w pełnej wersji.")
+                                  "są w pełnej wersji tylko wtedy, gdy znaleziono plik konia (patrz krok 1).")
         s4 = Step(p, 5, "Obejrzyj i zapisz", "Wynik to plik .vd. Obejrzyj go w przeglądarce .vd razem z ciałem (anim_0400.vd), potem zaimportuj w UOFiddlerze na KOPII klienta.")
         res = {"vd": None}
 
@@ -1290,8 +1311,24 @@ class App:
             except ValueError as e:
                 messagebox.showwarning("Złe dane", f"Sprawdź liczby w polach ({e}).")
                 return
+            ex = H.model3d_extras(self.cfg)
+            if k[1] in H.HELD_KINDS and k[1] != "shield" and not ex["motion"]:
+                messagebox.showwarning("Broń", "Brak pliku pipeline/weapon_motion.json obok modelu ciała (projekt UO_Model3D). Bez niego nie umieszczę broni w dłoni.")
+                return
+            if k[1] == "shield" and not ex["shield"]:
+                messagebox.showwarning("Tarcza", "Brak pliku pipeline/uo_shield_keys.py obok modelu ciała (projekt UO_Model3D).")
+                return
+            roll = v["roll"].get().strip().replace(",", ".")
+            if roll:
+                try:
+                    float(roll)
+                except ValueError:
+                    messagebox.showwarning("Złe dane", "Obrót broni to liczba stopni.")
+                    return
             spec = dict(item=v["file"].get().strip(), kind=k[1], out=str(out_dir()), name=H.slugify(v["name"].get()), actions=acts,
-                        turn=turn, scale=scale, saturation=sat, skip=[x.strip() for x in v["skip"].get().split(",") if x.strip()])
+                        turn=turn, scale=scale, saturation=sat, skip=[x.strip() for x in v["skip"].get().split(",") if x.strip()],
+                        body_vd=ex["body_vd"] if exact.get() else None, horse_vd=ex["horse_vd"] if horse.get() else None,
+                        cloth=cloth.get() and k[1] in ("robe", "skirt", "cloak"), roll=roll or None)
             out = out_dir()
 
             def ok(lines):
@@ -1307,8 +1344,9 @@ class App:
                      on_fail=lambda o: s3.bad("Nie udało się (zobacz podpowiedź i Szczegóły)."), keys=[])
 
         self.button(s3.body, "▶ Zbuduj (kilka akcji na próbę)", lambda: build(v["actions"].get().strip() or "0 4 9 16"), big=True)
-        self.button(s3.body, "Zbuduj wszystkie akcje (bez konnych)", lambda: build(" ".join(str(i) for i in range(35) if not 23 <= i <= 29)),
-                    "Pełny render (kilka minut).")
+        self.button(s3.body, "Zbuduj wszystkie akcje", lambda: build(" ".join(str(i) for i in range(35) if horse.get() and H.model3d_extras(self.cfg)["horse_vd"]
+                                                                              or not 23 <= i <= 29)),
+                    "Pełny render (kilka minut). Akcje konne tylko z koniem.")
         self.button(s3.body, "Otwórz folder wyniku", lambda: self.open_folder(out_dir()))
 
         def to_toolkit():
@@ -1331,6 +1369,7 @@ class App:
                         "Przeglądarka .vd", "Wskaż plik vd-viewer.html w Ustawieniach."))
         ttk.Label(p, text="Import: UOFiddler → Animations → Animation Edit → ID animacji przedmiotu → Import from VD → Save. Typ pliku = typ celu (ludzie: typ 2).",
                   style=sty(MUTED), wraplength=700).pack(anchor="w", padx=14, pady=4)
+        show_extras()
         recheck()
 
     # ---- pack (any lab)

@@ -224,4 +224,206 @@ def load(path, skip=()):
         return load_gltf(path, skip)
     if ext == ".obj":
         return load_obj(path, skip)
-    raise ValueError(f"Format {ext} nie jest obsługiwany bez Blendera. Zamień model na .glb (np. darmowym konwerterem online) albo .obj.")
+    if ext == ".fbx":
+        return load_fbx(path, skip)
+    raise ValueError(f"Format {ext} nie jest obsługiwany. Zamień model na .glb, .fbx (binarny) albo .obj.")
+
+
+# ------------------------------------------------------------------ binary FBX (geometry, node transforms, diffuse colours)
+def _fbx_nodes(d):
+    import zlib
+    if not d.startswith(b"Kaydara FBX Binary"):
+        raise ValueError("Obsługuję tylko binarny FBX (ASCII FBX zamień na .glb).")
+    ver = struct.unpack_from("<I", d, 23)[0]
+    big = ver >= 7500
+    hdr = 24 if big else 12
+    nul = 25 if big else 13
+
+    def read(off):
+        if big:
+            end, nprop, plen, nlen = struct.unpack_from("<QQQB", d, off)
+        else:
+            end, nprop, plen, nlen = struct.unpack_from("<IIIB", d, off)
+        if end == 0:
+            return None, off + nul
+        p = off + hdr + 1
+        name = d[p:p+nlen].decode("latin-1"); p += nlen
+        props = []
+        for _ in range(nprop):
+            t = chr(d[p]); p += 1
+            if t in "YCIFDL":
+                fmt = {"Y": "<h", "C": "<b", "I": "<i", "F": "<f", "D": "<d", "L": "<q"}[t]
+                props.append(struct.unpack_from(fmt, d, p)[0]); p += struct.calcsize(fmt)
+            elif t in "fdlib":
+                ln, enc, cl = struct.unpack_from("<III", d, p); p += 12
+                dt = {"f": "<f4", "d": "<f8", "l": "<i8", "i": "<i4", "b": "u1"}[t]
+                raw = d[p:p+cl]; p += cl
+                if enc == 1:
+                    raw = zlib.decompress(raw)
+                props.append(np.frombuffer(raw, np.dtype(dt), count=ln))
+            elif t in "SR":
+                ln = struct.unpack_from("<I", d, p)[0]; p += 4
+                raw = d[p:p+ln]; p += ln
+                props.append(raw.decode("latin-1") if t == "S" else raw)
+            else:
+                raise ValueError("FBX: nieznany typ właściwości " + t)
+        kids = []
+        while p < end:
+            k, p = read(p)
+            if k is None:
+                break
+            kids.append(k)
+        return (name, props, kids), end
+
+    out, off = [], 27
+    while off < len(d) - nul:
+        n, off = read(off)
+        if n is None:
+            break
+        out.append(n)
+    return out
+
+
+def _fbx_find(nodes, name):
+    return [n for n in nodes if n[0] == name]
+
+
+def _fbx_props70(node):
+    out = {}
+    for k in node[2]:
+        if k[0] == "Properties70":
+            for p in k[2]:
+                if p[0] == "P" and len(p[1]) >= 5:
+                    out[p[1][0]] = p[1][4:]
+    return out
+
+
+def _fbx_euler(deg, order=0):
+    a = np.radians(deg)
+    cx, cy, cz = np.cos(a); sx, sy, sz = np.sin(a)
+    Rx = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]]); Ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]]); Rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]])
+    return Rz @ Ry @ Rx                                         # eEulerXYZ: X first
+
+
+def load_fbx(path, skip=()):
+    d = open(path, "rb").read()
+    top = _fbx_nodes(d)
+    objs = _fbx_find(top, "Objects")
+    if not objs:
+        raise ValueError("FBX bez obiektów.")
+    objs = objs[0][2]
+    conns = [(c[1][0], c[1][1], c[1][2]) for c in (_fbx_find(top, "Connections") or [("", [], [])])[0][2] if c[0] == "C" and len(c[1]) >= 3]
+    parent_of = {}                                           # child id -> [parent ids]
+    for kind, ch, pa in conns:
+        parent_of.setdefault(ch, []).append(pa)
+    gset = _fbx_find(top, "GlobalSettings")
+    up, scale = 1, 1.0
+    if gset:
+        gp = _fbx_props70(gset[0])
+        up = int(gp.get("UpAxis", [1])[0]); scale = float(gp.get("UnitScaleFactor", [1.0])[0])
+    models = {o[1][0]: o for o in objs if o[0] == "Model"}
+    geoms = {o[1][0]: o for o in objs if o[0] == "Geometry" and len(o[1]) >= 3 and o[1][2] == "Mesh"}
+    mats = {o[1][0]: o for o in objs if o[0] == "Material"}
+
+    def local(mid):
+        pr = _fbx_props70(models[mid])
+        t = np.array(pr.get("Lcl Translation", [0, 0, 0])[:3], float)
+        r = np.array(pr.get("Lcl Rotation", [0, 0, 0])[:3], float)
+        s = np.array(pr.get("Lcl Scaling", [1, 1, 1])[:3], float)
+        pre = np.array(pr.get("PreRotation", [0, 0, 0])[:3], float)
+        M = np.eye(4)
+        M[:3, :3] = _fbx_euler(pre) @ _fbx_euler(r) * s[None, :]
+        M[:3, 3] = t
+        return M
+
+    def world(mid, depth=0):
+        M = local(mid)
+        for p in parent_of.get(mid, []):
+            if p in models and depth < 64:
+                return world(p, depth + 1) @ M
+        return M
+
+    out = Mesh(); out.mats = []
+    P, N, U, T, MT = [], [], [], [], []
+    skipl = [s.lower() for s in skip if s]
+    matidx = {}
+    for gid, g in geoms.items():
+        owners = [p for p in parent_of.get(gid, []) if p in models]
+        if not owners:
+            continue
+        mid = owners[0]
+        nm = (models[mid][1][1] if len(models[mid][1]) > 1 else "").lower()
+        if any(s in nm for s in skipl):
+            continue
+        kids = {k[0]: k for k in g[2]}
+        verts = kids["Vertices"][1][0].reshape(-1, 3).astype(float)
+        pvi = kids["PolygonVertexIndex"][1][0].astype(int)
+        ends = np.flatnonzero(pvi < 0)
+        starts = np.concatenate([[0], ends[:-1] + 1])
+        vidx = np.where(pvi < 0, ~pvi, pvi)
+        # per polygon-vertex attributes
+        def layer(name, dname, iname):
+            e = kids.get(name)
+            if e is None:
+                return None
+            sub = {k[0]: k for k in e[2]}
+            data = sub[dname][1][0].astype(float)
+            mapping = sub["MappingInformationType"][1][0]
+            ref = sub["ReferenceInformationType"][1][0]
+            comp = 3 if dname == "Normals" else 2
+            data = data.reshape(-1, comp)
+            if ref == "IndexToDirect" and iname in sub:
+                data = data[sub[iname][1][0].astype(int)]
+            if mapping == "ByPolygonVertex":
+                return data
+            if mapping in ("ByVertice", "ByVertex"):
+                return data[vidx] if len(data) == len(verts) else None
+            return None
+        nrm = layer("LayerElementNormal", "Normals", "NormalsIndex")
+        uv = layer("LayerElementUV", "UV", "UVIndex")
+        # triangulate polygons (fan)
+        tri_pv = []
+        for s_, e_ in zip(starts, ends):
+            for k in range(s_ + 1, e_):
+                tri_pv.append((s_, k, k + 1))
+        tri_pv = np.array(tri_pv, int)
+        pv = tri_pv.ravel()
+        W = world(mid)
+        pos = verts[vidx[pv]] @ W[:3, :3].T + W[:3, 3]
+        nr = (nrm[pv] @ np.linalg.inv(W[:3, :3]).T) if nrm is not None else np.zeros_like(pos)
+        uvs = uv[pv] if uv is not None else np.zeros((len(pv), 2))
+        base = sum(len(x) for x in P)
+        P.append(pos); N.append(nr); U.append(uvs)
+        T.append(np.arange(len(pos)).reshape(-1, 3) + base)
+        # material: diffuse colour of the first material connected to the model
+        col = (0.75, 0.75, 0.75, 1.0)
+        mlist = [ch for (kind, ch, pa) in conns if pa == mid and ch in mats]
+        if mlist:
+            pr = _fbx_props70(mats[mlist[0]])
+            dc = pr.get("DiffuseColor") or pr.get("Diffuse")
+            if dc and len(dc) >= 3:
+                col = (float(dc[0]), float(dc[1]), float(dc[2]), 1.0)
+        key = col
+        if key not in matidx:
+            matidx[key] = len(out.mats); out.mats.append(Material(col))
+        MT.append(np.full(len(T[-1]), matidx[key]))
+        out.names.append(nm)
+    if not P:
+        raise ValueError("Model nie zawiera żadnej siatki (albo wszystkie elementy pominięto).")
+    pos = np.concatenate(P)
+    # to Y-up metres
+    k = scale * 0.01
+    if up == 2:
+        pos = np.stack([pos[:, 0], pos[:, 2], -pos[:, 1]], 1)
+        nr_all = np.concatenate(N); nr_all = np.stack([nr_all[:, 0], nr_all[:, 2], -nr_all[:, 1]], 1)
+    else:
+        nr_all = np.concatenate(N)
+    out.pos = pos * k; out.nrm = nr_all; out.uv = np.concatenate(U)
+    out.tri = np.concatenate(T); out.mat_of_tri = np.concatenate(MT)
+    # the polygon-vertex layout repeats every vertex per face: weld identical (position, normal, uv)
+    key = np.round(np.c_[out.pos * 1e5, out.nrm * 1e3, out.uv * 1e4]).astype(np.int64)
+    _, first, inv = np.unique(key, axis=0, return_index=True, return_inverse=True)
+    inv = inv.reshape(-1)
+    out.pos, out.nrm, out.uv = out.pos[first], out.nrm[first], out.uv[first]
+    out.tri = inv[out.tri]
+    return finish(out)

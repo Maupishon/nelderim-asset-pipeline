@@ -5,6 +5,8 @@ import numpy as np
 from . import raster as R
 from .glbmodel import GLB
 from . import statmesh
+from . import weapons as wp
+from . import vdread
 
 # frames per action of the original body (anim 400); loop actions have 3 extra keys in the .glb that are not UO frames
 ACTION_FRAMES = [10, 10, 10, 10, 1, 5, 5, 1, 1, 7, 7, 7, 7, 7, 7, 10, 7, 7, 7, 7, 5, 6, 6, 5, 5, 1, 5, 5, 7, 5, 5, 7, 5, 5, 5]
@@ -71,10 +73,10 @@ class Body:
     def joint_mask(self, patterns):
         return np.array([any(jbase(n) == p or n.startswith(p) for p in patterns) for n in self.names])
 
-    def pose_matrices(self, action, k):
-        name = self.action_names[action]
-        t = (1 + 3 * k) / 24.0
-        return self.g.skin_matrices(self.g.pose(name, t))
+    def pose_matrices(self, action, k, sub=0):
+        """(world matrices of all nodes, skinning matrices) at UO frame k of an action (sub = extra scene frames)."""
+        W = self.g.pose(self.action_names[action], (1 + 3 * k + sub) / 24.0)
+        return W, self.g.skin_matrices(W)
 
     def skin_body(self, SM):
         g = self.g
@@ -101,14 +103,22 @@ def nearest(points, ref, chunk=2000):
 
 
 class Item:
-    def __init__(self, path, kind, body, turn=0, scale=0.0, skip=(), saturation=1.0, metal=None, shift=(0.0, 0.0, 0.0)):
+    def __init__(self, path, kind, body, turn=0, scale=0.0, skip=(), saturation=1.0, metal=None, shift=(0.0, 0.0, 0.0),
+                 motion=None, shield_keys=None, ref=None, roll_deg=None):
         self.kind = kind
         self.body = body
+        self.rigid = None
+        self.cloth = None
+        self.cloth_t = None
         m = statmesh.load(path, skip)
         self.mesh = m
         P = m.pos.copy()
+        if kind in wp.CLASS_OF_KIND or kind == "shield":
+            self._init_held(P, m, kind, turn, scale, motion, shield_keys, ref, roll_deg)
+            self.prepare_materials(saturation, metal)
+            return
         if kind not in EXTENTS:
-            raise ValueError(f"Rodzaj '{kind}' nie jest obsługiwany bez Blendera.")
+            raise ValueError(f"Rodzaj '{kind}' nie jest obsługiwany.")
         lo, hi = EXTENTS[kind]
         # turn about the vertical axis (glTF Y up)
         th = math.radians(turn); c, s = math.cos(th), math.sin(th)
@@ -134,6 +144,35 @@ class Item:
             self.fit(GAP_BY_KIND.get(kind, 0.015))
         self.bind_weights()
         self.prepare_materials(saturation, metal)
+
+    def _init_held(self, P, m, kind, turn, scale, motion, shield_keys, ref, roll_deg):
+        """weapons (rigid on the weapon bone of their class) and shields (rigid on shield.L)."""
+        th = math.radians(turn); c, s = math.cos(th), math.sin(th)
+        Rm = np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
+        P = P @ Rm.T; N = m.nrm @ Rm.T
+        length = max(P[:, 1].max() - P[:, 1].min(), 1e-6)
+        if kind == "shield":
+            if not shield_keys:
+                raise ValueError("Brak danych tarczy (pipeline/uo_shield_keys.py projektu UO_Model3D).")
+            self.rigid = wp.Shield(self.body, shield_keys)
+            sc = float(scale) if scale and scale > 0 else 0.55 / length          # a heater shield is about 55 cm tall
+            P = P * sc
+            Q = self.rigid.place(P)
+        else:
+            if not motion:
+                raise ValueError("Brak pliku pipeline/weapon_motion.json projektu UO_Model3D (potrzebny do broni).")
+            self.rigid = wp.Weapon(self.body, motion, wp.CLASS_OF_KIND[kind])
+            sc = float(scale) if scale and scale > 0 else self.rigid.class_length() / length
+            P = P * sc
+            Q = self.rigid.place(P, ref=ref, roll_deg=roll_deg)
+        self.scale = sc
+        # normals follow the same rotation as the vertices (place() is rigid): recompute from the geometry
+        self.pos = Q
+        self.nrm = N
+        self.tri = m.tri
+        self.nrm = _vertex_normals(Q, m.tri)
+        self.jnt = np.zeros((len(Q), 4), int); self.wgt = np.zeros((len(Q), 4)); self.wgt[:, 0] = 1.0
+        self.worn = set()
 
     # ---- keep the item out of the body (rest pose); smooth push like uo_fit_item.py but simpler
     def fit(self, gap, iters=6):
@@ -178,6 +217,9 @@ class Item:
             part = KIND_PART[kind]
             if part in ("skirt", "cloak"):
                 W = self.cloth_weights(part, W)
+            elif kind == "robe":
+                W = self.cloth_weights("skirt", W, base=["pelvis", "spine", "chest", "neck", "clavicle", "upper_arm", "forearm", "thigh", "shin"],
+                                       sleeves=True)
             else:
                 W = self.restrict(W, PARTS[part])
         # keep the 4 strongest
@@ -221,7 +263,7 @@ class Item:
             out[bad, np.flatnonzero(allowed)[0]] = 1.0
         return out / np.maximum(out.sum(1, keepdims=True), 1e-9)
 
-    def cloth_weights(self, part, W_body):
+    def cloth_weights(self, part, W_body, base=None, sleeves=False):
         """skirt / cloak: follow the cloth chains of the model (skirt_K_S / cloak_K_S) by distance; above the chains: the body."""
         b = self.body
         pref = part + "_"
@@ -239,12 +281,27 @@ class Item:
             np.add.at(Wc, (np.arange(len(Wc)), np.array(ch)[near[:, c]]), wt[:, c])
         Wc /= np.maximum(Wc.sum(1, keepdims=True), 1e-9)
         t = np.clip((top - self.pos[:, 1]) / band, 0, 1)[:, None]
-        Wb = self.restrict(W_body, ["pelvis", "spine", "chest", "neck", "clavicle"] if part == "cloak" else ["pelvis", "spine"])
+        if sleeves:                                        # robe sleeves always follow the arms
+            arm = self.body.joint_mask(["upper_arm", "forearm", "hand", "finger", "clavicle"])
+            t = t * (1 - np.clip((W_body[:, arm].sum(1)) * 2, 0, 1))[:, None]
+        Wb = self.restrict(W_body, base or (["pelvis", "spine", "chest", "neck", "clavicle"] if part == "cloak" else ["pelvis", "spine"]))
+        self.cloth_t = t[:, 0].copy()
         return (1 - t) * Wb + t * Wc
 
     def prepare_materials(self, saturation, metal):
         self.saturation = saturation
         self.metal = metal
+
+    def pose(self, action, k, W, SM):
+        """vertices and normals at a UO frame: rigid bone (weapon, shield), cloth simulation, or linear blend skinning."""
+        if self.rigid is not None:
+            M = self.rigid.matrix(W, self.rigid.basis(action, k))
+            return self.pos @ M[:3, :3].T + M[:3, 3], self.nrm @ M[:3, :3].T
+        P, N = self.skin(SM)
+        if self.cloth is not None and (action, k) in self.cloth:
+            t = self.cloth_t
+            P = P + (self.cloth[(action, k)] - P) * t[:, None]
+        return P, N
 
     def skin(self, SM):
         P = np.zeros_like(self.pos); N = np.zeros_like(self.nrm)
@@ -256,6 +313,15 @@ class Item:
             N += w * np.einsum("nij,nj->ni", M[:, :3, :3], self.nrm)
         N /= np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-9)
         return P, N
+
+
+def _vertex_normals(P, tri):
+    a, b, c = P[tri[:, 0]], P[tri[:, 1]], P[tri[:, 2]]
+    fn = np.cross(b - a, c - a)
+    acc = np.zeros_like(P)
+    for k in range(3):
+        np.add.at(acc, tri[:, k], fn)
+    return acc / np.maximum(np.linalg.norm(acc, axis=1, keepdims=True), 1e-12)
 
 
 def shade(item, tid, W, H, xy, nrm_view, direction=None):
@@ -349,7 +415,21 @@ def clean(img, fill=4, min_piece=8):
     return img
 
 
-def render_layer(body, item, actions, out_path, outline_f=0.38, margin=0.01, progress=None):
+def _dilate(m, n=1):
+    for _ in range(n):
+        p = np.pad(m, 1)
+        m = m | p[:-2, 1:-1] | p[2:, 1:-1] | p[1:-1, :-2] | p[1:-1, 2:]
+    return m
+
+
+HORSE_ACTION = {23: 0, 24: 1, 25: 2, 26: 2, 27: 2, 28: 2, 29: 2}      # rider action -> action of the horse sprite (walk, run, stand)
+
+
+def render_layer(body, item, actions, out_path, outline_f=0.38, margin=0.01, progress=None, body_masks=None, horse_masks=None,
+                 cloth_sim=None):
+    """Render the item layer of every (action, direction, frame) to a .vd.
+    body_masks: {(action, dir): [bool mask]} silhouettes of the original body (anim 400): the body hides the item exactly along them (EXACT_BODY).
+    horse_masks: same for the original horse (mounted actions): the horse hides the part of the item behind the saddle."""
     from .vdwrite import write_vd
     W, H = CANVAS
     blocks = {}
@@ -362,12 +442,16 @@ def render_layer(body, item, actions, out_path, outline_f=0.38, margin=0.01, pro
     g = body.g
     occ_tri = occ_vert[g.tri].all(1)
     tors_tri = torso_vert[g.tri].all(1)
+    pelvis = body.names.index("pelvis")
     total = sum(5 * ACTION_FRAMES[a] for a in actions); done = 0; t0 = time.time()
     for a in actions:
+        if cloth_sim is not None:
+            cloth_sim(a)                                    # fills item.cloth[(a, k)] for every frame of the action
         for k in range(ACTION_FRAMES[a]):
-            SM = body.pose_matrices(a, k)
+            Wp, SM = body.pose_matrices(a, k)
             Pb, Nb = body.skin_body(SM)
-            Pi, Ni = item.skin(SM)
+            Pi, Ni = item.pose(a, k, Wp, SM)
+            pel = Wp[g.joints[pelvis]][:3, 3]
             for d in range(5):
                 xyb, zb = R.camera(Pb, d, CANVAS, ANCHOR)
                 xyi, zi = R.camera(Pi, d, CANVAS, ANCHOR)
@@ -381,6 +465,18 @@ def render_layer(body, item, actions, out_path, outline_f=0.38, margin=0.01, pro
                     if cloak:
                         _, tdep = R.raster(xyb, zb, g.tri[tors_tri], W, H)
                         hide |= tdep < dep - 0.12
+                    ob = body_masks.get((a, d)) if body_masks else None
+                    if ob is not None and k < len(ob):
+                        hide = _dilate(hide, 1) & ob[k]                   # exact: only along the original body outline
+                    if horse_masks and a in HORSE_ACTION:
+                        hm = horse_masks.get((HORSE_ACTION[a], d))
+                        if hm:
+                            hmk = hm[min(k, len(hm) - 1)]
+                            pelz = float(R.camera(pel[None, :], d, CANVAS, ANCHOR)[1][0])
+                            behind = hmk & (dep >= pelz - 0.02)
+                            if ob is not None and k < len(ob):
+                                behind &= ~_dilate(ob[k], 2)                # the original rider's visible parts stay in front
+                            hide = hide | behind
                     img[hide] = 0
                     img = clean(outline(img, outline_f))
                 else:
