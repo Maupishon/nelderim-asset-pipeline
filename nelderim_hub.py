@@ -100,45 +100,129 @@ def missing(cfg: dict, only_required: bool = True) -> list[str]:
             if (req or not only_required) and not path_ok(k, cfg.get(k))]
 
 
+def _search_bases() -> list[Path]:
+    """Folders worth scanning on any computer: next to this program, home, Desktop/Downloads/Documents, every drive root."""
+    home = Path.home()
+    out = [HERE.parent, HERE.parent.parent, home, home / "Desktop", home / "Downloads", home / "Documents",
+           home / "OneDrive" / "Desktop", home / "OneDrive" / "Documents"]
+    if os.name == "nt":
+        import string
+        out += [Path(f"{d}:/") for d in string.ascii_uppercase if Path(f"{d}:/").exists()]
+    else:
+        out += [Path("/mnt"), Path("/media"), Path("/opt")]
+    seen, res = set(), []
+    for b in out:
+        try:
+            r = b.resolve()
+        except OSError:
+            continue
+        if r.is_dir() and r not in seen:
+            seen.add(r); res.append(r)
+    return res
+
+
+_SKIP = {"windows", "program files", "program files (x86)", "programdata", "$recycle.bin", "system volume information",
+         "appdata", "node_modules", ".git", ".venv", "venv", "__pycache__", "proc", "sys", "dev", "usr", "lib", "bin", "etc"}
+
+# what identifies each folder/file on disk (independent of its name)
+_MARKS = {
+    "client": lambda p: (p / "anim.idx").is_file() and (p / "tiledata.mul").is_file(),
+    "toolkit": lambda p: (p / "games/ultima-online/outfit-lab/build_item.py").is_file(),
+    "fiddler": lambda p: (p / "UoFiddler.exe").is_file() or (p / "UOFiddler.exe").is_file(),
+    "serv": lambda p: (p / "ServUO.sln").is_file() or ((p / "Scripts").is_dir() and (p / "Server").is_dir()),
+    "vdtool": lambda p: (p / "vdtool.py").is_file(),
+    "bodyglb": lambda p: (p / "model" / "UO_Body_0x190.glb").is_file(),
+    "vdviewer": lambda p: (p / "vd-viewer.html").is_file(),
+}
+
+
+def scan_paths(keys, max_depth: int = 4, budget_s: float = 8.0) -> dict:
+    """Breadth-first search of the usual places for every key in keys; first hit wins. Time-boxed."""
+    import time
+    want = [k for k in keys if k in _MARKS]
+    found: dict = {}
+    t0 = time.time()
+    level = [(b, 0) for b in _search_bases()]
+    seen = set()
+    while level and want and time.time() - t0 < budget_s:
+        nxt = []
+        for d, depth in level:
+            if d in seen:
+                continue
+            seen.add(d)
+            for k in list(want):
+                try:
+                    hit = _MARKS[k](d)
+                except OSError:
+                    hit = False
+                if hit:
+                    found[k] = str(d / "model" / "UO_Body_0x190.glb") if k == "bodyglb" else (
+                        str(d / "vd-viewer.html") if k == "vdviewer" else str(d))
+                    want.remove(k)
+            if depth < max_depth:
+                try:
+                    for c in d.iterdir():
+                        if c.is_dir() and not c.name.startswith(".") and c.name.lower() not in _SKIP:
+                            nxt.append((c, depth + 1))
+                except OSError:
+                    pass
+            if time.time() - t0 > budget_s:
+                break
+        level = nxt
+    return found
+
+
 def guesses(key: str) -> list[str]:
-    """Where to open the folder dialog first: siblings of this repo, never assumed to exist."""
+    """Candidates for one key (checked by path_ok before use); never assumed to exist."""
     if key == "pipeline":
         return [str(HERE)]
-    if key == "bodyglb":
-        return find_bodyglb()
-    names = {"client": ["Nelderim"], "toolkit": ["SpriteMotion-UO-Toolkit", "SpriteMotion"],
-             "fiddler": ["UO Fiddler"], "serv": ["ServUO-master"], "vdtool": ["vdtool"]}.get(key, [])
-    out = []
-    for base in (HERE.parent, HERE.parent.parent, Path.home()):
-        for n in names:
-            for cand in (base / n, base / n / n):
-                if cand.is_dir():
-                    out.append(str(cand))
-    return out
+    hit = scan_paths([key], budget_s=4.0).get(key)
+    return [hit] if hit else []
 
 
 def find_bodyglb() -> list[str]:
-    """Plausible places of UO_Body_0x190.glb (siblings of this folder / home); the user confirms in Settings."""
-    out = []
-    for base in (HERE.parent, HERE.parent.parent, Path.home(), Path.home() / "Desktop", Path.home() / "Downloads"):
-        for n in ("UO_Model3D-main", "UO_Model3D"):
-            for cand in (base / n / "model" / "UO_Body_0x190.glb", base / n / n / "model" / "UO_Body_0x190.glb"):
-                if cand.is_file():
-                    out.append(str(cand))
-    return out
+    hit = scan_paths(["bodyglb"], budget_s=4.0).get("bodyglb")
+    return [hit] if hit else []
 
 
 # --------------------------------------------------------- command builders
-def system_python() -> str:
-    """Interpreter for helper scripts. In the frozen exe sys.executable is the exe itself, so look for a real Python."""
+_PY_CACHE: dict = {}
+
+
+def _python_ok(exe: str, need_deps: bool = False) -> bool:
+    """True when exe is a real Python 3.10+ (not the Microsoft Store stub), optionally with numpy + Pillow."""
+    key = (exe, need_deps)
+    if key not in _PY_CACHE:
+        import subprocess
+        code = "import sys;assert sys.version_info>=(3,10)" + (";import numpy, PIL" if need_deps else "") + ";print('PY_OK')"
+        try:
+            r = subprocess.run([exe, "-c", code], capture_output=True, text=True, timeout=30,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            _PY_CACHE[key] = "PY_OK" in r.stdout
+        except (OSError, ValueError, subprocess.SubprocessError):
+            _PY_CACHE[key] = False
+    return _PY_CACHE[key]
+
+
+def find_python(need_deps: bool = False) -> str | None:
+    """A working Python on this computer (skips the WindowsApps store stub), or None."""
     if not FROZEN:
         return sys.executable
     import shutil
     for name in ("python", "python3", "py"):
         p = shutil.which(name)
-        if p:
+        if p and "windowsapps" not in p.lower() and _python_ok(p, need_deps):
             return p
-    raise SystemExit("Python 3.10+ not found on PATH (needed to run the toolkit / pipeline scripts).")
+    return None
+
+
+def system_python() -> str:
+    """Interpreter for helper scripts. In the frozen exe sys.executable is the exe itself, so look for a real Python."""
+    p = find_python()
+    if p:
+        return p
+    raise SystemExit("Nie znaleziono Pythona 3.10+ (potrzebny tylko do instalowania bibliotek). "
+                     "Program .exe sam uruchamia skrypty – ten krok nie jest potrzebny.")
 
 
 def self_script_cmd(script, *args) -> list[str]:
@@ -149,11 +233,20 @@ def self_script_cmd(script, *args) -> list[str]:
 
 
 def toolkit_python(cfg: dict) -> str:
+    """The toolkit's .venv python, else a system Python. In the frozen exe without a usable Python: the exe itself."""
     tk = Path(cfg["toolkit"])
     for rel in (".venv/Scripts/python.exe", ".venv/bin/python", ".venvs/spritemotion/Scripts/python.exe"):
         if (tk / rel).is_file():
             return str(tk / rel)
-    return system_python()
+    return find_python(need_deps=True) or sys.executable
+
+
+def toolkit_argv(cfg: dict) -> list[str]:
+    """argv prefix that behaves like `python`: a real interpreter, or `Nelderim.exe --py` (numpy + Pillow are inside the exe)."""
+    exe = toolkit_python(cfg)
+    if FROZEN and Path(exe).resolve() == Path(sys.executable).resolve():
+        return [exe, "--py"]
+    return [exe]
 
 
 def tk_env(cfg: dict) -> dict:
@@ -172,7 +265,7 @@ def vd_original(cfg: dict, anim_id: int) -> Path:
 
 def _tk(cfg, *args):
     """Command run with the toolkit's python from the toolkit root."""
-    return {"argv": [toolkit_python(cfg), *map(str, args)], "cwd": cfg["toolkit"], "env": tk_env(cfg)}
+    return {"argv": [*toolkit_argv(cfg), *map(str, args)], "cwd": cfg["toolkit"], "env": tk_env(cfg)}
 
 
 def cmd_build_set(cfg, out, design, sword, config, actions):
@@ -299,6 +392,18 @@ def gump_ids(anim_id: int) -> tuple[int, int]:
     return anim_id + 50000, anim_id + 60000
 
 
+def _retry(fn, tries=12, wait=0.5):
+    """Windows: a file just written is often held for a moment (antivirus, indexer, UOFiddler) -> WinError 32."""
+    import time
+    for i in range(tries):
+        try:
+            return fn()
+        except PermissionError:
+            if i == tries - 1:
+                raise
+            time.sleep(wait)
+
+
 def backup_file(path: Path) -> Path | None:
     """Copy an existing file to <name>_BACKUP_<timestamp>.vd before it is overwritten."""
     import shutil
@@ -306,8 +411,28 @@ def backup_file(path: Path) -> Path | None:
     if not path.is_file():
         return None
     dst = path.with_name(f"{path.stem}_BACKUP_{time.strftime('%Y%m%d-%H%M%S')}{path.suffix}")
-    shutil.copy2(path, dst)
+    _retry(lambda: shutil.copy2(path, dst))
     return dst
+
+
+def safe_copy(src: Path, dst: Path) -> tuple[Path, Path | None, str]:
+    """Copy src -> dst with a backup of dst. Returns (written path, backup, note).
+    Same file -> nothing to do. dst locked by another program -> waits, then writes <name>_nowy_<time> next to it."""
+    import shutil
+    import time
+    src, dst = Path(src), Path(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if dst.exists() and src.resolve() == dst.resolve():
+        return dst, None, "plik już jest w tym miejscu – nic nie kopiuję"
+    b = backup_file(dst)
+    try:
+        _retry(lambda: shutil.copyfile(src, dst))
+        return dst, b, ""
+    except PermissionError:
+        alt = dst.with_name(f"{dst.stem}_nowy_{time.strftime('%H%M%S')}{dst.suffix}")
+        _retry(lambda: shutil.copyfile(src, alt))
+        return alt, b, (f"{dst.name} jest otwarty w innym programie (UOFiddler? podgląd?) – zapisałem jako {alt.name}. "
+                        "Zamknij tamten program, jeśli chcesz nadpisać oryginalną nazwę.")
 
 
 def write_json(path: Path, obj) -> None:

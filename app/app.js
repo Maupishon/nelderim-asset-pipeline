@@ -88,7 +88,8 @@ function field(parent, f, val = "") {
   else input = el("input", { type: "text", id, value: val ?? "", placeholder: f.placeholder || "" });
   const ctl = el("div", { class: "ctl" }, input);
   if (["file", "dir", "save"].includes(f.type)) ctl.append(el("button", { class: "small", text: "Wybierz…", onclick: async () => { const p = await pickPath(f.type, f.label, f.filter || ""); if (p) { input.value = p; input.dispatchEvent(new Event("change")); } } }));
-  const row = el("div", { class: "row" }, el("label", { for: id, text: f.label }), ctl, el("span", { class: "q", "data-tip": f.help || "", text: "?" }));
+  if (f.help) { input.dataset.tip = f.help; }
+  const row = el("div", { class: "row" }, el("label", { for: id, text: f.label, "data-tip": f.help || null }), ctl, f.help ? el("span", { class: "q", "data-tip": f.help, text: "?" }) : el("span"));
   if (f.type === "check") { row.children[1].replaceChildren(el("label", { class: "check" }, input, f.text || "")); }
   parent.append(row);
   input.dataset.key = f.key;
@@ -298,10 +299,10 @@ BUILD.gump = () => {
   const f1 = form(s1.body, [{ key: "graphic", label: "Numer przedmiotu", help: "np. 0xDF0" }, { key: "anim", label: "Numer animacji", help: "np. 617 laska, 618 szabla." }]);
   btns(s1.body, ["Sprawdź przedmiot", () => lookup(s1, f1.graphic.get(), (a) => f1.anim.set(a))]);
   const s2 = step(p, 2, "Obrazek broni", "PNG poziomo: rękojeść po lewej.");
-  const f2 = form(s2.body, [{ key: "image", label: "Obrazek (PNG)", type: "file", filter: ".png", help: "" }]);
+  const f2 = form(s2.body, [{ key: "image", label: "Obrazek (PNG)", type: "file", filter: ".png", help: "Twoja broń jako PNG z przezroczystym tłem, POZIOMO: rękojeść z lewej, czubek / kula z prawej." }]);
   const s3 = step(p, 3, "Rodzaj i nazwa", "Gotowe ustawienia Levy'ego dla laski i szabli.");
-  const f3 = form(s3.body, [{ key: "preset", label: "Rodzaj broni", type: "select", options: [["sabre", "Szabla / miecz"], ["staff", "Laska / kij"], ["own", "Własne ustawienia"]], help: "" },
-    { key: "name", label: "Nazwa pracy", help: "" }]);
+  const f3 = form(s3.body, [{ key: "preset", label: "Rodzaj broni", type: "select", options: [["sabre", "Szabla / miecz"], ["staff", "Laska / kij"], ["own", "Własne ustawienia"]], help: "Gotowe ustawienia grubości i przesunięcia, sprawdzone na szabli (618) i lasce (617). „Własne” = wpisujesz sam w ustawieniach zaawansowanych." },
+    { key: "name", label: "Nazwa pracy", help: "Nazwa folderu na wyniki (gumpy i porównanie). Bez polskich znaków i spacji najbezpieczniej." }]);
   const a = adv(s3.body);
   const f3b = form(a, [{ key: "thick", label: "Grubość px", help: "Laska ≈ 26." }, { key: "ratio", label: "Proporcja", def: "0.15", help: "Szabla 0.15." },
     { key: "shift", label: "Przesunięcie dx,dy", def: "0,0", help: "Szabla 3,-9." }, { key: "front", label: "Dłoń przed bronią od wiersza", help: "Szabla 106." },
@@ -319,8 +320,8 @@ BUILD.gump = () => {
 BUILD.set = () => {
   const p = page("set", "🧩 Zestaw z arkusza (zaawansowane)", "Cały strój: arkusz PNG 4×3, osobny miecz, plik konfiguracji. Przykład: Wiedźmin z toolkitu.");
   const s = step(p, 1, "Pliki", "");
-  const F = form(s.body, [{ key: "design", label: "Arkusz (PNG)", type: "file", filter: ".png", help: "4 kolumny × 3 rzędy." }, { key: "sword", label: "Miecz (PNG)", type: "file", filter: ".png", help: "" },
-    { key: "config", label: "Konfiguracja (JSON)", type: "file", filter: ".json", help: "" }, { key: "out", label: "Folder wynikowy (lab)", type: "dir", help: "" },
+  const F = form(s.body, [{ key: "design", label: "Arkusz (PNG)", type: "file", filter: ".png", help: "4 kolumny × 3 rzędy." }, { key: "sword", label: "Miecz (PNG)", type: "file", filter: ".png", help: "Obraz dla klucza „sword” (poziomo, rękojeść z lewej). Gdy zestaw nie ma miecza, zostaw puste – program podstawi zastępczy plik." },
+    { key: "config", label: "Konfiguracja (JSON)", type: "file", filter: ".json", help: "Plik JSON zestawu (title, items, cells…), np. witcher.json z przykładu Levy'ego. Zapisany jako UTF-8 bez BOM." }, { key: "out", label: "Folder wynikowy (lab)", type: "dir", help: "Gdzie zapisać przymiarkę (atlas + podgląd HTML). Puste = folder pracy w toolkicie." },
     { key: "actions", label: "Akcje", def: "0 4 9 13 16", help: "Puste = wszystkie." }]);
   btns(s.body, ["Wypełnij przykładem Wiedźmina", () => { const b = S.workroot + "/witcher-lab/"; F.design.set(b + "witcher_design.png"); F.sword.set(b + "witcher_sword.png"); F.config.set(b + "witcher.json"); F.out.set(b + "lab"); }],
     ["▶ Zbuduj", async () => { const v = F.values(); if (!v.design || !v.sword || !v.config || !v.out) return toast("Uzupełnij pliki.", "bad"); try { const j = await runTask("build_set", v); j.status === "ok" ? s.ok("Zbudowane.") : s.bad("Nie udało się."); } catch (e) {} }, "primary"],
@@ -331,7 +332,7 @@ BUILD.set = () => {
 BUILD.pack = () => {
   const p = page("pack", "📦 Spakuj do .vd", "Dla wcześniej zbudowanych prac 2D (kreatory robią to same na końcu).");
   const s = step(p, 1, "Praca i opcje", "Folder „lab” (z manifest.json).");
-  const F = form(s.body, [{ key: "lab", label: "Folder pracy (lab)", type: "dir", help: "" }, { key: "key", label: "Przedmiot (klucz)", help: "Puste = pierwszy przedmiot w pracy." },
+  const F = form(s.body, [{ key: "lab", label: "Folder pracy (lab)", type: "dir", help: "Folder „lab” zbudowanej przymiarki (ten z index.html i atlasami), np. workspace/ultima-online/<praca>/lab w toolkicie." }, { key: "key", label: "Przedmiot (klucz)", help: "Puste = pierwszy przedmiot w pracy." },
     { key: "outline", label: "Kontur", type: "check", text: "ciemny kontur 1 px (cienka broń)" }, { key: "body", label: "Własny plik ciała .vd", type: "file", filter: ".vd", help: "Puste = z klienta." },
     { key: "out", label: "Plik wynikowy .vd", type: "save", filter: ".vd", help: "Puste = folder roboczy toolkitu." }]);
   btns(s.body, ["📦 Spakuj", async () => { const v = F.values(); if (!v.lab) return toast("Wskaż folder pracy.", "bad"); try { const j = await runTask("pack", { ...v, outline: v.outline ? "1" : "" }); packResult(s, j); } catch (e) {} }, "primary"]);
@@ -342,7 +343,7 @@ const VD = { path: null, open(p) { this.path = p; store("vdpath", p); built.vd =
 BUILD.vd = () => {
   const p = page("vd", "🎞 Podgląd pliku .vd", "Wszystkie 5 kierunków wybranej akcji, z oryginalnym ciałem pod spodem (jeśli jest body400.vd).");
   const card = el("div", { class: "card" }); p.append(card);
-  const F = form(card, [{ key: "path", label: "Plik .vd", type: "file", filter: ".vd", help: "" }], { path: VD.path || restore("vdpath", "") });
+  const F = form(card, [{ key: "path", label: "Plik .vd", type: "file", filter: ".vd", help: "Pełna ścieżka do pliku .vd (eksport UOFiddlera albo wynik z tego programu), np. …\\workspace\\ultima-online\\vd\\nowy_0469.vd. Kliknij „Wybierz…” albo wklej ścieżkę i naciśnij Enter / Wczytaj." }], { path: VD.path || restore("vdpath", "") });
   const ctl = el("div", { class: "btns" }); card.append(ctl);
   const act = el("select"); const fr = el("input", { type: "range", min: 0, max: 0, value: 0, style: "width:200px" }); const fl = el("span", { class: "muted" });
   const body = el("input", { type: "checkbox", checked: true }); const play = el("button", { text: "Play" });
@@ -382,6 +383,10 @@ BUILD.client = () => {
   let items = [], sel = -1;
   const FIELDS = { wearable: [["name", "Nazwa"], ["item_id", "Item ID (0x..)"], ["anim", "Anim id"], ["layer", "Warstwa (layer)"], ["tile_name", "Nazwa w tiledata"], ["art", "Ikona (PNG)", "file"], ["gump_male", "Gump męski (PNG)", "file"], ["gump_female", "Gump damski (PNG)", "file"]],
     monster: [["name", "Nazwa"], ["vd", "Plik .vd", "file"], ["body", "Body (puste = automatycznie)"]] };
+  const FIELD_HELP = { name: "Nazwa pozycji w recepturze (dla Ciebie i w raporcie).", item_id: "Numer grafiki przedmiotu, np. 0x2683 (z UOFiddlera → Items).",
+    anim: "Numer animacji na postaci (animId). Puste = z tiledata albo pierwszy wolny – sprawdź „Wolne ID animacji”.", layer: "Warstwa w tiledata (np. 22 = szata, 20 = płaszcz). Puste = jak w tiledata.",
+    tile_name: "Nazwa przedmiotu zapisywana w tiledata.mul.", art: "Ikona przedmiotu (PNG z przezroczystym tłem).", gump_male: "Gump paperdolla męski (PNG, np. gump_<id>_meski.png z zakładki Gump).",
+    gump_female: "Gump paperdolla damski (PNG). Puste = brak.", vd: "Plik .vd z animacją potwora (eksport UOFiddlera).", body: "Numer body potwora. Puste = program wybierze wolny („Zaproponuj wolny slot”)." };
   const kindOf = (it) => (it.vd !== undefined ? "monster" : "wearable");
   const drawT = () => {
     tbl.innerHTML = ""; tbl.append(el("tr", {}, el("th", { text: "#" }), el("th", { text: "Nazwa" }), el("th", { text: "Rodzaj" }), el("th", { text: "ID / plik" })));
@@ -391,7 +396,7 @@ BUILD.client = () => {
     ed.innerHTML = ""; if (sel < 0) { ed.append(el("div", { class: "muted", text: "Wybierz pozycję z listy albo dodaj nową." })); return; }
     const it = items[sel]; const k = kindOf(it);
     ed.append(el("h2", { class: "sec", text: k === "monster" ? "Potwór z pliku .vd" : "Przedmiot do noszenia" }));
-    for (const [key, label, type] of FIELDS[k]) { const f = field(ed, { key, label, type: type || "text", help: "" }, it[key] ?? ""); f.input.addEventListener("change", () => { const v = f.get(); if (v === "") delete it[key]; else it[key] = ["anim", "layer", "body"].includes(key) && /^\d+$/.test(v) ? +v : v; drawT(); }); }
+    for (const [key, label, type] of FIELDS[k]) { const f = field(ed, { key, label, type: type || "text", help: FIELD_HELP[key] || label }, it[key] ?? ""); f.input.addEventListener("change", () => { const v = f.get(); if (v === "") delete it[key]; else it[key] = ["anim", "layer", "body"].includes(key) && /^\d+$/.test(v) ? +v : v; drawT(); }); }
     if (k === "monster") btns(ed, ["Zaproponuj wolny slot", async () => { if (!it.vd) return toast("Najpierw wskaż plik .vd.", "bad"); const j = await runTask("suggest_slot", { vd: it.vd }); if (j.result.body) { it.body = j.result.body; drawE(); drawT(); toast("Wolny body: " + j.result.body, "ok"); } else toast("Nie znalazłem propozycji – zobacz Szczegóły.", "bad"); }]);
   };
   btns(s2.body, ["Wczytaj", async () => { const pth = fpath.get(); if (!pth) return; const r = await api.get("/api/recipe?path=" + encodeURIComponent(pth)); items = r.items || []; sel = items.length ? 0 : -1; drawT(); drawE(); store("recipe", pth); }],

@@ -112,9 +112,12 @@ Fakty techniczne z kodu nakładki:
 Jedno wejście: `nelderim.py` (`run_nelderim.bat/.sh`, `run_hub.bat/.sh`, `Nelderim.exe`). Uruchamia `nelderim_app.py`: serwer stdlib na 127.0.0.1 (port 8774+) i UI w przeglądarce (`app/index.html`, `app/app.js`, `app/style.css`; three.js 0.160 w `app/vendor`, MIT). Styl ciemny „Fit Lab": lewa lista stron i prac, środek widok 3D + pasek (akcja, kierunki 0–7, klatka, Play, kamera UO) + podglądy na żywo z „poke px", prawy panel (historia Cofnij/Ponów, Slot fit: offset/rotate/skala, opcje, Mierz, Zbuduj .vd, Zapisz/Reset). Pozostałe strony: Ubranie 2D, Broń 2D, Gump, Spakuj do .vd, Zestaw, Podgląd .vd, Dodawanie do klienta (receptura, szukanie, wolne ID, na sucho / zastosuj z potwierdzeniem), Ustawienia, Pomoc.
 - `nelderim_hub.py`: logika i budowniczowie komend `cmd_*` (wspólne z UI), ścieżki w `~/.nelderim_hub.json`. Zmieniając argumenty skryptów Levy'ego, popraw `cmd_*`.
 - `nelderim_app.py`: zadania (`task()` → Job z krokami-podprocesami, log w `/api/job`), sesja 3D (`M3D`: `/api/m3d/load|static|pose|preview|measure|save`), podgląd `.vd` (`/api/vd/*`). Bez logiki formatów.
-- Tryby pomocnicze `nelderim.py` (też w exe): `--run-script PLIK.py`, `--uo3d`, `--pick`, `--deps-ok`; `--classic` = stare okno Tk (`nelderim_hub_ui.py`).
+- Tryby pomocnicze `nelderim.py` (też w exe): `--run-script PLIK.py`, `--py [-c KOD | SKRYPT.py]` (exe udaje `python` dla skryptów Levy'ego: potrzebują tylko numpy + Pillow + stdlib), `--uo3d`, `--pick`, `--deps-ok`; `--classic` = stare okno Tk (`nelderim_hub_ui.py`).
+- Python dla toolkitu (`toolkit_argv`): `.venv` toolkitu → systemowy Python z numpy+Pillow (pomija atrapę WindowsApps) → exe `--py`.
+- „Wykryj automatycznie” (`scan_paths`): Pulpit/Pobrane/Dokumenty, folder obok programu, wszystkie dyski, do 4 poziomów; rozpoznaje po zawartości (`_MARKS`), max ~8 s.
+- Kopiowanie `.vd`: `safe_copy` (ten sam plik → nic; WinError 32 → ponawia ~6 s, potem zapis jako `<nazwa>_nowy_<czas>.vd`).
 - Prace 3D: `<toolkit>/workspace/ultima-online/<nazwa>/model3d/` (bez toolkitu: `<wyjście>/prace3d/`), `work.json` + 3 poprzednie wersje w `history/`.
-- Exe: `build_exe.bat` (PyInstaller, konsola) → `dist\Nelderim\` (exe + `app/`, `uo3d/`, skrypty); CI `build-exe` → artefakt `Nelderim-windows`.
+- Exe: `build_exe.bat` (PyInstaller, konsola) → `dist\Nelderim\` (exe + `app/`, `uo3d/`, skrypty); CI `build-exe`: smoke test exe, artefakt `Nelderim-windows`, Release (`main` → tag `najnowsza`, latest; inna gałąź przy ręcznym uruchomieniu → prerelease `test-<gałąź>`). Link: `releases/latest/download/Nelderim-windows.zip`.
 
 ## Przedmioty i broń — instrukcja Levy'ego (NELDERIM_PRZEDMIOTY_INSTRUKCJA)
 

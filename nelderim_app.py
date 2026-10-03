@@ -410,12 +410,10 @@ def task(cfg, name, p):
 
         def cp(j):
             src = Path(p["vd"]); dst = H.workdir(cfg) / (p.get("dst") or src.name)
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            b = H.backup_file(dst)
-            shutil.copy2(src, dst)
-            j.say(f"Skopiowano: {dst}" + (f" (kopia poprzedniego: {b})" if b else ""))
-            j.result["vd"] = str(dst)
-        return run_job("Kopiowanie .vd", [py(cp), lambda j: H.cmd_vd_info(cfg, str(H.workdir(cfg) / (p.get("dst") or Path(p["vd"]).name)))])
+            out, b, note = H.safe_copy(src, dst)
+            j.say(f"Gotowe: {out}" + (f" (kopia poprzedniego: {b})" if b else "") + (f"\n[!] {note}" if note else ""))
+            j.result["vd"] = str(out)
+        return run_job("Kopiowanie .vd", [py(cp), lambda j: H.cmd_vd_info(cfg, j.result["vd"])])
     raise ValueError("Nieznane zadanie: " + name)
 
 
@@ -591,15 +589,12 @@ class Handler(BaseHTTPRequestHandler):
             H.save_config(cfg)
             return self.send(200, state(cfg))
         if path == "/api/autodetect":
-            found = {}
-            for k in H.PATHS:
-                if H.path_ok(k, cfg.get(k)):
-                    continue
-                if k == "pipeline":
-                    found[k] = str(H.HERE); continue
-                for g in H.guesses(k):
-                    if H.path_ok(k, g):
-                        found[k] = g; break
+            todo = [k for k in H.PATHS if not H.path_ok(k, cfg.get(k))]
+            found = {k: v for k, v in H.scan_paths(todo).items() if H.path_ok(k, v)}
+            if "pipeline" in todo:
+                found["pipeline"] = str(H.HERE)
+            if "output" in todo:
+                found["output"] = str(Path.home() / "Nelderim-wyniki")
             cfg.update(found); H.save_config(cfg)
             return self.send(200, {"found": found, "state": state(cfg)})
         if path == "/api/pick":

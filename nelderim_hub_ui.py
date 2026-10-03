@@ -10,7 +10,6 @@ from __future__ import annotations
 import os
 import queue
 import re
-import shutil
 import subprocess
 import threading
 import webbrowser
@@ -1337,10 +1336,8 @@ class App:
             if not self.ready(["toolkit"]):
                 return
             dst = H.workdir(self.cfg) / f"nowy3d_{H.slugify(v['name'].get())}.vd"
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            b = H.backup_file(dst)
-            shutil.copy2(vd, dst)
-            s4.ok(f"Skopiowano do folderu roboczego toolkitu:\n{dst}" + (f"\n(kopia poprzedniego: {b})" if b else ""))
+            dst, b, note = H.safe_copy(Path(vd), dst)
+            s4.ok(f"Skopiowano do folderu roboczego toolkitu:\n{dst}" + (f"\n(kopia poprzedniego: {b})" if b else "") + (f"\n{note}" if note else ""))
             self.run([lambda: H.cmd_vd_info(self.cfg, str(dst))], "Sprawdzanie pliku .vd", keys=["toolkit"])
 
         self.button(s4.body, "Sprawdź plik .vd", to_toolkit, "Kopiuje .vd do folderu roboczego toolkitu (z kopią starego) i pokazuje typ i liczbę klatek.", big=True)

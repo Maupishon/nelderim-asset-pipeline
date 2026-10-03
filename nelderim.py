@@ -12,7 +12,9 @@ Helper modes (used by the app itself, also inside the frozen exe):
     --uo3d [args]                 the 3D renderer (uo3d_py.py)
     --pick file|dir|save TITLE [FILTER]   native file dialog, prints the chosen path
     --deps-ok                     prints DEPS_OK when numpy and Pillow import
+    --py [-c CODE | SCRIPT.py] [args]   acts as `python` for Levy's toolkit scripts (exe without Python installed)
 """
+import os
 import runpy
 import sys
 from pathlib import Path
@@ -49,6 +51,17 @@ def main(argv):
         sys.path.insert(0, str(script.parent))
         runpy.run_path(str(script), run_name="__main__")
         return 0
+    if argv[:1] == ["--py"]:
+        rest = argv[1:]
+        if rest[:1] == ["-c"]:
+            sys.argv = ["-c", *rest[2:]]
+            sys.path.insert(0, os.getcwd())
+            exec(compile(rest[1], "<string>", "exec"), {"__name__": "__main__"})
+            return 0
+        if rest[:1] == ["-m"]:
+            print("Ten program (.exe) nie instaluje bibliotek – numpy i Pillow są już w środku.", file=sys.stderr)
+            return 1
+        return main(["--run-script", *rest])
     if argv[:1] == ["--uo3d"]:
         import uo3d_py
         uo3d_py.main(argv[1:])

@@ -7,6 +7,8 @@ python -m PyInstaller --onefile --noconfirm --name Nelderim ^
   --hidden-import nelderim_patch --hidden-import nelderim_search --hidden-import nelderim_core --hidden-import uopatch ^
   --hidden-import uop_gump_patch --hidden-import uop_probe --hidden-import vd_inject ^
   --collect-submodules uo3d --hidden-import numpy --hidden-import PIL.Image ^
+  --hidden-import PIL.ImageDraw --hidden-import PIL.ImageFilter --hidden-import PIL.ImageOps --hidden-import PIL.ImageChops ^
+  --hidden-import argparse --hidden-import hashlib --hidden-import struct --hidden-import math --hidden-import csv ^
   nelderim.py || goto :fail
 if exist dist\Nelderim rmdir /s /q dist\Nelderim
 mkdir dist\Nelderim
