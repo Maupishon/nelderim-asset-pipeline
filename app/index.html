@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="pl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nelderim Lab</title>
+<link rel="stylesheet" href="/app/style.css">
+<script type="importmap">{ "imports": { "three": "/app/vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<aside id="nav">
+  <div id="brand"><h1>Nelderim Lab</h1><div class="sub" id="brandsub">animacje przedmiotów UO</div></div>
+  <nav id="navlist"></nav>
+  <div id="ctx"></div>
+  <div id="navfoot">
+    <button class="small" id="themeBtn" title="Jasny / ciemny motyw">◐ motyw</button>
+    <button class="small" id="quitBtn" title="Wyłącza program (serwer w tle)">⏻ zamknij</button>
+  </div>
+</aside>
+
+<main id="main">
+  <!-- START -->
+  <section class="page" id="p-start">
+    <h1>Co chcesz zrobić?</h1>
+    <div class="hint">Wybierz zadanie. Każde prowadzi krok po kroku. Najedź myszą na „?”, żeby zobaczyć wyjaśnienie.</div>
+    <div class="card"><h2 class="sec">Czy wszystko jest gotowe?</h2><div id="startChecks"></div></div>
+    <div class="grid2" id="startTiles"></div>
+  </section>
+
+  <!-- FIT LAB (3D) -->
+  <section class="page full" id="p-fit">
+    <div id="fit">
+      <div id="view"><div class="over" id="viewInfo"></div>
+        <div class="empty" id="viewEmpty"><div>Wybierz model 3D przedmiotu po prawej (Plik modelu → Wczytaj).</div>
+          <span class="muted">Potrzebny jest UO_Body_0x190.glb w Ustawieniach. Blender nie jest potrzebny.</span></div></div>
+      <div id="bar">
+        <span class="muted">Akcja</span><select id="actSel"></select>
+        <span class="dirs" id="dirBtns"></span>
+        <input type="range" id="frameSl" min="0" max="0" value="0"><span id="frameLbl" class="muted">1/1</span>
+        <button id="playBtn">Play</button>
+        <button id="uoCamBtn" title="Widok kamerą UO (rzut prostokątny, 28,45° z góry)">UO camera</button>
+        <label class="check"><input type="checkbox" id="showBody" checked> ciało</label>
+      </div>
+      <div id="previews">
+        <h2 class="sec" style="margin:0 0 6px">Podgląd na żywo (kamera UO)</h2>
+        <div class="tools">
+          <label class="check"><input type="checkbox" id="animPrev"> Animuj podglądy</label>
+          <span class="muted">Rozmiar</span><select id="prevSize"><option value="1">1×</option><option value="2" selected>2×</option><option value="3">3×</option></select>
+          <span class="muted" id="prevInfo"></span>
+        </div>
+        <div id="prevgrid"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="page" id="p-cloth"></section>
+  <section class="page" id="p-weapon"></section>
+  <section class="page" id="p-gump"></section>
+  <section class="page" id="p-set"></section>
+  <section class="page" id="p-pack"></section>
+  <section class="page" id="p-client"></section>
+  <section class="page" id="p-vd"></section>
+  <section class="page" id="p-settings"></section>
+  <section class="page" id="p-help"></section>
+</main>
+
+<aside id="side"></aside>
+
+<footer id="foot">
+  <div id="hints"></div>
+  <div id="status"><span class="msg" id="statusMsg">Gotowy.</span><progress id="prog" hidden></progress>
+    <button class="small" id="stopBtn" hidden>Przerwij</button><button class="small" id="logBtn">Szczegóły ▸</button></div>
+  <pre id="log"></pre>
+</footer>
+<div class="tip" id="tip" hidden></div>
+<script type="module" src="/app/app.js"></script>
+</body>
+</html>

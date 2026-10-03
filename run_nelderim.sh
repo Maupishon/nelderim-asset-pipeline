@@ -3,7 +3,7 @@
 # run_nelderim.sh
 #
 # Double-click (if your file manager allows it) or run from a terminal to
-# launch the Nelderim Asset Pipeline GUI on Linux/macOS. Mirrors
+# launch Nelderim Lab (hub + pipeline, opens in the browser) on Linux/macOS. Mirrors
 # run_nelderim.bat's checks:
 #   1. Finds a usable Python 3.10+.
 #   2. Makes sure Pillow is installed (installs it if not).
@@ -64,27 +64,15 @@ echo
 # on Linux, unlike the Windows python.org installer which bundles it)
 # ---------------------------------------------------------------------
 if ! "$PYEXE" -c "import tkinter" >/dev/null 2>&1; then
-    echo "[PROBLEM] Python's 'tkinter' module (needed for the GUI window)"
-    echo "is not installed. On Linux this is usually a separate package"
-    echo "from Python itself:"
-    echo "  Debian/Ubuntu:  sudo apt install python3-tk"
-    echo "  Fedora:         sudo dnf install python3-tkinter"
-    echo "  Arch:           sudo pacman -S tk"
-    echo "  macOS:          tkinter should already be bundled - try"
-    echo "                  reinstalling Python via python.org or brew."
+    echo "[UWAGA] Brak modułu tkinter: przyciski „Wybierz…” nie otworzą okna wyboru."
+    echo "        Ścieżki można wpisać ręcznie. Instalacja: sudo apt install python3-tk"
     echo
-    echo "After installing, run this script again."
-    echo
-    echo "(You can still use the command-line tools - nelderim_patch.py"
-    echo "and nelderim_search.py - without tkinter; only the GUI needs it.)"
-    pause_on_exit
-    exit 1
 fi
 
 # ---------------------------------------------------------------------
 # Step 3: make sure Pillow is installed
 # ---------------------------------------------------------------------
-if ! "$PYEXE" -c "import PIL" >/dev/null 2>&1; then
+if ! "$PYEXE" -c "import PIL, numpy" >/dev/null 2>&1; then
     echo "Pillow (an image library this tool needs) is not installed yet."
     echo "Installing it now - this only happens once and may take a moment..."
     echo
@@ -95,9 +83,9 @@ if ! "$PYEXE" -c "import PIL" >/dev/null 2>&1; then
         "$PYEXE" -m pip install -r requirements.txt --break-system-packages
     fi
 
-    if ! "$PYEXE" -c "import PIL" >/dev/null 2>&1; then
+    if ! "$PYEXE" -c "import PIL, numpy" >/dev/null 2>&1; then
         echo
-        echo "[PROBLEM] Could not install Pillow automatically. The error"
+        echo "[PROBLEM] Could not install Pillow / numpy automatically. The error"
         echo "above from pip explains why. Common fixes:"
         echo "  - Make sure you have an internet connection."
         echo "  - Try: $PYEXE -m pip install --user Pillow"
@@ -114,9 +102,9 @@ fi
 # ---------------------------------------------------------------------
 # Step 4: launch the GUI
 # ---------------------------------------------------------------------
-echo "Starting the Nelderim Asset Pipeline..."
+echo "Starting Nelderim Lab (opens in the browser; Ctrl+C stops it)..."
 echo
-"$PYEXE" nelderim_gui.py
+"$PYEXE" nelderim.py "$@"
 EXITCODE=$?
 
 # ---------------------------------------------------------------------

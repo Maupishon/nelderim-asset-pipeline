@@ -3,11 +3,12 @@ setlocal enabledelayedexpansion
 REM ===========================================================================
 REM run_nelderim.bat
 REM
-REM Double-click this file to launch the Nelderim Asset Pipeline GUI.
+REM Double-click this file to launch Nelderim Lab (hub + pipeline in one app,
+REM opens in your web browser).
 REM What it does, step by step:
 REM   1. Looks for Python 3.10+ on your system (tries "python" then "py").
-REM   2. Makes sure the "Pillow" library is installed (installs it if not).
-REM   3. Starts the graphical tool (nelderim_gui.py).
+REM   2. Makes sure the "Pillow" and "numpy" libraries are installed.
+REM   3. Starts the app (nelderim.py).
 REM   4. If anything goes wrong, it prints a plain-language explanation and
 REM      keeps this window open (instead of vanishing instantly) so you can
 REM      actually read what happened.
@@ -67,9 +68,9 @@ echo.
 REM ---------------------------------------------------------------------
 REM Step 2: make sure Pillow is installed
 REM ---------------------------------------------------------------------
-!PYEXE! -c "import PIL" >nul 2>nul
+!PYEXE! -c "import PIL, numpy" >nul 2>nul
 if not %errorlevel%==0 (
-    echo Pillow ^(an image library this tool needs^) is not installed yet.
+    echo Pillow / numpy ^(libraries this tool needs^) are not installed yet.
     echo Installing it now - this only happens once and may take a moment...
     echo.
 
@@ -80,30 +81,27 @@ if not %errorlevel%==0 (
         !PYEXE! -m pip install -r requirements.txt --break-system-packages
     )
 
-    !PYEXE! -c "import PIL" >nul 2>nul
+    !PYEXE! -c "import PIL, numpy" >nul 2>nul
     if not !errorlevel!==0 (
         echo.
-        echo [PROBLEM] Could not install Pillow automatically. The error
+        echo [PROBLEM] Could not install Pillow / numpy automatically. The error
         echo above from pip explains why. Common fixes:
         echo   - Make sure you have an internet connection.
         echo   - Try running this .bat file as Administrator.
-        echo   - Ask for help, with the error text above, at:
-        echo     https://github.com/anthropics/claude-code/issues
-        echo     ^(or wherever this project's support/issues page is^)
         echo.
         pause
         exit /b 1
     )
-    echo Pillow installed successfully.
+    echo Libraries installed successfully.
     echo.
 )
 
 REM ---------------------------------------------------------------------
 REM Step 3: launch the GUI
 REM ---------------------------------------------------------------------
-echo Starting the Nelderim Asset Pipeline...
+echo Starting Nelderim Lab - it opens in your browser. Close this window to stop it.
 echo.
-!PYEXE! nelderim_gui.py
+!PYEXE! nelderim.py %*
 set "EXITCODE=%errorlevel%"
 
 REM ---------------------------------------------------------------------
