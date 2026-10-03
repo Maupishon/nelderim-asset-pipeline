@@ -124,8 +124,9 @@ Jedno wejście: `nelderim.py` (`run_nelderim.bat/.sh`, `run_hub.bat/.sh`, `Nelde
 `python anim_wire.py --client <KOPIA> --file 5 [--slots 32 33] [--names '{"32":"Smok"}'] [--range lo-hi] [--out DIR] [--apply] [--json]`; w aplikacji: Dodawanie do klienta → krok 4 (miniatury, nazwy, „Podepnij zaznaczone”).
 - Sloty z danymi wg układu `UOReader._base` (wyżej); typ z grupy: 110 → MONSTER, 65 → ANIMAL, 175 → HUMAN.
 - „Nieprzypisany” = żadna niezakomentowana linia `Bodyconv.def` nie wskazuje go w kolumnie animN (kolumny: body, anim2, anim3, anim4, anim5).
-- Wolne body: nie w body.def / Bodyconv.def / AnimationFrame*.uop / mobtypes.txt, nie `animId` w tiledata.mul ani w Equipconv.def, ≠ 0, pusty zakres w anim.mul; najpierw pasmo typu (MONSTER 1–199, ANIMAL 200–399, HUMAN 400+), poza nim tylko powyżej najwyższego id w mobtypes.txt (model `AnimIdx` się nie przesuwa).
+- Wolne body: nie w body.def / Bodyconv.def / mobtypes.txt / AnimationFrame*.uop (akcje 0–99, nie tylko 0–4) / AnimationSequence.uop (pierwszy uint32 wpisu = animId, zlib przy flag 1), nie `animId` w tiledata.mul ani w Equipconv.def, ≠ 0, pusty zakres w anim.mul; najpierw pasmo typu (MONSTER 1–199, ANIMAL 200–399, HUMAN 400+), poza nim tylko powyżej najwyższego id w mobtypes.txt (model `AnimIdx` się nie przesuwa).
 - Zapis tylko do `--out` (w aplikacji `<wyjście>/anim_wire`): kopia + blok `# --- added by anim_wire.py ---` w Bodyconv.def (`body -1 -1 -1 slot -1 # opis`) i mobtypes.txt (`body TYP 0`), backup, manifest, weryfikacja ponownym odczytem.
+- `--check-body N` (w aplikacji „🩺 Sprawdź”): co już używa body N. Lekcja z gry: body 32 przypięte do anim5 slot 196 (wilkołak) pokazało smoka z UOP — UOP ma pierwszeństwo, a stara wersja sprawdzała w UOP tylko akcje 0–4.
 - NIESPRAWDZONE w grze: wcześniej Bodyconv.def był tylko do odczytu (`nelderim_core`); przed hurtowym podpinaniem sprawdzić jedno body. Testowane na sztucznym kliencie (anim5 z blokami z horse200.vd).
 
 ## Przedmioty i broń — instrukcja Levy'ego (NELDERIM_PRZEDMIOTY_INSTRUKCJA)

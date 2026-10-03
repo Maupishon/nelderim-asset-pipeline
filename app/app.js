@@ -457,6 +457,8 @@ BUILD.client = () => {
       else s4.bad(j.result.error || "Nie zapisano – zobacz Szczegóły.");
     } catch (e) {}
   };
+  const fchk = form(s4.body, [{ key: "body", label: "Sprawdź body", placeholder: "np. 32", help: "Pokazuje, co już używa danego numeru body: mobtypes.txt, body.def, Bodyconv.def, pliki UOP (klient 3D) i anim.mul. Jeśli w grze widać inny wygląd niż w UOFiddlerze, zwykle winne są pliki UOP – mają pierwszeństwo." }]);
+  btns(s4.body, ["🩺 Sprawdź", () => { const b = fchk.body.get(); if (!/^\d+$/.test(b)) return toast("Wpisz numer body, np. 32.", "bad"); runTask("anim_check", { body: +b }).then(() => showLog(true)); }]);
   btns(s4.body, ["🔍 Szukaj", scan, "primary", "Przegląda plik i pokazuje nieprzypisane animacje z proponowanym body. Niczego nie zapisuje."],
     ["🔗 Podepnij zaznaczone…", wire, "", "Dopisuje Bodyconv.def i mobtypes.txt do folderu wyników (z kopią obecnych)."]);
 };

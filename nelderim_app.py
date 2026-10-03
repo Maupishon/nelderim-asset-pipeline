@@ -385,6 +385,9 @@ def task(cfg, name, p):
         if p.get("apply"):
             a.append("--apply")
         return run_job("Zastosowanie zmian" if p.get("apply") else "Przebieg na sucho", [lambda j: H._pl(cfg, "nelderim_patch.py", *a)])
+    if name == "anim_check":
+        require("pipeline", "client")
+        return run_job(f"Sprawdzanie body {p['body']}", [lambda j: H.cmd_anim_check(cfg, p["body"])])
     if name == "anim_wire":
         require("pipeline", "client", "output")
         names = {int(k): str(v) for k, v in (p.get("names") or {}).items() if str(v).strip()}

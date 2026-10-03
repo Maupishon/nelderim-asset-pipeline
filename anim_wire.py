@@ -13,7 +13,8 @@ WHAT IT DOES
   2. Diff against Bodyconv.def: a slot is "unassigned" when no Bodyconv.def line points
      at it in the anim<N> column (live or inert lines alike - every non-comment line counts).
   3. For each unassigned slot picks a free body id, clean on all four collision sources
-     (body.def, Bodyconv.def, AnimationFrame*.uop, mobtypes.txt), not used as an item
+     (body.def, Bodyconv.def, mobtypes.txt, AnimationFrame*.uop for action groups 0-99, AnimationSequence.uop),
+     not used as an item
      animation (tiledata.mul animId, Equipconv.def), never 0, and with an empty anim.mul span, preferring the id band whose default type equals the slot's type
      (MONSTER 0-199, ANIMAL 200-399, HUMAN 400+). Outside the band only ids ABOVE every
      id already in mobtypes.txt are used, so the cumulative People-group model of
@@ -154,13 +155,65 @@ def bodyconv_refs(path):
 
 
 # ---------------------------------------------------------------- free bodies
-def free_bodies(client, typ, taken, max_body=MAX_BODY, lo=None, hi=None):
+UOP_GROUPS = 100            # action groups probed per body in AnimationFrame*.uop (not only 0-4)
+
+
+def _uop_entries(path):
+    """read-only list of (hash, offset, header len, compressed len, decompressed len, flag) of a MYP (.uop) file."""
+    out = []
+    with open(path, "rb") as f:
+        if f.read(4) != b"MYP\x00":
+            return out
+        _ver, _sig, nxt, _cap, _cnt = struct.unpack("<II q i i", f.read(24))
+        while nxt:
+            f.seek(nxt)
+            n, nxt = struct.unpack("<i q", f.read(12))
+            for _ in range(n):
+                off, hlen, clen, dlen, h, _ad, flag = struct.unpack("<q i i i Q I h", f.read(34))
+                if off:
+                    out.append((h, off, hlen, clen, dlen, flag))
+    return out
+
+
+class UopIndex:
+    """What the client's UOP animation files already use (UOP beats Bodyconv.def / anim*.mul).
+    frames: hashes of AnimationFrame*.uop, probed per body for action groups 0..UOP_GROUPS-1.
+    sequence: animation ids listed in AnimationSequence.uop (first uint32 of each entry, zlib when flag 1)."""
+
+    def __init__(self, client):
+        import glob, zlib
+        self.frames = set()
+        for p in glob.glob(os.path.join(client, "AnimationFrame*.uop")):
+            self.frames |= {e[0] for e in _uop_entries(p)}
+        self.sequence = set()
+        sp = C.find(client, "AnimationSequence.uop")
+        if sp:
+            with open(sp, "rb") as f:
+                for h, off, hlen, clen, dlen, flag in _uop_entries(sp):
+                    f.seek(off + hlen)
+                    data = f.read(clen)
+                    if flag == 1:
+                        try:
+                            data = zlib.decompress(data)
+                        except zlib.error:
+                            continue
+                    if len(data) >= 4:
+                        self.sequence.add(struct.unpack_from("<I", data, 0)[0])
+
+    def frame_groups(self, body):
+        return [g for g in range(UOP_GROUPS) if C.uop_hash(C.animframe_path(body, g)) in self.frames]
+
+    def used(self, body):
+        return body in self.sequence or bool(self.frame_groups(body))
+
+
+def free_bodies(client, typ, taken, max_body=MAX_BODY, lo=None, hi=None, uop=None):
     """generator of clean body ids for a TYPE (see module doc for the order)."""
     mob = C.load_mobtypes(C.find(client, "mobtypes.txt"))
     bd = C.find(client, "body.def"); bc = C.find(client, "Bodyconv.def")
     bodydef = C.load_bodydef_bodies(bd) if bd else set()
     bconv = C.load_bodyconv_bodies(bc) if bc else set()
-    uop = C.animframe_uop_bodies(client, 0, max_body)
+    uop = uop or UopIndex(client)
     aidx = C.find(client, "anim.idx")
     main = C.AnimIdxFile(aidx) if aidx else None
     used_anim = set()                                             # animation ids already used by worn items
@@ -182,7 +235,7 @@ def free_bodies(client, typ, taken, max_body=MAX_BODY, lo=None, hi=None):
         band = {"MONSTER": range(0, 200), "ANIMAL": range(200, 400), "HUMAN": range(400, max_body)}[typ]
         order = list(band) + [b for b in range(top + 1, max_body) if b not in band]
     for b in order:
-        if b <= 0 or b in taken or b in bodydef or b in bconv or b in uop or b in mob or b in used_anim:
+        if b <= 0 or b in taken or b in bodydef or b in bconv or b in mob or b in used_anim or uop.used(b):
             continue
         if typ == "ANIMAL" and b < 200 or typ == "HUMAN" and b < 400:
             continue                                              # main-file formula undefined there
@@ -197,12 +250,13 @@ def plan(client, n, slots=None, names=None, lo=None, hi=None):
     found = scan_slots(client, n)
     refs = bodyconv_refs(C.find(client, "Bodyconv.def"))[n]
     rows, taken, gens = [], set(), {}
+    uop = UopIndex(client)
     for s in found:
         s["assigned_to"] = refs.get(s["slot"], [])
         if s["assigned_to"] or (slots and s["slot"] not in slots):
             continue
         typ = s["type"]
-        g = gens.setdefault(typ, free_bodies(client, typ, taken, lo=lo, hi=hi))
+        g = gens.setdefault(typ, free_bodies(client, typ, taken, lo=lo, hi=hi, uop=uop))
         body = next(g, None)
         s["body"] = body
         s["name"] = (names or {}).get(s["slot"], "")
@@ -288,18 +342,56 @@ def thumbnail(client, n, slot, size=96):
     return None
 
 
+def check_body(client, b):
+    """plain-language list of everything that already uses body b (empty = free)."""
+    out = []
+    mob = C.load_mobtypes(C.find(client, "mobtypes.txt"))
+    if b in mob:
+        out.append(f"mobtypes.txt: {mob[b]}")
+    bd = C.find(client, "body.def")
+    if bd and b in C.load_bodydef_bodies(bd):
+        out.append("body.def przekierowuje to body")
+    bc = C.find(client, "Bodyconv.def")
+    if bc and b in C.load_bodyconv_bodies(bc):
+        out.append("Bodyconv.def ma to body")
+    u = UopIndex(client)
+    g = u.frame_groups(b)
+    if g:
+        out.append(f"AnimationFrame*.uop: akcje {g[:12]}{'...' if len(g) > 12 else ''} (UOP wygrywa z Bodyconv.def)")
+    if b in u.sequence:
+        out.append("AnimationSequence.uop: jest na liście (UOP wygrywa z Bodyconv.def)")
+    aidx = C.find(client, "anim.idx")
+    if aidx:
+        for typ in ("MONSTER", "ANIMAL", "HUMAN"):
+            if (typ == "ANIMAL" and b < 200) or (typ == "HUMAN" and b < 400):
+                continue
+            st, ln = anim_mul_span(b, typ)
+            if not C.AnimIdxFile(aidx).span_free(st, ln):
+                out.append(f"anim.mul: są dane w zakresie typu {typ}")
+    return out
+
+
 # ---------------------------------------------------------------- CLI
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--client", required=True, help="client folder (a COPY) - read only")
-    ap.add_argument("--file", type=int, required=True, choices=FILES, help="which animN.mul to scan (2-5)")
+    ap.add_argument("--file", type=int, default=None, choices=FILES, help="which animN.mul to scan (2-5)")
     ap.add_argument("--slots", nargs="*", type=int, default=None, help="only these slots (default: all unassigned)")
     ap.add_argument("--names", default="", help='JSON {"slot": "name"} for comments in the .def files')
     ap.add_argument("--range", default="", help="body id range lo-hi to pick from (default: by type band, see doc)")
     ap.add_argument("--out", default="patched_anim_wire", help="output folder (never the client)")
     ap.add_argument("--apply", action="store_true", help="write Bodyconv.def + mobtypes.txt to --out")
     ap.add_argument("--json", action="store_true", help="print RESULT_JSON <json> (for Nelderim Lab)")
+    ap.add_argument("--check-body", type=int, default=None, help="only report what already uses this body id")
     a = ap.parse_args(argv)
+    if a.check_body is not None:
+        why = check_body(a.client, a.check_body)
+        print(f"[BODY   ] {a.check_body}: " + ("wolne" if not why else "ZAJĘTE"))
+        for w in why:
+            print("          - " + w)
+        return 0
+    if a.file is None:
+        ap.error("--file 2|3|4|5 jest wymagane")
     names = {int(k): v for k, v in json.loads(a.names).items()} if a.names else {}
     lo = hi = None
     if a.range:
