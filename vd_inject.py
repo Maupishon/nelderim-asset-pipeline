@@ -254,10 +254,12 @@ def animframe_uop_bodies(client, lo, hi):
         return set()
     import glob
     out = set()
+    hs = set()
     for p in glob.glob(os.path.join(client, "AnimationFrame*.uop")):
-        hs = read_uop_hashes(p)
+        hs |= read_uop_hashes(p)
+    if hs:
         for body in range(lo, hi):
-            for g in range(5):
+            for g in range(100):   # every action group, not only 0-4
                 if uop_hash(f"build/animationlegacyframe/{body:06d}/{g:02d}.bin") in hs:
                     out.add(body)
                     break

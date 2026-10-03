@@ -20,7 +20,7 @@ Jeden program: **Nelderim Lab** (hub + pipeline razem). Otwiera się w przegląd
 | Windows, z Pythonem | dwuklik `run_nelderim.bat` |
 | Linux / macOS | `./run_nelderim.sh` |
 
-(`run_hub.bat` / `run_hub.sh` robią to samo. Stare okno Tk: `python nelderim.py --classic`.)
+Narzędzia bez okna: `python nelderim.py search | patch | inject | wire | uo3d | vd2glb …` (albo `Nelderim.exe …`); `--help` przy każdym pokazuje opcje.
 
 ### 1. Pobranie (na dowolny komputer)
 **Windows – paczka gotowa do uruchomienia:**
@@ -125,11 +125,10 @@ anything.
 | `nelderim_core.py` | Shared, proven building blocks - binary codecs, offset models, collision checks. Every other tool either calls into this or duplicates a piece of it under test. Read this file's section comments before touching format logic anywhere. |
 | `nelderim_patch.py` | Unified CLI - classifies recipe items and routes them to the three engines below as subprocesses. |
 | `nelderim_search.py` | Read-only lookup: search items by name/id, inspect an anim id's gump/UOP status, inspect a body id's collisions and type. |
-| `nelderim.py` | The one entry point: starts Nelderim Lab (`nelderim_app.py` server + `app/` web UI); `--classic` opens the older Tk hub. |
+| `nelderim.py` | The one entry point: starts Nelderim Lab (`nelderim_app.py` server + `app/` web UI); `nelderim.py search/patch/inject/wire/uopatch/gumppatch/uo3d/vd2glb ...` runs the tools from the command line. |
 | `nelderim_app.py`, `app/` | Local web app (stdlib HTTP server on 127.0.0.1, three.js vendored in `app/vendor`, MIT). Only builds commands and calls the tools; no format logic. |
 | `nelderim_hub.py` | Command builders for Levy's toolkit scripts and the pipeline tools (shared by the app and the Tk hub). |
 | `uo3d/`, `uo3d_py.py` | 3D renderer without Blender (numpy + Pillow): glTF/FBX/OBJ, skinning, UO camera, `.vd` writer. |
-| `nelderim_gui.py` | Older Tkinter recipe front-end. No format logic - only builds a recipe and shells out to the CLI tools above. |
 | `uopatch.py` | Wearable/item patcher: art, gump (MUL side), tiledata, optional `mobtypes.txt`/`body.def` entries. |
 | `uop_gump_patch.py` | Patches a gump directly inside `gumpartLegacyMUL.uop` in place, for items whose gump id already lives there. |
 | `vd_inject.py` | Imports a `.vd` monster-animation container into `anim.mul`/`anim.idx`, auto-picking (or taking) a target body id. |

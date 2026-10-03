@@ -91,6 +91,7 @@ Fakty techniczne z kodu nakładki:
 - Zero halucynacji: ID, ścieżki, formaty tylko z plików na dysku lub kodu ClassicUO/ServUO.
 - UOP > MUL: zapis do `.mul` zasobu istniejącego w `.uop` (np. `gumpartLegacyMUL.uop`) klient ignoruje → `uop_gump_patch.py`.
 - Kolejność rozwiązywania: `body.def` → `AnimationFrame*.uop` → `Bodyconv.def` → `anim.mul`.
+- `AnimationFrame*.uop`: jeden plik na body na AKCJĘ (grupy 0–99), nie na kierunek. Sprawdzanie tylko 0–4 przepuściło body 32 (smok z UOP w grze). `nelderim_core.animframe_uop_bodies`, `vd_inject.py`, `uopatch.py`, `anim_wire.py` sprawdzają 0–99.
 - Offsety w `anim.mul`:
   - People (≥400): `(graphic - 400) * 175 + 35000`
   - High (<200): `graphic * 110`
@@ -109,10 +110,10 @@ Fakty techniczne z kodu nakładki:
 
 ## Nelderim Lab (hub + pipeline w jednym)
 
-Jedno wejście: `nelderim.py` (`run_nelderim.bat/.sh`, `run_hub.bat/.sh`, `Nelderim.exe`). Uruchamia `nelderim_app.py`: serwer stdlib na 127.0.0.1 (port 8774+) i UI w przeglądarce (`app/index.html`, `app/app.js`, `app/style.css`; three.js 0.160 w `app/vendor`, MIT). Styl ciemny „Fit Lab": lewa lista stron i prac, środek widok 3D + pasek (akcja, kierunki 0–7, klatka, Play, kamera UO) + podglądy na żywo z „poke px", prawy panel (historia Cofnij/Ponów, Slot fit: offset/rotate/skala, opcje, Mierz, Zbuduj .vd, Zapisz/Reset). Pozostałe strony: Ubranie 2D, Broń 2D, Gump, Spakuj do .vd, Zestaw, Podgląd .vd, Dodawanie do klienta (receptura, szukanie, wolne ID, na sucho / zastosuj z potwierdzeniem), Ustawienia, Pomoc.
+Jedno wejście: `nelderim.py` (`run_nelderim.bat/.sh`, `Nelderim.exe`). Narzędzia z linii poleceń: `nelderim.py search|patch|inject|wire|uopatch|gumppatch|uo3d|vd2glb …` (= odpowiednie skrypty `.py`, które nadal działają też bezpośrednio). Stare okna Tk (`nelderim_gui.py`, `nelderim_hub_ui.py`, `--classic`) usunięte; skrypty pipeline'u leżą zawsze obok programu (bez ustawienia „pipeline”); ustawienia: klient, toolkit, wyjście, UO_Body_0x190.glb. Uruchamia `nelderim_app.py`: serwer stdlib na 127.0.0.1 (port 8774+) i UI w przeglądarce (`app/index.html`, `app/app.js`, `app/style.css`; three.js 0.160 w `app/vendor`, MIT). Styl ciemny „Fit Lab": lewa lista stron i prac, środek widok 3D + pasek (akcja, kierunki 0–7, klatka, Play, kamera UO) + podglądy na żywo z „poke px", prawy panel (historia Cofnij/Ponów, Slot fit: offset/rotate/skala, opcje, Mierz, Zbuduj .vd, Zapisz/Reset). Pozostałe strony: Ubranie 2D, Broń 2D, Gump, Spakuj do .vd, Zestaw, Podgląd .vd, Dodawanie do klienta (receptura, szukanie, wolne ID, na sucho / zastosuj z potwierdzeniem), Ustawienia, Pomoc.
 - `nelderim_hub.py`: logika i budowniczowie komend `cmd_*` (wspólne z UI), ścieżki w `~/.nelderim_hub.json`. Zmieniając argumenty skryptów Levy'ego, popraw `cmd_*`.
 - `nelderim_app.py`: zadania (`task()` → Job z krokami-podprocesami, log w `/api/job`), sesja 3D (`M3D`: `/api/m3d/load|static|pose|preview|measure|save`), podgląd `.vd` (`/api/vd/*`). Bez logiki formatów.
-- Tryby pomocnicze `nelderim.py` (też w exe): `--run-script PLIK.py`, `--py [-c KOD | SKRYPT.py]` (exe udaje `python` dla skryptów Levy'ego: potrzebują tylko numpy + Pillow + stdlib), `--uo3d`, `--pick`, `--deps-ok`; `--classic` = stare okno Tk (`nelderim_hub_ui.py`).
+- Tryby pomocnicze `nelderim.py` (też w exe): `--run-script PLIK.py`, `--py [-c KOD | SKRYPT.py]` (exe udaje `python` dla skryptów Levy'ego: potrzebują tylko numpy + Pillow + stdlib), `--uo3d`, `--pick`, `--deps-ok`.
 - Python dla toolkitu (`toolkit_argv`): `.venv` toolkitu → systemowy Python z numpy+Pillow (pomija atrapę WindowsApps) → exe `--py`.
 - „Wykryj automatycznie” (`scan_paths`): Pulpit/Pobrane/Dokumenty, folder obok programu, wszystkie dyski, do 4 poziomów; rozpoznaje po zawartości (`_MARKS`), max ~8 s.
 - Kopiowanie `.vd`: `safe_copy` (ten sam plik → nic; WinError 32 → ponawia ~6 s, potem zapis jako `<nazwa>_nowy_<czas>.vd`).
