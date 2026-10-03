@@ -3,7 +3,10 @@ on:
   workflow_dispatch:
   pull_request:
   push:
+    branches: [main]
     tags: ['v*']
+permissions:
+  contents: write
 jobs:
   windows:
     runs-on: windows-latest
@@ -15,10 +18,33 @@ jobs:
       - name: Build
         shell: cmd
         run: build_exe.bat
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $out = & dist\Nelderim\Nelderim.exe --deps-ok
+          if ($out -notmatch 'DEPS_OK') { throw "exe: numpy/Pillow missing ($out)" }
+          $out = & dist\Nelderim\Nelderim.exe --py -c "import numpy, PIL.ImageDraw, PIL.ImageFilter, argparse, hashlib, struct; print('PY_OK')"
+          if ($out -notmatch 'PY_OK') { throw "exe --py failed ($out)" }
+          $out = & dist\Nelderim\Nelderim.exe --uo3d --help
+          if ($LASTEXITCODE -ne 0) { throw "exe --uo3d failed" }
       - name: Zip
         shell: pwsh
-        run: Compress-Archive -Path dist\NelderimHub -DestinationPath NelderimHub-windows.zip
+        run: Compress-Archive -Path dist\Nelderim -DestinationPath Nelderim-windows.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: NelderimHub-windows
-          path: NelderimHub-windows.zip
+          name: Nelderim-windows
+          path: Nelderim-windows.zip
+      - name: Publish release (download link without GitHub login)
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } elseif ($env:GITHUB_REF_NAME -eq 'main') { 'najnowsza' } else { 'test-' + ($env:GITHUB_REF_NAME -replace '[^A-Za-z0-9._-]', '-') }
+          gh release delete $tag --yes --cleanup-tag 2>$null
+          $notes = "Pobierz Nelderim-windows.zip, rozpakuj i uruchom Nelderim.exe. Zbudowane z $env:GITHUB_SHA."
+          if ($tag -eq 'najnowsza' -or $env:GITHUB_REF_TYPE -eq 'tag') {
+            gh release create $tag Nelderim-windows.zip --target $env:GITHUB_SHA --title "Nelderim Lab ($tag)" --notes $notes --latest
+          } else {
+            gh release create $tag Nelderim-windows.zip --target $env:GITHUB_SHA --title "Nelderim Lab – wersja testowa ($env:GITHUB_REF_NAME)" --notes $notes --prerelease
+          }

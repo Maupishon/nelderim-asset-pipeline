@@ -30,6 +30,23 @@ T = dict(THEMES["light"])
 REG = {"canvas": [], "menu": [], "tk": []}       # widgets that ttk styles cannot reach: recolored on theme change
 
 
+NOWIN = {"creationflags": 0x08000000} if os.name == "nt" else {}      # no flashing console windows from the exe
+
+
+def norm_item(text: str):
+    """ItemID typed by a human -> '0x2683' (hex with 0x, or a plain decimal number). None when it is neither."""
+    t = text.strip()
+    if re.fullmatch(r"0[xX][0-9a-fA-F]+", t):
+        return "0x" + t[2:].upper()
+    if re.fullmatch(r"\d+", t):
+        return hex(int(t))
+    return None
+
+
+BAD_ITEM = ("Numer przedmiotu wygląda nieprawidłowo.\n\nWpisz go tak: 0x2683 (zero, mały iks, potem cyfry/litery A–F) "
+            "albo zwykłą liczbą (np. 9859). Skopiuj go z UOFiddlera (Items → ID).")
+
+
 def sty(level):
     return {"muted": "Muted.TLabel", "ok": "Ok.TLabel", "bad": "Bad.TLabel", "acc": "Acc.TLabel"}.get(level, "Status.TLabel")
 
@@ -51,28 +68,12 @@ def pick_font(root, names, default):
             return have[n.lower()]
     return default
 
-# known error text -> plain-language advice
-HINTS = [
-    (r"Empty design", "Któraś komórka arkusza wzoru jest pusta (albo obrazek jest w całości przezroczysty). "
-                      "Każdy przedmiot musi leżeć na środku swojej komórki."),
-    (r"unrecognized arguments: --config", "Masz starą wersję build.py w toolkicie. Skopiuj paczkę Levy'ego v2 "
-                                          "(SpriteMotion_skrypty_Nelderim_1.zip) do folderu toolkitu, z nadpisaniem."),
-    (r"No module named '?(numpy|PIL|scipy)", "Brakuje bibliotek w środowisku toolkitu. W PowerShellu, w folderze toolkitu: "
-                                             ".venv\\Scripts\\activate  a potem  python -m pip install numpy pillow scipy"),
-    (r"FileNotFoundError.*(anim\.idx|anim\.mul|tiledata|Gumpidx|Gumpart|Equipconv|Bodyconv|Body\.def)",
-     "Nie znaleziono pliku klienta UO. W Ustawieniach wskaż folder, w którym leżą pliki .mul i .def klienta."),
-    (r"region_ids\.png", "Brakuje masek regionów ciała w toolkicie (workspace/ultima-online/region-audit/...). "
-                         "Rozpakuj kompletny toolkit SpriteMotion."),
-    (r"Only human/equipment animation IDs", "To nie jest animacja ubrania (ID poniżej 400). Wybierz inny przedmiot."),
-    (r"requires a DEF remapping", "Ta animacja jest przekierowana w Body.def. Ten program jej nie obsługuje."),
-    (r"Truncated animation record|Invalid frame|Animation run outside", "Dane animacji w kliencie są nietypowe lub uszkodzone."),
-    (r"PermissionError|Permission denied", "Brak uprawnień do zapisu. Zamknij programy używające pliku albo wybierz inny folder."),
-    (r"Original gump \d+ not found", "Tego gumpu nie ma w Gumpidx/Gumpart.mul (może leży w pliku .uop)."),
-]
+from nelderim_hub import HINTS  # noqa: E402  (shared with the web app)
 
 PL = {"client": "Folder klienta UO (kopia!)", "toolkit": "Folder toolkitu SpriteMotion",
       "pipeline": "Folder tego programu (pipeline)", "output": "Folder na wyniki dodawania",
-      "vdviewer": "Plik vd-viewer.html", "fiddler": "Folder UOFiddlera", "serv": "Folder ServUO", "vdtool": "Folder vdtool"}
+      "vdviewer": "Plik vd-viewer.html", "fiddler": "Folder UOFiddlera", "serv": "Folder ServUO", "vdtool": "Folder vdtool",
+      "bodyglb": "Plik UO_Body_0x190.glb"}
 
 HELP = """SŁOWNICZEK
 
@@ -211,6 +212,7 @@ class App:
         self.pages: dict[str, tuple] = {}
         self.current = None
         self.current_key = "start"
+        self.offer_deps = False
         self.navbtns: dict[str, ttk.Button] = {}
         pref = self.cfg.get("theme", "auto")
         self.theme = system_theme() if pref == "auto" else pref
@@ -332,7 +334,8 @@ class App:
         self.content.columnconfigure(0, weight=1)
         self.content.rowconfigure(0, weight=1)
         for key, label in [("start", "🏠  Start"), ("cloth", "👕  Ubranie / szata"), ("weapon", "⚔  Broń"),
-                           ("gump", "🖼  Obrazek na lalce (gump)"), ("pack", "📦  Spakuj do .vd"),
+                           ("gump", "🖼  Obrazek na lalce (gump)"), ("m3d", "🧊  Model 3D"),
+                           ("pack", "📦  Spakuj do .vd"),
                            ("tools", "🔎  Podgląd i narzędzia"), ("set", "🧩  Zestaw z arkusza"),
                            ("patch", "🛠  Dodawanie do klienta"), ("settings", "⚙  Ustawienia"), ("help", "❓  Pomoc")]:
             b = ttk.Button(nav, text=label, style="Nav.TButton", width=26, command=lambda k=key: self.show(k))
@@ -418,7 +421,7 @@ class App:
     # ------------------------------------------------------------ helpers
     def ready(self, keys=None) -> bool:
         H = self.H
-        bad = [k for k in (keys or H.missing(self.cfg)) if not H.path_ok(k, self.cfg.get(k))]
+        bad = [k for k in (keys if keys is not None else H.missing(self.cfg)) if not H.path_ok(k, self.cfg.get(k))]
         if bad:
             messagebox.showwarning("Brakuje ustawień", "Najpierw uzupełnij w Ustawieniach:\n\n" +
                                    "\n".join("• " + PL[k] for k in bad))
@@ -430,6 +433,8 @@ class App:
         for pat, msg in HINTS:
             if re.search(pat, line) and msg not in shown:
                 shown.add(msg)
+                if "numpy" in pat:
+                    self.offer_deps = True
                 self.say("💡 PODPOWIEDŹ: " + msg)
                 self.set_status("Coś poszło nie tak – zobacz podpowiedź w szczegółach.", BADC)
                 self.ui(lambda: self._toggle_log(True))
@@ -440,7 +445,7 @@ class App:
         self.say("$ " + " ".join(f'"{a}"' if " " in a else a for a in cmd["argv"]))
         try:
             p = subprocess.Popen(cmd["argv"], cwd=cmd["cwd"], env=cmd["env"], stdout=subprocess.PIPE,
-                                 stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+                                 stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", **NOWIN)
         except OSError as e:
             self.say(f"[BŁĄD] {e}")
             capture.append(str(e))
@@ -494,6 +499,9 @@ class App:
                     self._toggle_log(True)
                     if on_fail:
                         on_fail(out)
+                    if self.offer_deps:
+                        self.offer_deps = False
+                        self.offer_install()
             self.ui(done)
 
         threading.Thread(target=work, daemon=True).start()
@@ -576,15 +584,56 @@ class App:
         else:
             messagebox.showinfo("Folder", f"Nie ma jeszcze: {p}")
 
+    # ---- python libraries
+    def deps_ok(self) -> bool:
+        H = self.H
+        try:
+            c = H.cmd_deps_check(self.cfg)
+            r = subprocess.run(c["argv"], cwd=c["cwd"], env=c["env"], capture_output=True, text=True, timeout=60,
+                               **NOWIN)
+            return "DEPS_OK" in r.stdout
+        except (OSError, subprocess.SubprocessError):
+            return False
+
+    def offer_install(self):
+        if messagebox.askyesno("Brakuje bibliotek", "Do pracy potrzebne są biblioteki Pythona (numpy, Pillow, scipy), "
+                                                    "a ten komputer ich nie ma.\n\nZainstalować je teraz? "
+                                                    "(wymaga internetu, trwa chwilę)"):
+            self.install_deps()
+
+    def install_deps(self):
+        H = self.H
+        self.run([lambda: H.cmd_pip_install(self.cfg)], "Instalacja bibliotek",
+                 on_ok=lambda o: (self.set_status("✓ Biblioteki zainstalowane. Możesz ponowić poprzednią akcję.", OKC),
+                                  self.refresh_start()),
+                 on_fail=lambda o: messagebox.showwarning("Instalacja", "Nie udało się zainstalować. Zobacz Szczegóły "
+                                                          "(brak internetu? brak uprawnień?)."),
+                 keys=["toolkit"])
+
+    def check_deps_async(self, label, button):
+        def work():
+            ok = self.deps_ok()
+
+            def upd():
+                if not label.winfo_exists():
+                    return
+                label.configure(text=("✓ " if ok else "✗ ") + "Biblioteki Pythona (numpy, Pillow)",
+                                style=sty(OKC if ok else BADC))
+                if not ok:
+                    button.pack(side="left")
+            self.ui(upd)
+        threading.Thread(target=work, daemon=True).start()
+
     # ---- shared step logic
     def lookup_step(self, step, graphic_var, on_anim=None):
         H = self.H
 
         def go():
-            g = graphic_var.get().strip()
+            g = norm_item(graphic_var.get())
             if not g:
-                messagebox.showinfo("Numer przedmiotu", "Wpisz ItemID, np. 0x2684.")
+                messagebox.showwarning("Numer przedmiotu", BAD_ITEM)
                 return
+            graphic_var.set(g)
             step.info("Sprawdzam…")
 
             def ok(lines):
@@ -664,7 +713,7 @@ class App:
         self.stop_preview()
         c = H.cmd_serve(self.cfg, lab)
         self.server = subprocess.Popen(c["argv"], cwd=c["cwd"], env=c["env"], stdout=subprocess.DEVNULL,
-                                       stderr=subprocess.DEVNULL)
+                                       stderr=subprocess.DEVNULL, **NOWIN)
         self.set_status(f"Podgląd działa: http://127.0.0.1:{H.PORT}", OKC)
         self.root.after(700, lambda: webbrowser.open(f"http://127.0.0.1:{H.PORT}"))
 
@@ -733,6 +782,8 @@ class App:
                   "Masz obrazek szaty, koszuli, spodni, butów… Program dopasuje go do animacji chodzenia, walki itd.", "cloth"),
                  ("⚔  Zmienić wygląd broni",
                   "Miecz, laska, włócznia. Wystarczy obrazek broni ułożony poziomo.", "weapon"),
+                 ("🧊  Przerobić model 3D na animację",
+                  "Masz gotowy model 3D (.glb lub .obj). Zostanie dopasowany do ciała UO i wyrenderowany do .vd. Bez Blendera.", "m3d"),
                  ("🖼  Zrobić obrazek broni na lalce postaci",
                   "Ten, który widać w oknie Paperdoll (gump). Męski i damski.", "gump"),
                  ("📦  Spakować gotową pracę do pliku .vd",
@@ -772,11 +823,17 @@ class App:
                       width=48).pack(side="left")
             if not ok:
                 ttk.Button(r, text="Ustaw", command=lambda: self.show("settings")).pack(side="left")
+        if H.path_ok("toolkit", self.cfg.get("toolkit")):
+            r = ttk.Frame(self.pre)
+            r.pack(fill="x")
+            lab = ttk.Label(r, text="… sprawdzam biblioteki Pythona", style=sty(MUTED), width=48)
+            lab.pack(side="left")
+            self.check_deps_async(lab, ttk.Button(r, text="Zainstaluj", command=self.install_deps))
         if H.path_ok("toolkit", self.cfg.get("toolkit")) and not H.toolkit_has_axisfit(self.cfg):
             ttk.Label(self.pre, text="⚠ Toolkit ma starą wersję skryptów (bez obsługi broni). Skopiuj paczkę Levy'ego v2.",
                       style=sty(BADC), wraplength=700).pack(anchor="w")
         if allok:
-            ttk.Label(self.pre, text="Wszystko gotowe. Wybierz zadanie poniżej. 👇", style=sty(OKC)).pack(anchor="w")
+            ttk.Label(self.pre, text="Foldery są ustawione. Wybierz zadanie poniżej. 👇", style=sty(OKC)).pack(anchor="w")
 
     def page_settings(self, p):
         H = self.H
@@ -792,7 +849,8 @@ class App:
             "vdviewer": "Plik vd-viewer.html – przeglądarka plików .vd (opcjonalnie).",
             "fiddler": "Folder programu UOFiddler (opcjonalnie, do szybkiego uruchamiania).",
             "serv": "Folder serwera ServUO z skryptami C# (opcjonalnie).",
-            "vdtool": "Osobny folder vdtool (opcjonalnie; inaczej używam narzędzi z toolkitu)."}
+            "vdtool": "Osobny folder vdtool (opcjonalnie; inaczej używam narzędzi z toolkitu).",
+            "bodyglb": "Plik UO_Body_0x190.glb: model 3D ciała UO (z projektu UO_Model3D, folder model). Potrzebny tylko do ścieżki z modelem 3D. Blender NIE jest potrzebny."}
         box = ttk.Frame(p, padding=10)
         box.pack(fill="x")
         for k, (label, kind, _, req) in H.PATHS.items():
@@ -805,6 +863,8 @@ class App:
         self.button(b, "💾 Zapisz", self._save_paths, "Zapisuje ustawienia.", big=True)
         self.button(b, "🔍 Wykryj automatycznie", self._autodetect,
                     "Szuka folderów obok tego programu i w katalogu domowym.")
+        self.button(b, "Zainstaluj biblioteki Pythona", lambda: self.ready(["toolkit"]) and self.install_deps(),
+                    "Instaluje numpy, Pillow i scipy (potrzebne skryptom toolkitu), jeśli ich brakuje.")
         self.button(b, "Pokaż, gdzie zapisano ustawienia",
                     lambda: messagebox.showinfo("Plik ustawień", str(H.CONFIG_FILE)))
         self.st_note = ttk.Label(p, text="", style=sty(MUTED), wraplength=700)
@@ -891,6 +951,11 @@ class App:
             if not all(v[k].get().strip() for k in ("graphic", "image", "name")):
                 messagebox.showinfo("Brakuje danych", "Uzupełnij kroki 1–3 (ItemID, obrazek, nazwa pracy).")
                 return False
+            g = norm_item(v["graphic"].get())
+            if not g:
+                messagebox.showwarning("Numer przedmiotu", BAD_ITEM)
+                return False
+            v["graphic"].set(g)
             return True
 
         def build(actions):
@@ -974,6 +1039,11 @@ class App:
             if not all(v[k].get().strip() for k in ("graphic", "image", "name")):
                 messagebox.showinfo("Brakuje danych", "Uzupełnij kroki 1–3 (ItemID, obrazek, nazwa pracy).")
                 return False
+            g = norm_item(v["graphic"].get())
+            if not g:
+                messagebox.showwarning("Numer przedmiotu", BAD_ITEM)
+                return False
+            v["graphic"].set(g)
             if not H.path_ok("toolkit", self.cfg.get("toolkit")):
                 self.ready(["toolkit"])
                 return False
@@ -1064,6 +1134,10 @@ class App:
             if not all(v[k].get().strip() for k in ("anim", "image", "name")):
                 messagebox.showinfo("Brakuje danych", "Uzupełnij numer animacji (krok 1), obrazek (2) i nazwę (3).")
                 return
+            if not v["anim"].get().strip().isdigit():
+                messagebox.showwarning("Numer animacji", "Numer animacji to zwykła liczba, np. 617. "
+                                       "Kliknij „Sprawdź przedmiot”, a wpisze się sam.")
+                return
             if not H.path_ok("toolkit", self.cfg.get("toolkit")):
                 self.ready(["toolkit"])
                 return
@@ -1096,6 +1170,184 @@ class App:
         ttk.Label(s4.body, text="").pack()
         ttk.Label(p, text="Import: UOFiddler → Gumps → Replace (lub Insert, jeśli gumpu nie ma).", style=sty(MUTED)
                   ).pack(anchor="w", padx=14, pady=4)
+
+    # ---- 3D model (without Blender)
+    def page_m3d(self, p):
+        H = self.H
+        self.head(p, "🧊 Model 3D", "Masz model 3D przedmiotu (.glb lub .obj)? Program wstawi go na model ciała UO, przypnie do szkieletu i "
+                                    "wyrenderuje klatki wszystkich animacji do pliku .vd. Działa bez Blendera, w samym Pythonie. "
+                                    "Dla ubrań, zbroi, hełmów, włosów, szat, spódnic, peleryn, broni i tarcz.")
+        v = {k: tk.StringVar() for k in ("kind", "file", "name", "skip", "turn", "scale", "sat", "actions", "roll")}
+        v["kind"].set(H.KINDS3D[0][0])
+        v["turn"].set("0")
+        v["sat"].set("1.0")
+        v["actions"].set("0 4 9 16")
+        names = [k[0] for k in H.KINDS3D]
+        s0 = Step(p, 1, "Czy wszystko jest gotowe?", "Potrzebny jest plik UO_Body_0x190.glb (ciało 3D, z projektu UO_Model3D, folder „model”) oraz "
+                                                      "biblioteki Pythona numpy i Pillow.")
+
+        def recheck():
+            probs = H.model3d_problems(self.cfg)
+            if probs:
+                s0.bad("\n".join(probs))
+                return
+            s0.info("Sprawdzam biblioteki Pythona…")
+
+            def work():
+                try:
+                    c = H.cmd_deps_check_sys(self.cfg)
+                    r = subprocess.run(c["argv"], cwd=c["cwd"], env=c["env"], capture_output=True, text=True, timeout=60, **NOWIN)
+                    ok = "DEPS_OK" in r.stdout
+                except (OSError, subprocess.SubprocessError):
+                    ok = False
+                self.ui(lambda: s0.ok("Wszystko gotowe. Kontynuuj.") if ok else
+                        s0.bad("Brakuje bibliotek Pythona (numpy, Pillow). Kliknij „Zainstaluj biblioteki”."))
+            threading.Thread(target=work, daemon=True).start()
+
+        def install():
+            self.run([lambda: H.cmd_pip_install_sys(self.cfg)], "Instalacja bibliotek", on_ok=lambda o: recheck(), keys=[])
+
+        self.button(s0.body, "Sprawdź ponownie", recheck)
+        self.button(s0.body, "Zainstaluj biblioteki", install, "Instaluje numpy, Pillow i scipy (wymaga internetu).")
+        self.button(s0.body, "Otwórz Ustawienia", lambda: self.show("settings"))
+        extras_lbl = ttk.Label(s0.body, text="", style=sty(MUTED), wraplength=700, justify="left")
+        extras_lbl.pack(anchor="w")
+
+        def show_extras():
+            ex = H.model3d_extras(self.cfg)
+            txt = ["ciało z oryginału (dokładna sylwetka): " + ("jest" if ex["body_vd"] else "brak"),
+                   "koń (akcje konne): " + ("jest" if ex["horse_vd"] else "brak"),
+                   "dane broni: " + ("są" if ex["motion"] else "brak"), "dane tarczy: " + ("są" if ex["shield"] else "brak")]
+            extras_lbl.configure(text="Znalezione obok modelu ciała (folder pipeline): " + "; ".join(txt))
+
+        s1 = Step(p, 2, "Co to za przedmiot?", "Rodzaj decyduje o rozmiarze, miejscu na ciele i sposobie przypięcia do kości (ubranie wygina się razem z ciałem).")
+        f = ttk.Frame(s1.body)
+        f.pack(fill="x", pady=2)
+        ttk.Label(f, text="Rodzaj przedmiotu", width=30).pack(side="left")
+        cb = ttk.Combobox(f, textvariable=v["kind"], state="readonly", width=44, values=names)
+        cb.pack(side="left")
+        Tip(cb, "Od rodzaju zależy rozmiar i sposób dopasowania modelu do ciała.")
+        note = ttk.Label(s1.body, text="", style=sty(MUTED), wraplength=700, justify="left")
+        note.pack(anchor="w")
+
+        def kind_info(*_a):
+            k = next((x for x in H.KINDS3D if x[0] == v["kind"].get()), H.KINDS3D[0])
+            note.configure(text=k[2])
+
+        cb.bind("<<ComboboxSelected>>", kind_info)
+        kind_info()
+        s2 = Step(p, 3, "Wskaż model 3D", "Plik .glb (najlepiej), .fbx (binarny) albo .obj. Sprawdź licencję modelu. Własny szkielet modelu zostanie pominięty "
+                                          "(ciało UO daje wagi). Broń i tarcza: ustaw model pionowo (czubek / góra w kierunku +Y).")
+        self.row(s2.body, "Plik modelu 3D", v["file"], "Do ok. 20 tys. wierzchołków (więcej = wolniej).", kind="file",
+                 ftypes=[("Modele 3D", "*.glb *.gltf *.fbx *.obj"), ("Wszystkie", "*.*")])
+        self.row(s2.body, "Nazwa pracy", v["name"], "Np. nekro-szata. Wynik trafi do folderu o tej nazwie.")
+        adv = self.advanced(s2.body)
+        self.row(adv, "Pomiń elementy (nazwy, po przecinku)", v["skip"], "Plik często zawiera coś jeszcze: oczy, ciało modelu, elementy pomocnicze. "
+                                                                         "Wpisz fragmenty ich nazw, np. eyes,body,collision.")
+        self.row(adv, "Obrót (stopnie)", v["turn"], "Wpisz 180, jeśli przedmiot jest zwrócony tyłem do przodu.")
+        self.row(adv, "Skala (0 = automatycznie)", v["scale"], "Mnożnik rozmiaru. 0 = z wysokości rodzaju przedmiotu (tak jak w oryginalnych animacjach); "
+                                                              "dla broni z typowej długości jej klasy, dla tarczy ok. 55 cm.")
+        self.row(adv, "Obrót broni wokół trzonu (stopnie)", v["roll"], "Tylko broń: obrót głowicy / ostrza wokół własnej osi. Puste = jak w oryginalnej broni klasy.")
+        exact = tk.BooleanVar(value=True)
+        horse = tk.BooleanVar(value=True)
+        cloth = tk.BooleanVar(value=True)
+        for var, txt, hlp in ((exact, "Dokładna sylwetka ciała z oryginału (EXACT_BODY)", "Ciało zasłania przedmiot dokładnie wzdłuż oryginalnych klatek ciała. Potrzebuje pliku body400.vd w folderze pipeline projektu UO_Model3D."),
+                              (horse, "Koń w akcjach konnych (23–29)", "Dodaje akcje konne: koń zasłania część przedmiotu. Potrzebuje pliku horse200.vd w folderze pipeline projektu UO_Model3D."),
+                              (cloth, "Symulacja tkaniny (szata, spódnica, peleryna)", "Dół szaty, spódnicy lub peleryny faluje i zderza się z ciałem. Wolniej (kilka–kilkanaście sekund na akcję).")):
+            c = ttk.Checkbutton(adv, text=txt, variable=var)
+            c.pack(anchor="w")
+            Tip(c, hlp)
+        self.row(adv, "Nasycenie kolorów (0–1)", v["sat"], "1 = kolory modelu, 0 = tylko szarości (przedmiot farbowany w grze).")
+        self.row(adv, "Akcje do wyrenderowania", v["actions"], "Numery ruchów, np. 0 4 9 16. Puste = wszystkie 35 poza konnymi (23–29).")
+        s3 = Step(p, 4, "Zbuduj", "Najpierw kilka akcji na próbę (chodzenie, stanie, cięcie, czar). Postęp widać w „Szczegółach”. Akcje konne (23–29) "
+                                  "są w pełnej wersji tylko wtedy, gdy znaleziono plik konia (patrz krok 1).")
+        s4 = Step(p, 5, "Obejrzyj i zapisz", "Wynik to plik .vd. Obejrzyj go w przeglądarce .vd razem z ciałem (anim_0400.vd), potem zaimportuj w UOFiddlerze na KOPII klienta.")
+        res = {"vd": None}
+
+        def out_dir():
+            return H.workroot(self.cfg) / H.slugify(v["name"].get()) / "model3d"
+
+        def build(acts_text):
+            probs = H.model3d_problems(self.cfg)
+            if probs:
+                messagebox.showwarning("Brakuje ustawień", "\n".join(probs))
+                recheck()
+                return
+            if not all(v[k].get().strip() for k in ("file", "name")):
+                messagebox.showinfo("Brakuje danych", "Wskaż plik modelu (krok 3) i podaj nazwę pracy.")
+                return
+            if not Path(v["file"].get().strip()).is_file():
+                messagebox.showwarning("Model", "Nie ma takiego pliku modelu.")
+                return
+            k = next((x for x in H.KINDS3D if x[0] == v["kind"].get()), H.KINDS3D[0])
+            try:
+                acts = [int(x) for x in acts_text.split()]
+                if any(not 0 <= a < 35 for a in acts):
+                    raise ValueError("akcje: 0–34")
+                scale = float(v["scale"].get().replace(",", ".") or 0)
+                turn = float(v["turn"].get().replace(",", ".") or 0)
+                sat = float(v["sat"].get().replace(",", ".") or 1)
+            except ValueError as e:
+                messagebox.showwarning("Złe dane", f"Sprawdź liczby w polach ({e}).")
+                return
+            ex = H.model3d_extras(self.cfg)
+            if k[1] in H.HELD_KINDS and k[1] != "shield" and not ex["motion"]:
+                messagebox.showwarning("Broń", "Brak pliku pipeline/weapon_motion.json obok modelu ciała (projekt UO_Model3D). Bez niego nie umieszczę broni w dłoni.")
+                return
+            if k[1] == "shield" and not ex["shield"]:
+                messagebox.showwarning("Tarcza", "Brak pliku pipeline/uo_shield_keys.py obok modelu ciała (projekt UO_Model3D).")
+                return
+            roll = v["roll"].get().strip().replace(",", ".")
+            if roll:
+                try:
+                    float(roll)
+                except ValueError:
+                    messagebox.showwarning("Złe dane", "Obrót broni to liczba stopni.")
+                    return
+            spec = dict(item=v["file"].get().strip(), kind=k[1], out=str(out_dir()), name=H.slugify(v["name"].get()), actions=acts,
+                        turn=turn, scale=scale, saturation=sat, skip=[x.strip() for x in v["skip"].get().split(",") if x.strip()],
+                        body_vd=ex["body_vd"] if exact.get() else None, horse_vd=ex["horse_vd"] if horse.get() else None,
+                        cloth=cloth.get() and k[1] in ("robe", "skirt", "cloak"), roll=roll or None)
+            out = out_dir()
+
+            def ok(lines):
+                m = [x for x in lines if "RESULT_VD" in x]
+                vd = Path(m[-1].split("RESULT_VD", 1)[1].strip()) if m else out / (spec["name"] + ".vd")
+                if vd.is_file():
+                    res["vd"] = vd
+                    s3.ok(f"Gotowe. Plik .vd: {vd}")
+                else:
+                    s3.bad("Nie powstał plik .vd. Zobacz Szczegóły.")
+
+            self.run([lambda: H.cmd_uo3d(self.cfg, spec)], "Render modelu 3D", on_ok=ok,
+                     on_fail=lambda o: s3.bad("Nie udało się (zobacz podpowiedź i Szczegóły)."), keys=[])
+
+        self.button(s3.body, "▶ Zbuduj (kilka akcji na próbę)", lambda: build(v["actions"].get().strip() or "0 4 9 16"), big=True)
+        self.button(s3.body, "Zbuduj wszystkie akcje", lambda: build(" ".join(str(i) for i in range(35) if horse.get() and H.model3d_extras(self.cfg)["horse_vd"]
+                                                                              or not 23 <= i <= 29)),
+                    "Pełny render (kilka minut). Akcje konne tylko z koniem.")
+        self.button(s3.body, "Otwórz folder wyniku", lambda: self.open_folder(out_dir()))
+
+        def to_toolkit():
+            vd = res["vd"]
+            if not vd or not vd.is_file():
+                messagebox.showinfo("Plik .vd", "Najpierw zbuduj (krok 4).")
+                return
+            if not self.ready(["toolkit"]):
+                return
+            dst = H.workdir(self.cfg) / f"nowy3d_{H.slugify(v['name'].get())}.vd"
+            dst, b, note = H.safe_copy(Path(vd), dst)
+            s4.ok(f"Skopiowano do folderu roboczego toolkitu:\n{dst}" + (f"\n(kopia poprzedniego: {b})" if b else "") + (f"\n{note}" if note else ""))
+            self.run([lambda: H.cmd_vd_info(self.cfg, str(dst))], "Sprawdzanie pliku .vd", keys=["toolkit"])
+
+        self.button(s4.body, "Sprawdź plik .vd", to_toolkit, "Kopiuje .vd do folderu roboczego toolkitu (z kopią starego) i pokazuje typ i liczbę klatek.", big=True)
+        self.button(s4.body, "Przeglądarka plików .vd", lambda: self.cfg.get("vdviewer") and Path(self.cfg["vdviewer"]).is_file()
+                    and webbrowser.open(Path(self.cfg["vdviewer"]).as_uri()) or messagebox.showinfo(
+                        "Przeglądarka .vd", "Wskaż plik vd-viewer.html w Ustawieniach."))
+        ttk.Label(p, text="Import: UOFiddler → Animations → Animation Edit → ID animacji przedmiotu → Import from VD → Save. Typ pliku = typ celu (ludzie: typ 2).",
+                  style=sty(MUTED), wraplength=700).pack(anchor="w", padx=14, pady=4)
+        show_extras()
+        recheck()
 
     # ---- pack (any lab)
     def page_pack(self, p):
