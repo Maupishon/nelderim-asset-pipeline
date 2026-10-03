@@ -146,6 +146,16 @@ class Item:
             return
         if kind not in EXTENTS:
             raise ValueError(f"Rodzaj '{kind}' nie jest obsługiwany.")
+        if m.extras.get("uo3d_rest"):                       # made from a .vd: already on the body in the rest pose
+            P, N = apply_adjust(P, m.nrm.copy(), self.adjust)
+            self.scale = 1.0
+            self.pos = P; self.nrm = N
+            self.tri = m.tri
+            if kind in FIT_KINDS and self.adjust.get("fit", True):
+                self.fit(GAP_BY_KIND.get(kind, 0.015))
+            self.bind_weights()
+            self.prepare_materials(saturation, metal)
+            return
         lo, hi = EXTENTS[kind]
         # turn about the vertical axis (glTF Y up)
         th = math.radians(turn); c, s = math.cos(th), math.sin(th)
@@ -384,6 +394,9 @@ def shade(item, tid, W, H, xy, nrm_view, direction=None):
             u = np.mod(uv[sel, 0], 1.0); v = np.mod(uv[sel, 1], 1.0)
             cc = cc * mat.tex[np.minimum((v*th).astype(int), th-1), np.minimum((u*tw).astype(int), tw-1)]
         col[sel] = cc
+    if m.vcol is not None:
+        vc = w0[:, None]*m.vcol[tri[:, 0]] + w1[:, None]*m.vcol[tri[:, 1]] + w2[:, None]*m.vcol[tri[:, 2]]
+        col = col * vc
     rgb = col[:, :3]
     if item.saturation != 1.0:
         grey = rgb.mean(1, keepdims=True)

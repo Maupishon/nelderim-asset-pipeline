@@ -18,6 +18,8 @@ class Mesh:
         self.pos = np.zeros((0, 3)); self.nrm = np.zeros((0, 3)); self.uv = np.zeros((0, 2))
         self.tri = np.zeros((0, 3), int); self.mat_of_tri = np.zeros(0, int); self.mats = []
         self.names = []
+        self.vcol = None                # (N,4) vertex colours 0..1 (glTF COLOR_0) or None
+        self.extras = {}                # glTF asset.extras (uo3d_rest = already in the body's rest pose, from a .vd)
 
 
 def _acc(js, buf, i):
@@ -102,7 +104,7 @@ def load_gltf(path, skip=()):
     mats.append(Material())                         # default material
     default = len(mats)-1
     out = Mesh(); out.mats = mats
-    P, N, U, T, MT = [], [], [], [], []
+    P, N, U, T, MT, VC = [], [], [], [], [], []
     skipl = [s.lower() for s in skip if s]
     scene = js["scenes"][js.get("scene", 0)]
 
@@ -123,6 +125,16 @@ def load_gltf(path, skip=()):
                 else:
                     nr = np.zeros_like(pos)
                 uv = _acc(js, bufs, a["TEXCOORD_0"]).astype(float) if "TEXCOORD_0" in a else np.zeros((len(pos), 2))
+                if "COLOR_0" in a:
+                    acc_i = js["accessors"][a["COLOR_0"]]
+                    vc = _acc(js, bufs, a["COLOR_0"]).astype(float)
+                    if acc_i["componentType"] in (5121, 5123):
+                        vc /= 255.0 if acc_i["componentType"] == 5121 else 65535.0
+                    if vc.shape[1] == 3:
+                        vc = np.c_[vc, np.ones(len(vc))]
+                else:
+                    vc = np.ones((len(pos), 4))
+                VC.append(vc)
                 posw = pos @ W[:3, :3].T + W[:3, 3]
                 nrw = nr @ np.linalg.inv(W[:3, :3]).T
                 base = sum(len(x) for x in P)
@@ -138,6 +150,9 @@ def load_gltf(path, skip=()):
         raise ValueError("Model nie zawiera żadnej siatki (albo wszystkie elementy pominięto).")
     out.pos = np.concatenate(P); out.nrm = np.concatenate(N); out.uv = np.concatenate(U)
     out.tri = np.concatenate(T); out.mat_of_tri = np.concatenate(MT)
+    vc = np.concatenate(VC)
+    out.vcol = vc if (vc[:, :3] < 0.999).any() else None
+    out.extras = (js.get("asset") or {}).get("extras") or {}
     return finish(out)
 
 
@@ -344,7 +359,7 @@ def load_fbx(path, skip=()):
         return M
 
     out = Mesh(); out.mats = []
-    P, N, U, T, MT = [], [], [], [], []
+    P, N, U, T, MT, VC = [], [], [], [], [], []
     skipl = [s.lower() for s in skip if s]
     matidx = {}
     for gid, g in geoms.items():

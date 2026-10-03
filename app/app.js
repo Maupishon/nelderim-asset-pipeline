@@ -349,7 +349,8 @@ BUILD.vd = () => {
   const body = el("input", { type: "checkbox", checked: true }); const play = el("button", { text: "Play" });
   ctl.append(el("span", { class: "muted", text: "Akcja" }), act, fr, fl, play, el("label", { class: "check" }, body, "ciało pod spodem"),
     el("button", { text: "Kopiuj do toolkitu", "data-tip": "Kopiuje .vd do folderu roboczego toolkitu (z kopią starego) i sprawdza go.", onclick: () => F.path.get() && runTask("copy_to_toolkit", { vd: F.path.get() }) }),
-    el("button", { text: "Otwórz folder", onclick: () => F.path.get() && api.post("/api/open", { path: F.path.get(), folder: true }) }));
+    el("button", { text: "Otwórz folder", onclick: () => F.path.get() && api.post("/api/open", { path: F.path.get(), folder: true }) }),
+    el("button", { text: "🧊 Przymierz w 3D", "data-tip": "Odtwarza z klatek „stój” tego .vd model 3D (.glb) założony na ciało i otwiera go w zakładce Model 3D (Fit Lab).", onclick: () => { const v = F.path.get(); if (!v) return toast("Najpierw wskaż plik .vd.", "bad"); show("fit"); FIT.fromVd(v); } }));
   const grid = el("div", { id: "vdgrid" }); card.append(grid);
   let info = null, timer = null;
   const draw = () => {
@@ -516,7 +517,8 @@ const FIT = {
     file.onchange = () => { P.item = file.value.trim(); this.change(); };
     side.append(el("div", { class: "kv" }, el("span", { class: "muted", text: "Plik" }), el("div", { style: "display:flex;gap:4px" }, file,
       el("button", { class: "small", text: "…", "data-tip": "Wybierz plik modelu", onclick: async () => { const p = await pickPath("file", "Model 3D", ".glb,.gltf,.fbx,.obj"); if (p) { file.value = p; P.item = p; if (!P.name) { P.name = slug(p.split(/[\\/]/).pop().replace(/\.[^.]+$/, "")); name.value = P.name; } this.change(); } } }))));
-    side.append(el("div", { class: "btns" }, el("button", { class: "primary", text: "Wczytaj / odśwież", onclick: () => this.load(true) })));
+    side.append(el("div", { class: "btns" }, el("button", { class: "primary", text: "Wczytaj / odśwież", onclick: () => this.load(true) }),
+      el("button", { text: "🎞 Z pliku .vd…", "data-tip": "Nie masz modelu 3D? Wskaż .vd oryginalnego przedmiotu (eksport UOFiddlera albo anim_XXXX.vd z mul2vd). Program odtworzy z klatek „stój” bryłę 3D z kolorami, już założoną na ciało, i wczyta ją tutaj. Kształt jest przybliżony (z sylwetek), dobry do przymiarki i poprawek.", onclick: async () => { const p = await pickPath("file", "Plik .vd przedmiotu", ".vd"); if (p) this.fromVd(p); } })));
     const info = el("div", { class: "hint", id: "loadInfo" }); side.append(info);
     sec("Slot fit");
     const slider = (label, get, set, min, max, stepv, unit, tip) => {
@@ -622,6 +624,17 @@ const FIT = {
       const poke = r.headers.get("X-Poke"); const url = URL.createObjectURL(await r.blob()); const img = fig.querySelector("img"); const old = img.src; img.src = url; if (old.startsWith("blob:")) URL.revokeObjectURL(old);
       fig.querySelector("figcaption").innerHTML = `kierunek ${d} · <span class="${+poke ? "warn" : "ok"}">${poke} poke px</span>`;
     }));
+  },
+  async fromVd(vd) {
+    const P = this.params;
+    try {
+      const j = await runTask("vd2glb", { vd, kind: P.kind, name: P.name }, "Model 3D z pliku .vd");
+      if (j.status === "ok" && j.result.glb) {
+        P.item = j.result.glb; if (!P.name) P.name = j.result.name;
+        this.persist(true); this.panel(); await this.load(true);
+        toast("Gotowe: model z " + vd.split(/[\\/]/).pop() + ". Dobierz rodzaj i dopasuj suwakami.", "ok");
+      }
+    } catch (e) {}
   },
   async build(actions) {
     const P = this.params; if (!P.item || !P.name) return toast("Podaj plik modelu i nazwę pracy.", "bad");

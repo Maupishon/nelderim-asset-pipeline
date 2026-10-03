@@ -45,6 +45,7 @@ Nic nie musi leżeć w konkretnym miejscu ani na konkretnym dysku. Przy pierwszy
 2. **Ustawienia → Wykryj automatycznie** (albo **Wybierz…** przy każdym polu). Zielona kropka = OK.
 3. **Start** → wybierz zadanie i idź od kroku 1. Znak **?** i najechanie myszą pokazują podpowiedzi.
    - **🧊 Model 3D (Fit Lab)**: wczytaj `.glb` / `.fbx` (binarny) / `.obj`, dopasuj suwakami (przesunięcie, obrót, skala), obejrzyj 3D i podglądy kamerą UO na żywo (z liczbą „poke px" – gdzie ciało przebija przez przedmiot), **Zmierz**, potem **▶ Próba** → **Wszystkie**. Cofnij/Ponów (Ctrl+Z / Ctrl+Y), **Zapisz ustawienia**. Obok modelu ciała folder `pipeline` z UO_Model3D daje: dokładną sylwetkę (`body400.vd`), konia (`horse200.vd`), broń (`weapon_motion.json`), tarczę (`uo_shield_keys.py`).
+   - **Nie masz modelu 3D?** W Fit Labie **🎞 Z pliku .vd…** (albo w **Podgląd .vd → 🧊 Przymierz w 3D**): program odtworzy z klatek „stój” oryginalnego przedmiotu przybliżoną bryłę 3D z kolorami, już założoną na ciało (zapis `…_z_vd.glb`). Dobra do przymiarki i poprawek; kształt pochodzi z sylwetek, więc bez ukrytych fałd.
    - **Ubranie 2D / Broń 2D / Gump / Zestaw**: metody Levy'ego (toolkit). Najpierw kilka akcji na próbę, potem 35.
    - **Spakuj do .vd**: z kopią poprzedniej wersji i testem konwertera. **Podgląd .vd**: klatki z ciałem pod spodem.
    - **Dodawanie do klienta**: receptura (przedmioty, potwory z `.vd`), szukanie, wolne ID. Zawsze **Na sucho** najpierw; **Zastosuj** pyta o potwierdzenie.

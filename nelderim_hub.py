@@ -615,6 +615,16 @@ def model3d_problems(cfg) -> list[str]:
     return out
 
 
+def cmd_vd2glb(cfg, vd, out, kind="", action=4, voxel=0.02):
+    """uo3d_vd2glb.py: item .vd (UO sprites) -> .glb already placed on the body (for the Fit Lab). Prints RESULT_GLB."""
+    a = [str(HERE / "uo3d_vd2glb.py"), "--body", cfg["bodyglb"], "--vd", vd, "--out", out, "--action", str(action),
+         "--voxel", str(voxel)]
+    if kind:
+        a += ["--kind", kind]
+    return {"argv": self_script_cmd(*a), "cwd": str(HERE),
+            "env": dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")}
+
+
 def cmd_uo3d(cfg, spec: dict):
     """uo3d_py.py (no Blender): spec keys item, kind, out, name, actions [ints], turn, scale, skip [..], saturation, outline."""
     a = [str(uo3d_script()), "--body", cfg["bodyglb"], "--item", spec["item"], "--kind", spec["kind"], "--out", spec["out"],

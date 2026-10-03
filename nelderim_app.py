@@ -224,6 +224,8 @@ class M3D:
                 col[vi] = c * mat.tex[np.minimum((v * th).astype(int), th - 1), np.minimum((u * tw).astype(int), tw - 1)][:, :3]
             else:
                 col[np.unique(m.tri[sel])] = c
+        if m.vcol is not None and len(m.vcol) == len(col):
+            col = col * m.vcol[:, :3]
         return col
 
 
@@ -402,6 +404,22 @@ def task(cfg, name, p):
                 j.result["vd"] = m[-1].split("RESULT_VD", 1)[1].strip()
         c = H.cmd_uo3d(cfg, spec); c["on_output"] = parse
         return run_job("Render modelu 3D", [lambda j: c])
+    if name == "vd2glb":
+        probs = H.model3d_problems(cfg)
+        if probs:
+            raise ValueError(" ".join(probs))
+        vd = Path(p["vd"])
+        if not vd.is_file():
+            raise ValueError("Nie ma takiego pliku .vd: " + str(vd))
+        nm = H.slugify(p.get("name") or vd.stem)
+        out = works_root(cfg) / nm / "model3d" / f"{H.slugify(vd.stem)}_z_vd.glb"
+
+        def parse(j, cap):
+            m = [x for x in cap if "RESULT_GLB" in x]
+            if m:
+                j.result["glb"] = m[-1].split("RESULT_GLB", 1)[1].strip()
+        c = H.cmd_vd2glb(cfg, str(vd), str(out), p.get("kind", ""), int(p.get("action", 4) or 4)); c["on_output"] = parse
+        return run_job("Model 3D z pliku .vd", [lambda j: c], finish=lambda j: j.result.update(name=nm))
     if name == "vd_info":
         require("toolkit")
         return run_job("Sprawdzanie .vd", [lambda j: H.cmd_vd_info(cfg, p["vd"])])
