@@ -49,6 +49,7 @@ Nic nie musi leżeć w konkretnym miejscu ani na konkretnym dysku. Przy pierwszy
    - **Ubranie 2D / Broń 2D / Gump / Zestaw**: metody Levy'ego (toolkit). Najpierw kilka akcji na próbę, potem 35.
    - **Spakuj do .vd**: z kopią poprzedniej wersji i testem konwertera. **Podgląd .vd**: klatki z ciałem pod spodem.
    - **Dodawanie do klienta**: receptura (przedmioty, potwory z `.vd`), szukanie, wolne ID. Zawsze **Na sucho** najpierw; **Zastosuj** pyta o potwierdzenie.
+   - **Dodawanie do klienta → krok 4 „Nieprzypisane animacje”**: wybierz `anim2–5.mul`, **Szukaj** pokaże animacje, których żadne body jeszcze nie używa (z miniaturą i proponowanym wolnym body). Zaznacz, nadaj nazwy, **Podepnij** – program dopisze wpisy do `Bodyconv.def` i `mobtypes.txt` w folderze wyników (z kopią obecnych). Skopiuj je do kopii klienta i sprawdź najpierw jedno body w grze.
 4. Gotowy `.vd` importujesz w UOFiddlerze (Animations → Animation Edit → Import from VD), na kopii klienta.
 
 ### 4. Gdy coś nie działa
@@ -133,6 +134,7 @@ anything.
 | `uopatch.py` | Wearable/item patcher: art, gump (MUL side), tiledata, optional `mobtypes.txt`/`body.def` entries. |
 | `uop_gump_patch.py` | Patches a gump directly inside `gumpartLegacyMUL.uop` in place, for items whose gump id already lives there. |
 | `vd_inject.py` | Imports a `.vd` monster-animation container into `anim.mul`/`anim.idx`, auto-picking (or taking) a target body id. |
+| `anim_wire.py` | Finds animations in anim2..5.mul that no body uses yet (diff against Bodyconv.def) and wires them: free body id clean on all collision sources, Bodyconv.def + mobtypes.txt entries written to `--out` (dry run by default). |
 | `uop_probe.py` | Thin compatibility shim - re-exports `uop_hash`/`read_uop_hashes` from `nelderim_core` under the name the other tools optionally import. Keep it alongside the other tools **in the client folder** so the `AnimationFrame*.uop` collision check is never silently skipped. |
 | `run_nelderim.bat` / `run_nelderim.sh` | Idiot-proof launchers for Windows / Linux+macOS - check Python/Pillow/numpy, install what's missing, launch Nelderim Lab, and never let the window vanish before an error can be read. |
 | `client-config/` | Reference snapshot of this shard's live `.def`/`mobtypes.txt` files - see its own README. Not deployed automatically; a tool's own `--out` folder is always the real deploy source. |

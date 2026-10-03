@@ -414,6 +414,51 @@ BUILD.client = () => {
     runTask("patch", { recipe: pth, apply, missing: f3.missing.get() }).then(() => showLog(true));
   };
   btns(s3.body, ["👁 Na sucho (bezpieczne)", () => go(false), "primary"], ["✍ Zastosuj…", () => go(true)]);
+
+  // ---- 4: animations in anim2..5.mul that no body uses yet -> Bodyconv.def + mobtypes.txt
+  const s4 = step(p, 4, "Nieprzypisane animacje (anim2–5.mul)", "Program przegląda wybrany plik animacji, porównuje z Bodyconv.def i pokazuje animacje, których żadne body jeszcze nie używa. Dla zaznaczonych dobiera wolne body i dopisuje wpisy do Bodyconv.def i mobtypes.txt (w folderze wyników, nie w kliencie).");
+  const f4 = form(s4.body, [{ key: "file", label: "Plik animacji", type: "select", options: [["5", "anim5.mul"], ["4", "anim4.mul"], ["3", "anim3.mul"], ["2", "anim2.mul"]],
+    help: "Który z plików anim2–5.mul (z folderu klienta) przejrzeć. Typ animacji (potwór / zwierzę / człowiek) wynika z numeru miejsca w pliku." }], { file: restore("animfile", "5") });
+  const wrap = el("div"); s4.body.append(wrap);
+  let rows = [], fileN = 5;
+  const draw4 = () => {
+    wrap.innerHTML = "";
+    if (!rows.length) return;
+    const t = el("table", { class: "t" });
+    t.append(el("tr", {}, el("th", { text: "" }), el("th", { text: "Podgląd" }), el("th", { text: "Miejsce" }), el("th", { text: "Typ" }), el("th", { text: "Akcje" }), el("th", { text: "Body" }), el("th", { text: "Nazwa (opis w pliku)" })));
+    for (const r of rows) {
+      const c = el("input", { type: "checkbox", checked: r.on !== false && r.body !== null }); c.onchange = () => { r.on = c.checked; };
+      const nm = el("input", { type: "text", value: r.name || "", placeholder: "np. Czerwony smok" }); nm.onchange = () => { r.name = nm.value.trim(); };
+      t.append(el("tr", {}, el("td", {}, c),
+        el("td", {}, el("img", { src: `/api/animslot/thumb?file=${fileN}&slot=${r.slot}`, style: "max-height:72px;image-rendering:pixelated;background:#0a0c10;border-radius:4px", alt: "" })),
+        el("td", { class: "mono", text: r.slot }), el("td", { text: { MONSTER: "potwór", ANIMAL: "zwierzę", HUMAN: "człowiek" }[r.type] || r.type }),
+        el("td", { text: `${r.actions}/${r.actions_total}` }),
+        el("td", { class: "mono" + (r.body === null ? " bad" : ""), text: r.body === null ? "brak wolnego" : r.body }), el("td", {}, nm)));
+    }
+    wrap.append(t);
+  };
+  const scan = async () => {
+    fileN = +f4.file.get(); store("animfile", String(fileN));
+    try {
+      const j = await runTask("anim_wire", { file: fileN }, `Szukanie w anim${fileN}.mul`);
+      if (j.result.error) return s4.bad(j.result.error);
+      rows = j.result.unassigned || []; draw4();
+      s4.info(`anim${fileN}.mul: ${j.result.slots_with_data} animacji, ${j.result.assigned} już przypisanych, ${rows.length} do podpięcia.` + (rows.length ? " Odznacz te, których nie chcesz, nadaj nazwy i kliknij „Podepnij”." : ""));
+    } catch (e) {}
+  };
+  const wire = async () => {
+    const sel = rows.filter((r) => r.on !== false && r.body !== null);
+    if (!sel.length) return toast("Najpierw „Szukaj” i zaznacz animacje.", "bad");
+    if (!confirm(`Dopisać ${sel.length} wpis(ów) do Bodyconv.def i mobtypes.txt?\n\nPliki trafią do folderu wyników (anim_wire), z kopią obecnych. Do klienta (KOPII) kopiujesz je sam. Dopisywanie do Bodyconv.def nie było jeszcze sprawdzone w grze – najpierw sprawdź jedno body.`)) return;
+    const names = Object.fromEntries(sel.filter((r) => r.name).map((r) => [r.slot, r.name]));
+    try {
+      const j = await runTask("anim_wire", { file: fileN, slots: sel.map((r) => r.slot), names, apply: true }, "Podpinanie animacji");
+      if (j.result.applied) { s4.ok(`Zapisano w ${j.result.out}. Skopiuj Bodyconv.def i mobtypes.txt do KOPII klienta i sprawdź body w grze.`); showLog(true); }
+      else s4.bad(j.result.error || "Nie zapisano – zobacz Szczegóły.");
+    } catch (e) {}
+  };
+  btns(s4.body, ["🔍 Szukaj", scan, "primary", "Przegląda plik i pokazuje nieprzypisane animacje z proponowanym body. Niczego nie zapisuje."],
+    ["🔗 Podepnij zaznaczone…", wire, "", "Dopisuje Bodyconv.def i mobtypes.txt do folderu wyników (z kopią obecnych)."]);
 };
 
 // ------------------------------------------------------------------ FIT LAB (3D)

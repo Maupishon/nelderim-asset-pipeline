@@ -10,6 +10,33 @@ def c16(c):
     return (r * 255 // 31, g * 255 // 31, b * 255 // 31)
 
 
+def decode_group(d, off):
+    """one UO animation group (palette 256 x u16, frame count, frame offsets, RLE frames) starting at d[off]
+    -> [frame dict(cx, cy, w, h, img RGBA)]. Same layout in .vd files and in anim*.mul records."""
+    pal = np.array([c16(v) for v in struct.unpack_from("<256H", d, off)], np.uint8)
+    start = off + 512
+    (fc,) = struct.unpack_from("<i", d, start)
+    offs = struct.unpack_from("<%di" % fc, d, start + 4)
+    frames = []
+    for fo in offs:
+        p = start + fo
+        cx, cy, w, h = struct.unpack_from("<hhHH", d, p); p += 8
+        img = np.zeros((h, w, 4), np.uint8)
+        xb = cx - 0x200; yb = cy + h - 0x200
+        while True:
+            (hdr,) = struct.unpack_from("<I", d, p); p += 4
+            if hdr == 0x7FFF7FFF:
+                break
+            hdr ^= (0x200 << 22) | (0x200 << 12)
+            x = xb + ((hdr >> 22) & 0x3ff); y = yb + ((hdr >> 12) & 0x3ff); n = hdr & 0xfff
+            idx = d[p:p + n]; p += n
+            if 0 <= y < h and x >= 0 and x + n <= w:
+                img[y, x:x + n, :3] = pal[np.frombuffer(idx, np.uint8)]
+                img[y, x:x + n, 3] = 255
+        frames.append(dict(cx=cx, cy=cy, w=w, h=h, img=img))
+    return frames
+
+
 def read_vd(path):
     """-> (anim_type, n_actions, {(action, direction): [frame dict(cx, cy, w, h, img RGBA)]})"""
     d = open(path, "rb").read()
@@ -23,27 +50,7 @@ def read_vd(path):
         a, dr = divmod(i, 5)
         if off <= 0 or ln <= 0:
             continue
-        pal = [c16(v) for v in struct.unpack_from("<256H", d, off)]
-        start = off + 512
-        (fc,) = struct.unpack_from("<i", d, start)
-        offs = struct.unpack_from("<%di" % fc, d, start + 4)
-        frames = []
-        for fo in offs:
-            p = start + fo
-            cx, cy, w, h = struct.unpack_from("<hhHH", d, p); p += 8
-            img = np.zeros((h, w, 4), np.uint8)
-            xb = cx - 0x200; yb = cy + h - 0x200
-            while True:
-                (hdr,) = struct.unpack_from("<I", d, p); p += 4
-                if hdr == 0x7FFF7FFF:
-                    break
-                hdr ^= (0x200 << 22) | (0x200 << 12)
-                x = xb + ((hdr >> 22) & 0x3ff); y = yb + ((hdr >> 12) & 0x3ff); n = hdr & 0xfff
-                idx = d[p:p + n]; p += n
-                if 0 <= y < h and x >= 0 and x + n <= w:
-                    img[y, x:x + n, :3] = np.array(pal, np.uint8)[np.frombuffer(idx, np.uint8)]
-                    img[y, x:x + n, 3] = 255
-            frames.append(dict(cx=cx, cy=cy, w=w, h=h, img=img))
+        frames = decode_group(d, off)
         anims[(a, dr)] = frames
     return at, nact, anims
 

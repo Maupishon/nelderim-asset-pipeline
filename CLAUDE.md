@@ -119,6 +119,15 @@ Jedno wejście: `nelderim.py` (`run_nelderim.bat/.sh`, `run_hub.bat/.sh`, `Nelde
 - Prace 3D: `<toolkit>/workspace/ultima-online/<nazwa>/model3d/` (bez toolkitu: `<wyjście>/prace3d/`), `work.json` + 3 poprzednie wersje w `history/`.
 - Exe: `build_exe.bat` (PyInstaller, konsola) → `dist\Nelderim\` (exe + `app/`, `uo3d/`, skrypty); CI `build-exe`: smoke test exe, artefakt `Nelderim-windows`, Release (`main` → tag `najnowsza`, latest; inna gałąź przy ręcznym uruchomieniu → prerelease `test-<gałąź>`). Link: `releases/latest/download/Nelderim-windows.zip`.
 
+## Nieprzypisane animacje anim2–5.mul → Bodyconv.def + mobtypes.txt (`anim_wire.py`)
+
+`python anim_wire.py --client <KOPIA> --file 5 [--slots 32 33] [--names '{"32":"Smok"}'] [--range lo-hi] [--out DIR] [--apply] [--json]`; w aplikacji: Dodawanie do klienta → krok 4 (miniatury, nazwy, „Podepnij zaznaczone”).
+- Sloty z danymi wg układu `UOReader._base` (wyżej); typ z grupy: 110 → MONSTER, 65 → ANIMAL, 175 → HUMAN.
+- „Nieprzypisany” = żadna niezakomentowana linia `Bodyconv.def` nie wskazuje go w kolumnie animN (kolumny: body, anim2, anim3, anim4, anim5).
+- Wolne body: nie w body.def / Bodyconv.def / AnimationFrame*.uop / mobtypes.txt, nie `animId` w tiledata.mul ani w Equipconv.def, ≠ 0, pusty zakres w anim.mul; najpierw pasmo typu (MONSTER 1–199, ANIMAL 200–399, HUMAN 400+), poza nim tylko powyżej najwyższego id w mobtypes.txt (model `AnimIdx` się nie przesuwa).
+- Zapis tylko do `--out` (w aplikacji `<wyjście>/anim_wire`): kopia + blok `# --- added by anim_wire.py ---` w Bodyconv.def (`body -1 -1 -1 slot -1 # opis`) i mobtypes.txt (`body TYP 0`), backup, manifest, weryfikacja ponownym odczytem.
+- NIESPRAWDZONE w grze: wcześniej Bodyconv.def był tylko do odczytu (`nelderim_core`); przed hurtowym podpinaniem sprawdzić jedno body. Testowane na sztucznym kliencie (anim5 z blokami z horse200.vd).
+
 ## Przedmioty i broń — instrukcja Levy'ego (NELDERIM_PRZEDMIOTY_INSTRUKCJA)
 
 Sprawdzone na: szabla 0xF5E→618, BlackStaff 0xDF0→617, Hooded Shroud 0x2684→970, kusza 0x13FD→616, rękawice 0x1414→530, ClothHood 0xA706→420 (anim4), plecak 0xE75→422 (anim3).
