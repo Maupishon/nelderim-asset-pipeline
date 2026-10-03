@@ -353,6 +353,11 @@ def cmd_anim_wire(cfg, n, slots=None, names=None, apply=False):
     return _pl(cfg, "anim_wire.py", *a)
 
 
+def cmd_anim_check(cfg, body):
+    """anim_wire.py --check-body: what already uses a body id (defs, UOP frames / sequence, anim.mul)."""
+    return _pl(cfg, "anim_wire.py", "--client", cfg["client"], "--check-body", str(int(body)))
+
+
 def cmd_pipeline_gui(cfg):
     return _pl(cfg, "nelderim_gui.py")
 
