@@ -1,12 +1,12 @@
-"""uo3d_py.py - render a 3D item onto the UO body WITHOUT Blender (numpy + Pillow only).
+"""uo3d/cli_render.py - render a 3D item onto the UO body WITHOUT Blender (numpy + Pillow only).
 
-    python uo3d_py.py --body UO_Body_0x190.glb --item model.glb --kind shirt --out DIR --name NAME [--actions 0 4 9] [--turn 0]
+    python nelderim.py uo3d --body UO_Body_0x190.glb --item model.glb --kind shirt --out DIR --name NAME [--actions 0 4 9] [--turn 0]
                       [--scale 0] [--skip eyes,body] [--saturation 1] [--outline 0.38]
 
 Writes DIR/NAME.vd (UOFiddler animation, type 2, 35 actions x 5 directions) and prints "RESULT_VD <path>".
 """
 import argparse, os, sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # program root (uo3d package)
 from uo3d import engine
 
 

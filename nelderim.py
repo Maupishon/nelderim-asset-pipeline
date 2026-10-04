@@ -5,11 +5,20 @@ nelderim.py - the one entry point of the Nelderim asset pipeline (Nelderim Lab).
     python nelderim.py                 start the app (local web page in your browser)
     python nelderim.py --no-browser    start without opening the browser
     python nelderim.py --port 8774     fixed port
-    python nelderim.py --classic       the older Tk window (nelderim_hub_ui)
+
+Tools from the command line (same scripts the app runs; `<tool> --help` for options):
+    python nelderim.py search  --client <klient> --item staff        (nelderim_search.py)
+    python nelderim.py patch   --client <klient> --recipe r.json --out wyniki [--apply]   (nelderim_patch.py)
+    python nelderim.py inject  --client <klient> --vd potwor.vd [--apply]               (vd_inject.py)
+    python nelderim.py wire    --client <klient> --file 5 [--apply]                      (anim_wire.py)
+    python nelderim.py uopatch | gumppatch ...                                          (uopatch.py, uop_gump_patch.py)
+    python nelderim.py uo3d    --body ... --item ... --kind ...                          (uo3d/cli_render.py)
+    python nelderim.py vd2glb  --body ... --vd ... --out ...                             (uo3d/cli_vd2glb.py)
+The same works with Nelderim.exe instead of `python nelderim.py`.
 
 Helper modes (used by the app itself, also inside the frozen exe):
-    --run-script FILE.py [args]   run one of the pipeline's .py tools (nelderim_patch.py, uo3d_py.py, ...)
-    --uo3d [args]                 the 3D renderer (uo3d_py.py)
+    --run-script FILE.py [args]   run one of the pipeline's .py tools (pipeline/nelderim_patch.py, uo3d/cli_render.py, ...)
+    --uo3d [args]                 the 3D renderer (uo3d/cli_render.py)
     --pick file|dir|save TITLE [FILTER]   native file dialog, prints the chosen path
     --deps-ok                     prints DEPS_OK when numpy and Pillow import
     --py [-c CODE | SCRIPT.py] [args]   acts as `python` for Levy's toolkit scripts (exe without Python installed)
@@ -20,7 +29,8 @@ import sys
 from pathlib import Path
 
 HERE = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
+for _p in (HERE, HERE / "lab", HERE / "pipeline"):          # program root, app server, client tools
+    sys.path.insert(0, str(_p))
 
 
 def pick(kind, title, filt=""):
@@ -53,8 +63,15 @@ def _utf8_console():
             pass
 
 
+TOOLS = {"search": "pipeline/nelderim_search.py", "patch": "pipeline/nelderim_patch.py", "inject": "pipeline/vd_inject.py",
+         "wire": "pipeline/anim_wire.py", "uopatch": "pipeline/uopatch.py", "gumppatch": "pipeline/uop_gump_patch.py",
+         "uo3d": "uo3d/cli_render.py", "vd2glb": "uo3d/cli_vd2glb.py"}
+
+
 def main(argv):
     _utf8_console()
+    if argv[:1] and argv[0] in TOOLS:
+        return main(["--run-script", str(HERE / TOOLS[argv[0]]), *argv[1:]])
     if argv[:1] == ["--run-script"]:
         script = Path(argv[1]).resolve()
         sys.argv = [str(script), *argv[2:]]
@@ -73,8 +90,8 @@ def main(argv):
             return 1
         return main(["--run-script", *rest])
     if argv[:1] == ["--uo3d"]:
-        import uo3d_py
-        uo3d_py.main(argv[1:])
+        from uo3d import cli_render
+        cli_render.main(argv[1:])
         return 0
     if argv[:1] == ["--pick"]:
         pick(argv[1] if len(argv) > 1 else "file", argv[2] if len(argv) > 2 else "Wybierz", argv[3] if len(argv) > 3 else "")
@@ -84,9 +101,9 @@ def main(argv):
         import PIL  # noqa: F401,F811
         print("DEPS_OK")
         return 0
-    if "--classic" in argv:
-        import nelderim_hub
-        return nelderim_hub.main([a for a in argv if a != "--classic"])
+    if argv[:1] and not argv[0].startswith("-"):
+        print(f"Nieznana komenda: {argv[0]}. Dostępne: {', '.join(TOOLS)} (albo bez argumentów = aplikacja).", file=sys.stderr)
+        return 2
     port = int(argv[argv.index("--port") + 1]) if "--port" in argv else None
     import nelderim_app
     nelderim_app.serve(open_browser="--no-browser" not in argv, port=port)

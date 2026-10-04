@@ -1,35 +1,30 @@
 #!/usr/bin/env python3
 """
-nelderim_hub.py - one launcher for every Nelderim tool, on any machine.
+nelderim_hub.py - shared logic of Nelderim Lab: where every folder is (asked once per user, kept in
+~/.nelderim_hub.json, never in the repo) and the command builders cmd_* that run the existing
+scripts exactly as you would in a terminal:
 
-Like nelderim_gui.py this file has NO format logic. It only asks where each
-tool lives, remembers the answers (per user, in ~/.nelderim_hub.json - never
-in the repo) and runs the existing scripts exactly as you would in a terminal:
-
-    SpriteMotion toolkit + Levy overlay : build.py, build_item.py, verify.py,
+    SpriteMotion toolkit + Levy overlay : build.py, build_item.py, verify.py, make_gump.py,
                                           mul2vd.py, atlas_to_vd.py, vdtool.py
-    Nelderim pipeline                   : nelderim_gui.py, nelderim_search.py,
-                                          nelderim_patch.py (dry-run first)
-    Viewers                             : Outfit Lab (local http server),
-                                          vd-viewer.html, UOFiddler
+    Nelderim pipeline (next to this file): nelderim_search.py, nelderim_patch.py, vd_inject.py,
+                                          anim_wire.py (dry run first)
+    3D route                            : uo3d/cli_render.py, uo3d/cli_vd2glb.py
 
-Standard library only (tkinter). Run:  python nelderim_hub.py
-Headless helpers:  python nelderim_hub.py --show-config
+No format logic here. The UI is nelderim_app.py + app/ (started by nelderim.py).
+    python nelderim_hub.py --show-config     prints the saved folders
 """
 
 from __future__ import annotations
 import json
 import os
-import queue
 import subprocess
 import sys
-import threading
-import webbrowser
 from pathlib import Path
 
 FROZEN = bool(getattr(sys, "frozen", False))
 # frozen (PyInstaller) exe: the pipeline scripts sit next to the exe, __file__ points to a temp dir
-HERE = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent
+HERE = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent   # program root
+PIPELINE = HERE / "pipeline"
 CONFIG_FILE = Path.home() / ".nelderim_hub.json"
 PORT = 8772
 
@@ -38,12 +33,7 @@ PATHS = {
     "client":   ("UO client folder (anim.idx, anim.mul, tiledata.mul, *.def)", "dir", "anim.idx", True),
     "toolkit":  ("SpriteMotion-UO-Toolkit folder (has pyproject.toml, with Levy overlay)", "dir",
                  "games/ultima-online/outfit-lab/build_item.py", True),
-    "pipeline": ("nelderim-asset-pipeline folder (has nelderim_patch.py)", "dir", "nelderim_patch.py", True),
     "output":   ("Output folder for patched files", "dir", None, True),
-    "vdviewer": ("vd-viewer.html (VD Animation Viewer)", "file", None, False),
-    "fiddler":  ("UOFiddler folder (has UOFiddler.exe)", "dir", None, False),
-    "serv":     ("ServUO folder (C# scripts)", "dir", None, False),
-    "vdtool":   ("vdtool folder (optional; the toolkit's tools/vd is used otherwise)", "dir", None, False),
     "bodyglb":  ("UO_Body_0x190.glb (3D body of UO_Model3D, folder model/)", "file", None, False),
 }
 
@@ -128,11 +118,7 @@ _SKIP = {"windows", "program files", "program files (x86)", "programdata", "$rec
 _MARKS = {
     "client": lambda p: (p / "anim.idx").is_file() and (p / "tiledata.mul").is_file(),
     "toolkit": lambda p: (p / "games/ultima-online/outfit-lab/build_item.py").is_file(),
-    "fiddler": lambda p: (p / "UoFiddler.exe").is_file() or (p / "UOFiddler.exe").is_file(),
-    "serv": lambda p: (p / "ServUO.sln").is_file() or ((p / "Scripts").is_dir() and (p / "Server").is_dir()),
-    "vdtool": lambda p: (p / "vdtool.py").is_file(),
     "bodyglb": lambda p: (p / "model" / "UO_Body_0x190.glb").is_file(),
-    "vdviewer": lambda p: (p / "vd-viewer.html").is_file(),
 }
 
 
@@ -156,8 +142,7 @@ def scan_paths(keys, max_depth: int = 4, budget_s: float = 8.0) -> dict:
                 except OSError:
                     hit = False
                 if hit:
-                    found[k] = str(d / "model" / "UO_Body_0x190.glb") if k == "bodyglb" else (
-                        str(d / "vd-viewer.html") if k == "vdviewer" else str(d))
+                    found[k] = str(d / "model" / "UO_Body_0x190.glb") if k == "bodyglb" else str(d)
                     want.remove(k)
             if depth < max_depth:
                 try:
@@ -174,8 +159,6 @@ def scan_paths(keys, max_depth: int = 4, budget_s: float = 8.0) -> dict:
 
 def guesses(key: str) -> list[str]:
     """Candidates for one key (checked by path_ok before use); never assumed to exist."""
-    if key == "pipeline":
-        return [str(HERE)]
     hit = scan_paths([key], budget_s=4.0).get(key)
     return [hit] if hit else []
 
@@ -326,16 +309,32 @@ def cmd_serve(cfg, lab):
 
 
 def _pl(cfg, script, *args):
-    return {"argv": self_script_cmd(Path(cfg["pipeline"]) / script, *args),
-            "cwd": cfg["pipeline"], "env": dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")}
+    """pipeline script that ships next to this program (never a separate folder)."""
+    return {"argv": self_script_cmd(PIPELINE / script, *args),
+            "cwd": str(PIPELINE), "env": dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")}
 
 
-def cmd_search(cfg, query):
-    return _pl(cfg, "nelderim_search.py", "--client", cfg["client"], "--item", query)
+def cmd_search(cfg, query, mode="item", limit=None):
+    """nelderim_search.py: mode item (name or id), anim (one anim id) or body (one body id)."""
+    a = ["--client", cfg["client"], f"--{mode}", str(query)]
+    if limit and mode == "item":
+        a += ["--limit", str(int(limit))]
+    return _pl(cfg, "nelderim_search.py", *a)
 
 
-def cmd_patch(cfg, recipe, apply):
-    a = ["--client", cfg["client"], "--recipe", recipe, "--out", cfg["output"]]
+def cmd_free_anim(cfg, count=5, lo=None, hi=None):
+    a = ["--client", cfg["client"], "--free-anim", str(int(count))]
+    if lo not in (None, ""):
+        a += ["--lo", str(int(lo))]
+    if hi not in (None, ""):
+        a += ["--hi", str(int(hi))]
+    return _pl(cfg, "nelderim_search.py", *a)
+
+
+def cmd_patch(cfg, recipe, apply, missing="stop", body_range=""):
+    a = ["--client", cfg["client"], "--recipe", recipe, "--out", cfg["output"], "--missing", missing]
+    if body_range:
+        a += ["--range", body_range]
     if apply:
         a.append("--apply")
     return _pl(cfg, "nelderim_patch.py", *a)
@@ -356,10 +355,6 @@ def cmd_anim_wire(cfg, n, slots=None, names=None, apply=False):
 def cmd_anim_check(cfg, body):
     """anim_wire.py --check-body: what already uses a body id (defs, UOP frames / sequence, anim.mul)."""
     return _pl(cfg, "anim_wire.py", "--client", cfg["client"], "--check-body", str(int(body)))
-
-
-def cmd_pipeline_gui(cfg):
-    return _pl(cfg, "nelderim_gui.py")
 
 
 def lab_items(lab: str) -> list[tuple[str, int]]:
@@ -559,7 +554,7 @@ def cmd_pip_install(cfg):
     return _tk(cfg, "-m", "pip", "install", "numpy", "pillow", "scipy")
 
 
-# ---- 3D model route without Blender (uo3d_py.py): label, kind (uo3d engine), note
+# ---- 3D model route without Blender (uo3d/cli_render.py): label, kind (uo3d engine), note
 KINDS3D = [
     ("Koszula / tunika", "shirt", ""),
     ("Zbroja piersiowa", "plate", ""),
@@ -602,7 +597,7 @@ def action_ids(text: str) -> list[str]:
 
 
 def uo3d_script() -> Path:
-    return HERE / "uo3d_py.py"
+    return HERE / "uo3d" / "cli_render.py"
 
 
 def pipeline_file(cfg, name):
@@ -633,8 +628,8 @@ def model3d_problems(cfg) -> list[str]:
 
 
 def cmd_vd2glb(cfg, vd, out, kind="", action=4, voxel=0.02):
-    """uo3d_vd2glb.py: item .vd (UO sprites) -> .glb already placed on the body (for the Fit Lab). Prints RESULT_GLB."""
-    a = [str(HERE / "uo3d_vd2glb.py"), "--body", cfg["bodyglb"], "--vd", vd, "--out", out, "--action", str(action),
+    """uo3d/cli_vd2glb.py: item .vd (UO sprites) -> .glb already placed on the body (for the Fit Lab). Prints RESULT_GLB."""
+    a = [str(HERE / "uo3d" / "cli_vd2glb.py"), "--body", cfg["bodyglb"], "--vd", vd, "--out", out, "--action", str(action),
          "--voxel", str(voxel)]
     if kind:
         a += ["--kind", kind]
@@ -643,7 +638,7 @@ def cmd_vd2glb(cfg, vd, out, kind="", action=4, voxel=0.02):
 
 
 def cmd_uo3d(cfg, spec: dict):
-    """uo3d_py.py (no Blender): spec keys item, kind, out, name, actions [ints], turn, scale, skip [..], saturation, outline."""
+    """uo3d/cli_render.py (no Blender): spec keys item, kind, out, name, actions [ints], turn, scale, skip [..], saturation, outline."""
     a = [str(uo3d_script()), "--body", cfg["bodyglb"], "--item", spec["item"], "--kind", spec["kind"], "--out", spec["out"],
          "--name", spec["name"], "--turn", str(spec.get("turn", 0)), "--scale", str(spec.get("scale", 0)),
          "--saturation", str(spec.get("saturation", 1.0)), "--outline", str(spec.get("outline", 0.38))]
@@ -694,13 +689,7 @@ def main(argv) -> int:
         for k, (label, _, _, req) in PATHS.items():
             print(f"{k:9} {'OK ' if path_ok(k, cfg.get(k)) else ('MISSING' if req else '-')}  {cfg.get(k, '')}")
         return 0
-    try:
-        import tkinter  # noqa: F401
-    except ImportError:
-        print("tkinter is missing. Linux: install python3-tk (Debian/Ubuntu) or python3-tkinter (Fedora).")
-        return 1
-    from nelderim_hub_ui import run_gui
-    run_gui(sys.modules[__name__])
+    print("Nelderim Lab startuje z nelderim.py (run_nelderim.bat / Nelderim.exe).  --show-config = zapisane foldery.")
     return 0
 
 

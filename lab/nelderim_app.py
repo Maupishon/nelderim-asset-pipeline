@@ -3,7 +3,7 @@ nelderim_app.py - Nelderim Lab: ONE local web app for the whole pipeline (hub + 
 
 Runs a small HTTP server on 127.0.0.1 and opens the browser. The page (app/index.html) talks to this server only.
 No format logic lives here either: tasks are the command builders of nelderim_hub.py (toolkit scripts, pipeline scripts,
-uo3d_py.py), and the live 3D fit uses the uo3d package in-process.
+uo3d/cli_render.py), and the live 3D fit uses the uo3d package in-process.
 
     python nelderim.py            (or run_nelderim.bat / run_nelderim.sh / Nelderim.exe)
 """
@@ -31,17 +31,12 @@ import nelderim_hub as H
 
 APP_DIR = H.HERE / "app"
 NOWIN = {"creationflags": 0x08000000} if os.name == "nt" else {}
-PL = {"client": "Folder klienta UO (kopia!)", "toolkit": "Folder toolkitu SpriteMotion", "pipeline": "Folder programu (pipeline)",
-      "output": "Folder na wyniki dodawania", "vdviewer": "Plik vd-viewer.html", "fiddler": "Folder UOFiddlera", "serv": "Folder ServUO",
-      "vdtool": "Folder vdtool", "bodyglb": "Plik UO_Body_0x190.glb"}
+PL = {"client": "Folder klienta UO (kopia!)", "toolkit": "Folder toolkitu SpriteMotion",
+      "output": "Folder na wyniki dodawania", "bodyglb": "Plik UO_Body_0x190.glb"}
 PATH_HELP = {
     "client": "Folder z grą (KOPIA klienta!), gdzie leżą anim.idx, anim.mul, tiledata.mul, Equipconv.def.",
     "toolkit": "Folder SpriteMotion-UO-Toolkit (tam gdzie pyproject.toml) z paczką Levy'ego v2. Potrzebny do metod 2D.",
-    "pipeline": "Folder tego programu (nelderim_patch.py). Wykrywa się sam.",
     "output": "Gdzie zapisywać wyniki dodawania do klienta.",
-    "vdviewer": "vd-viewer.html (przeglądarka .vd Levy'ego) – opcjonalnie; aplikacja ma własny podgląd .vd.",
-    "fiddler": "Folder UOFiddlera (opcjonalnie).", "serv": "Folder serwera ServUO (opcjonalnie).",
-    "vdtool": "Osobny vdtool (opcjonalnie).",
     "bodyglb": "UO_Body_0x190.glb z projektu UO_Model3D (folder model). Potrzebny do metody 3D. Blender nie jest potrzebny."}
 
 
@@ -365,13 +360,19 @@ def task(cfg, name, p):
                                                                      p.get("gid", ""))],
                        finish=lambda j: j.result.update(dir=str(out), image=str(out / "porownanie.png")))
     if name == "search":
-        require("pipeline", "client")
-        return run_job("Wyszukiwanie", [lambda j: H.cmd_search(cfg, p["query"])])
+        require("client")
+        mode = p.get("mode", "item")
+        if mode not in ("item", "anim", "body"):
+            raise ValueError("Nieznany tryb wyszukiwania.")
+        q = str(p["query"]).strip()
+        if mode != "item" and not re.fullmatch(r"(0x[0-9a-fA-F]+|\d+)", q):
+            raise ValueError("Przy szukaniu animacji / body wpisz numer, np. 970 albo 0x3CA.")
+        return run_job("Wyszukiwanie", [lambda j: H.cmd_search(cfg, q, mode, p.get("limit"))])
     if name == "free_anim":
-        require("pipeline", "client")
-        return run_job("Wolne ID animacji", [lambda j: H._pl(cfg, "nelderim_search.py", "--client", cfg["client"], "--free-anim", str(p.get("count", 5)))])
+        require("client")
+        return run_job("Wolne ID animacji", [lambda j: H.cmd_free_anim(cfg, p.get("count", 5) or 5, p.get("lo"), p.get("hi"))])
     if name == "suggest_slot":
-        require("pipeline", "client")
+        require("client")
 
         def parse(j, cap):
             m = re.search(r"auto-selected body (\d+)", "\n".join(cap))
@@ -380,16 +381,17 @@ def task(cfg, name, p):
         c = H._pl(cfg, "vd_inject.py", "--client", cfg["client"], "--vd", p["vd"]); c["on_output"] = parse; c["ok"] = (0, 1, 2)
         return run_job("Szukanie wolnego slotu", [lambda j: c])
     if name == "patch":
-        require("pipeline", "client", "output")
-        a = ["--client", cfg["client"], "--recipe", p["recipe"], "--out", cfg["output"], "--missing", p.get("missing", "stop")]
-        if p.get("apply"):
-            a.append("--apply")
-        return run_job("Zastosowanie zmian" if p.get("apply") else "Przebieg na sucho", [lambda j: H._pl(cfg, "nelderim_patch.py", *a)])
+        require("client", "output")
+        rng = str(p.get("range", "")).strip()
+        if rng and not re.fullmatch(r"\d+-\d+", rng):
+            raise ValueError("Zakres body wpisz jak 900-2000.")
+        c = H.cmd_patch(cfg, p["recipe"], bool(p.get("apply")), p.get("missing", "stop"), rng)
+        return run_job("Zastosowanie zmian" if p.get("apply") else "Przebieg na sucho", [lambda j: c])
     if name == "anim_check":
-        require("pipeline", "client")
+        require("client")
         return run_job(f"Sprawdzanie body {p['body']}", [lambda j: H.cmd_anim_check(cfg, p["body"])])
     if name == "anim_wire":
-        require("pipeline", "client", "output")
+        require("client", "output")
         names = {int(k): str(v) for k, v in (p.get("names") or {}).items() if str(v).strip()}
         c = H.cmd_anim_wire(cfg, int(p.get("file", 5)), [int(x) for x in p.get("slots") or []], names, bool(p.get("apply")))
 
@@ -529,7 +531,7 @@ class Handler(BaseHTTPRequestHandler):
     def allowed(self, p: Path) -> bool:
         """files the app may hand to the browser: under configured folders or the work root."""
         cfg = H.load_config()
-        roots = [cfg.get(k) for k in ("client", "toolkit", "pipeline", "output", "serv", "vdtool", "fiddler")]
+        roots = [cfg.get(k) for k in ("client", "toolkit", "output")]
         if cfg.get("bodyglb"):
             roots.append(str(Path(cfg["bodyglb"]).parent.parent))
         roots += [str(H.HERE)] + LAB_ROOTS
@@ -537,16 +539,47 @@ class Handler(BaseHTTPRequestHandler):
             rp = p.resolve()
         except OSError:
             return False
-        return any(r and (str(rp).lower().startswith(str(Path(r).resolve()).lower())) for r in roots)
+        for r in roots:
+            if not r:
+                continue
+            try:
+                rp.relative_to(Path(r).resolve())            # real containment (not a string prefix: /out vs /out-evil)
+                return True
+            except ValueError:
+                if os.name == "nt" and str(rp).lower().startswith(str(Path(r).resolve()).lower() + os.sep):
+                    return True                              # Windows paths are case-insensitive
+        return False
+
+    # --- protection of the local server against other web pages (CSRF / DNS rebinding) ---
+    def guard(self, post=False) -> bool:
+        """Only this app's own page may talk to the server. Blocks: a Host header that is not 127.0.0.1/localhost
+        (DNS rebinding), a foreign Origin, and POSTs that are not JSON (a plain cross-site form / text/plain POST
+        needs no CORS preflight, so without this any website open in the browser could drive the tools)."""
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
+        origin = self.headers.get("Origin")
+        ok = host in ("127.0.0.1", "localhost")
+        if ok and origin and origin != "null":
+            ok = urllib.parse.urlparse(origin).hostname in ("127.0.0.1", "localhost")
+        elif ok and origin == "null":
+            ok = False
+        if ok and post:
+            ok = (self.headers.get("Content-Type") or "").lower().startswith("application/json")
+        if not ok:
+            self.send(403, {"error": "Zabronione: to API jest tylko dla strony Nelderim Lab otwartej z tego komputera."})
+        return ok
 
     # routing
     def do_GET(self):
+        if not self.guard():
+            return
         try:
             self.route_get()
         except Exception as e:  # noqa: BLE001
             self.send(500, {"error": str(e), "trace": traceback.format_exc()[-1500:]})
 
     def do_POST(self):
+        if not self.guard(post=True):
+            return
         try:
             self.route_post()
         except ValueError as e:
@@ -629,8 +662,6 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/autodetect":
             todo = [k for k in H.PATHS if not H.path_ok(k, cfg.get(k))]
             found = {k: v for k, v in H.scan_paths(todo).items() if H.path_ok(k, v)}
-            if "pipeline" in todo:
-                found["pipeline"] = str(H.HERE)
             if "output" in todo:
                 found["output"] = str(Path.home() / "Nelderim-wyniki")
             cfg.update(found); H.save_config(cfg)
@@ -652,6 +683,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"ok": True})
         if path == "/api/lab/open":
             p = str(Path(data["path"]).resolve())
+            if not self.allowed(Path(p)):
+                return self.send(403, {"error": "Ten folder jest poza folderami aplikacji."})
             if not (Path(p) / "index.html").is_file():
                 raise ValueError("W tym folderze nie ma podglądu (index.html). Najpierw zbuduj przymiarkę.")
             if p not in LAB_ROOTS:
@@ -659,6 +692,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"url": f"/lab/{LAB_ROOTS.index(p)}/"})
         if path == "/api/open":
             p = Path(data["path"])
+            if not data.get("folder") and not self.allowed(p):          # showing a FOLDER is harmless; opening a FILE is not
+                return self.send(403, {"error": "Ten plik jest poza folderami aplikacji."})
             if p.exists():
                 H.open_path(str(p if p.is_dir() else p.parent) if data.get("folder") else str(p))
             return self.send(200, {"ok": p.exists()})
@@ -831,9 +866,6 @@ def free_port(start=8774):
 
 
 def serve(open_browser=True, port=None):
-    cfg = H.load_config()
-    if not cfg.get("pipeline"):
-        cfg["pipeline"] = str(H.HERE); H.save_config(cfg)
     port = port or free_port()
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{port}/"

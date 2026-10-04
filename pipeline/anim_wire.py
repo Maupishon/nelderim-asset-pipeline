@@ -316,7 +316,7 @@ def thumbnail(client, n, slot, size=96):
     """PNG bytes of the first frame of the first populated action/direction of a slot (to recognise the creature)."""
     from PIL import Image
     import io
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # program root (uo3d package)
     from uo3d import vdread
     idx, count = read_idx(C.find(client, f"anim{n}.idx"))
     start, nrec = slot_layout(n, slot)
