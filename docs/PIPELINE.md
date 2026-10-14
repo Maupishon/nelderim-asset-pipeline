@@ -109,7 +109,8 @@ use in `nelderim_core.py`, but worth having in one place:
    gump there when `MainMisc.uop` exists. Art is the other way round: this
    client has no `artLegacyMUL.uop` (only `tileart.uop`), so `art.mul` is read.
    Verified on a copy of the UOP (all original entries byte-identical, new
-   ones decode correctly); **not yet verified in game.**
+   ones decode correctly) and **in game (2026-10-14): the paperdoll shows the
+   new gump after the UOP entry was added.**
 2. **Resolution order matters.** `body.def` (hard redirect) →
    `AnimationFrame*.uop` → `Bodyconv.def` → `anim.mul`. A body listed in
    any earlier stage never reaches your `anim.mul` write.

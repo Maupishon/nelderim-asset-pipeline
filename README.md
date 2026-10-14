@@ -129,7 +129,7 @@ Krok 4 w **Dodawanie do klienta**: **📋 Pokaż już podpięte** (albo **Szukaj
 - Nowych gumpów jest do **52** na jeden plik `gumpartLegacyMUL.uop` (tyle wolnych miejsc ma jego tablica bloków). Potem trzeba inaczej.
 - Gump i art z klatki animacji to **przybliżenie** (klatka ma ok. 60 px, paperdoll ok. 200 px). Dla szat wychodzi dobrze, dla broni i pasków to raczej podkład do ręcznej poprawki.
 
-**Sprawdzone w grze:** podpinanie animacji z `anim5.mul` przez `Bodyconv.def` + `mobtypes.txt` (wilkołak).
+**Sprawdzone w grze:** podpinanie animacji z `anim5.mul` przez `Bodyconv.def` + `mobtypes.txt` (wilkołak, szata humanoidalna 429); dopisywanie nowego gumpu (paperdoll) do `gumpartLegacyMUL.uop`.
 **Jeszcze niesprawdzone w grze:** model 3D (przymiarka i `.vd` z 3D) oraz odtwarzanie 3D z `.vd`. Traktuj je jako podgląd i weryfikuj wynik.
 
 ---
