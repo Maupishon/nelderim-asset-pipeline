@@ -123,10 +123,13 @@ class UopFile:
         self.ver, self.sig, self.nextblk, self.blkcap, self.cnt = \
             struct.unpack("<II q i i", self.f.read(24))
         self.entries = {}  # hash -> dict(off, hlen, clen, dlen, adler, flag, record_pos)
+        self.last_block = None   # (table position, files used) of the final block in the chain
         pos = self.nextblk
         while True:
             self.f.seek(pos)
             n_files, nxt = struct.unpack("<i q", self.f.read(12))
+            if nxt == 0:
+                self.last_block = (pos, n_files)
             for _ in range(n_files):
                 record_pos = self.f.tell()
                 off, hlen, clen, dlen, h, adler, flag = struct.unpack(
@@ -163,6 +166,51 @@ class UopFile:
                                   new_adler, 0))
         e.update(off=new_off, hlen=0, clen=new_len, dlen=new_len,
                  adler=new_adler, flag=0)
+
+    def free_slots(self):
+        """How many NEW entries the final block table can take: the table is reserved for `blkcap`
+        records (34 bytes each) and the unused ones are zero-filled. Counted only while the reserved area
+        really is zero, so a payload that happens to live there can never be overwritten."""
+        if not self.last_block or self.blkcap <= 0:
+            return 0
+        pos, used = self.last_block
+        room = self.blkcap - used
+        if room <= 0:
+            return 0
+        self.f.seek(pos + 12 + used * 34)
+        area = self.f.read(room * 34)
+        free = 0
+        for i in range(room):
+            if area[i * 34:(i + 1) * 34] == bytes(34):
+                free += 1
+            else:
+                break
+        return free
+
+    def add_payload(self, h, new_payload):
+        """Add an entry that is NOT in the UOP yet: payload appended to the end of the file, a record written
+        into the first free slot of the final block table, that block's file count (and the header count)
+        bumped. Nothing already in the file is moved or changed."""
+        if h in self.entries:
+            raise KeyError(f"hash {h} is already present - use replace_payload")
+        if self.free_slots() < 1:
+            raise RuntimeError("no free slot left in the UOP block table")
+        pos, used = self.last_block
+        self.f.seek(0, os.SEEK_END)
+        new_off = self.f.tell()
+        self.f.write(new_payload)
+        n = len(new_payload)
+        adler = zlib.adler32(new_payload) & 0xFFFFFFFF
+        rec_pos = pos + 12 + used * 34
+        self.f.seek(rec_pos)
+        self.f.write(struct.pack("<q i i i Q I h", new_off, 0, n, n, h, adler, 0))
+        self.f.seek(pos)
+        self.f.write(struct.pack("<i", used + 1))
+        self.last_block = (pos, used + 1)
+        self.cnt += 1
+        self.f.seek(24)                       # header: magic(4) ver(4) sig(4) nextblk(8) blkcap(4) | count(4)
+        self.f.write(struct.pack("<i", self.cnt))
+        self.entries[h] = dict(off=new_off, hlen=0, clen=n, dlen=n, adler=adler, flag=0, record_pos=rec_pos)
 
     def close(self):
         self.f.close()
@@ -277,9 +325,18 @@ def run(client, recipe, apply_changes):
                 continue
             plan.append((it.get("name", "?"), label, gid, h, png_path))
 
-    print(f"[PLAN ] {len(plan)} gump entries to patch:")
+    probe = UopFile(uop_path)
+    have = set(probe.entries)
+    room = probe.free_slots()
+    probe.close()
+    n_new = sum(1 for _n, _l, _g, h, _p in plan if h not in have)
+    print(f"[PLAN ] {len(plan)} gump entries to patch ({len(plan) - n_new} replace, {n_new} NEW):")
     for name, label, gid, h, png_path in plan:
-        print(f"         {name} ({label}) gump {gid} <- {png_path}")
+        kind = "REPLACE" if h in have else "NEW    "
+        print(f"         {kind} {name} ({label}) gump {gid} <- {png_path}")
+    if n_new > room:
+        print(f"[ERROR] {n_new} new gump entries do not fit: the UOP has room for {room} more. "
+              "Nothing will be written for the ones that do not fit.")
 
     if not apply_changes:
         print("[PLAN ] dry run - nothing written. Re-run with --apply.")
@@ -293,16 +350,27 @@ def run(client, recipe, apply_changes):
     uop = UopFile(uop_path)
     written = []
     for name, label, gid, h, png_path in plan:
-        if h not in uop.entries:
-            print(f"[ERROR]  {name} ({label}) gump {gid}: hash not found "
-                  "in UOP - nothing to replace, skipping")
-            continue
-        old = uop.entries[h]
         w, hh, px = load_png(png_path)
         payload = build_uop_payload(w, hh, px)
-        uop.replace_payload(h, payload)
-        print(f"[ok   ]  {name} ({label}) gump {gid}  {w}x{hh}  "
-              f"({old['clen']} -> {len(payload)} bytes)")
+        if h not in uop.entries:
+            # not in the UOP yet. The client reads gumps ONLY from this file when MainMisc.uop is present
+            # (ClassicUO GumpsLoader: IsUOPInstallation -> gumpartLegacyMUL.uop, Gumpart.mul is ignored),
+            # so a new gump has to be added here, not to Gumpart.mul.
+            try:
+                uop.add_payload(h, payload)
+            except RuntimeError as e:
+                print(f"[ERROR]  {name} ({label}) gump {gid}: {e} - skipping")
+                continue
+            print(f"[ok   ]  {name} ({label}) gump {gid}  {w}x{hh}  (NEW entry, {len(payload)} bytes)")
+        else:
+            old = uop.entries[h]
+            if old["flag"] == 0 and old["hlen"] == 0 and uop.read_payload(h) == payload:
+                # identical bytes already stored: writing again would only grow the file by one payload
+                print(f"[ok   ]  {name} ({label}) gump {gid}  {w}x{hh}  (identical, left as is)")
+            else:
+                uop.replace_payload(h, payload)
+                print(f"[ok   ]  {name} ({label}) gump {gid}  {w}x{hh}  "
+                      f"({old['clen']} -> {len(payload)} bytes)")
         written.append((name, label, gid, h, w, hh))
     uop.close()
 

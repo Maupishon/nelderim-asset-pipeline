@@ -436,15 +436,16 @@ BUILD.client = () => {
     wrap.innerHTML = "";
     if (!rows.length) return;
     const t = el("table", { class: "t" });
-    t.append(el("tr", {}, el("th", { text: "" }), el("th", { text: "Podgląd" }), el("th", { text: "Miejsce" }), el("th", { text: "Typ" }), el("th", { text: "Akcje" }), el("th", { text: "Body" }), el("th", { text: "Nazwa (opis w pliku)" })));
+    t.append(el("tr", {}, el("th", { text: "" }), el("th", { text: "Podgląd" }), el("th", { text: "Miejsce" }), el("th", { text: "Typ" }), el("th", { text: "Akcje" }), el("th", { text: "Body" }), el("th", { text: "Nazwa (opis w pliku)" }), el("th", { text: "ID przedmiotu (do gumpu/artu)" })));
     for (const r of rows) {
       const c = el("input", { type: "checkbox", checked: r.on !== false && r.body !== null }); c.onchange = () => { r.on = c.checked; };
       const nm = el("input", { type: "text", value: r.name || "", placeholder: "np. Czerwony smok" }); nm.onchange = () => { r.name = nm.value.trim(); };
+      const ii = el("input", { type: "text", value: r.item || "", placeholder: "np. 0x2684" }); ii.onchange = () => { r.item = ii.value.trim(); };
       t.append(el("tr", {}, el("td", {}, c),
         el("td", {}, el("img", { src: `/api/animslot/thumb?file=${fileN}&slot=${r.slot}`, style: "max-height:72px;image-rendering:pixelated;background:#0a0c10;border-radius:4px", alt: "" })),
         el("td", { class: "mono", text: r.slot }), el("td", { text: { MONSTER: "potwór", ANIMAL: "zwierzę", HUMAN: "człowiek" }[r.type] || r.type }),
         el("td", { text: `${r.actions}/${r.actions_total}` }),
-        el("td", { class: "mono" + (r.body === null ? " bad" : ""), text: r.body === null ? "brak wolnego" : r.body }), el("td", {}, nm)));
+        el("td", { class: "mono" + (r.body === null ? " bad" : ""), text: r.body === null ? "brak wolnego" : r.body }), el("td", {}, nm), el("td", {}, ii)));
     }
     wrap.append(t);
   };
@@ -458,8 +459,8 @@ BUILD.client = () => {
     } catch (e) {}
   };
   const wire = async () => {
-    const sel = rows.filter((r) => r.on !== false && r.body !== null);
-    if (!sel.length) return toast("Najpierw „Szukaj” i zaznacz animacje.", "bad");
+    const sel = rows.filter((r) => r.on !== false && r.body !== null && !r.wired);
+    if (!sel.length) return toast("Najpierw „Szukaj” i zaznacz animacje (już podpiętych nie podpina się drugi raz).", "bad");
     if (!confirm(`Dopisać ${sel.length} wpis(ów) do Bodyconv.def i mobtypes.txt?\n\nPliki trafią do folderu wyników (anim_wire), z kopią obecnych. Do klienta (KOPII) kopiujesz je sam. Dopisywanie do Bodyconv.def nie było jeszcze sprawdzone w grze – najpierw sprawdź jedno body.`)) return;
     const names = Object.fromEntries(sel.filter((r) => r.name).map((r) => [r.slot, r.name]));
     try {
@@ -470,8 +471,34 @@ BUILD.client = () => {
   };
   const fchk = form(s4.body, [{ key: "body", label: "Sprawdź body", placeholder: "np. 32", help: "Pokazuje, co już używa danego numeru body: mobtypes.txt, body.def, Bodyconv.def, pliki UOP (klient 3D) i anim.mul. Jeśli w grze widać inny wygląd niż w UOFiddlerze, zwykle winne są pliki UOP – mają pierwszeństwo." }]);
   btns(s4.body, ["🩺 Sprawdź", () => { const b = fchk.body.get(); if (!/^\d+$/.test(b)) return toast("Wpisz numer body, np. 32.", "bad"); runTask("anim_check", { body: +b }).then(() => showLog(true)); }]);
+  const art = async () => {
+    const sel = rows.filter((r) => r.on !== false && r.body !== null);
+    if (!sel.length) return toast("Najpierw „Szukaj” i zaznacz animacje.", "bad");
+    try {
+      const j = await runTask("anim_art", { file: fileN, rows: sel.map((r) => ({ slot: r.slot, body: r.body, name: r.name || "", item: r.item || "" })) }, "Gump i art z klatki");
+      const it = j.result.items || [];
+      const made = it.filter((x) => !x.skipped && !x.error).length, skip = it.filter((x) => x.skipped).length, bad = it.filter((x) => x.error).length;
+      s4.ok(`Gump i art: ${made} gotowe, ${skip} pominięte (gump już zrobiony w innym module), ${bad} z błędem. Pliki PNG i receptura są w folderze wyników (anim_art). Jakość: przybliżenie z klatki animacji – obejrzyj porownanie_*.png.`);
+      showLog(true);
+    } catch (e) {}
+  };
+  const showWired = async () => {
+    fileN = +f4.file.get(); store("animfile", String(fileN));
+    try {
+      const j = await runTask("anim_wired", { file: fileN }, `Podpięte animacje w anim${fileN}.mul`);
+      if (j.result.error) return s4.bad(j.result.error);
+      const only = fwf.typ.get();
+      rows = (j.result.wired || []).filter((r) => only === "ALL" || r.type === only).map((r) => ({ ...r, on: false }));
+      draw4();
+      s4.info(`anim${fileN}.mul: ${rows.length} już podpiętych w Bodyconv.def. Zaznacz animacje, wpisz ID przedmiotu i kliknij „Gump i art z klatki”.`);
+    } catch (e) {}
+  };
+  const fwf = form(s4.body, [{ key: "typ", label: "Które podpięte pokazać", type: "select", options: [["HUMAN", "ludzie (ubrania, szaty)"], ["ALL", "wszystkie"], ["MONSTER", "potwory"], ["ANIMAL", "zwierzęta"]],
+    help: "Filtr listy „Pokaż już podpięte”. Gump i art robi się zwykle dla animacji typu człowiek (przedmioty do noszenia)." }]);
+  btns(s4.body, ["📋 Pokaż już podpięte", showWired, "", "Wczytuje animacje, które są już w Bodyconv.def (np. wpięte wcześniej). Pozwala dla nich zrobić gump i art z klatki."]);
   btns(s4.body, ["🔍 Szukaj", scan, "primary", "Przegląda plik i pokazuje nieprzypisane animacje z proponowanym body. Niczego nie zapisuje."],
-    ["🔗 Podepnij zaznaczone…", wire, "", "Dopisuje Bodyconv.def i mobtypes.txt do folderu wyników (z kopią obecnych)."]);
+    ["🔗 Podepnij zaznaczone…", wire, "", "Dopisuje Bodyconv.def i mobtypes.txt do folderu wyników (z kopią obecnych)."],
+    ["🖼 Gump i art z klatki", art, "", "Dla zaznaczonych robi z klatki animacji gump (męski i żeński, body+50000 / +60000) i ikonę art jako PNG w folderze wyników. Pomija animacje, dla których gump był już przygotowany w innym module. Niczego nie zmienia w kliencie."]);
 };
 
 // ------------------------------------------------------------------ FIT LAB (3D)

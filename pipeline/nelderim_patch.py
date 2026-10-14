@@ -65,6 +65,21 @@ GUMP_MALE_BASE = 50000
 GUMP_FEMALE_BASE = 60000
 
 
+def _has_file(client, name):
+    try:
+        return any(e.lower() == name.lower() for e in os.listdir(client))
+    except OSError:
+        return False
+
+
+def _is_uop_installation(client):
+    return _has_file(client, "MainMisc.uop")
+
+
+def _has_uop_gumps(client):
+    return _has_file(client, "gumpartLegacyMUL.uop")
+
+
 def classify(item, client):
     """Return the set of engines this item needs: any of
     {'wearable', 'gump_uop', 'monster'}. Uses the shared core to decide
@@ -87,6 +102,10 @@ def classify(item, client):
     uop_resident = set()
     if gump_ids and core is not None:
         uop_resident = core.gump_uop_bodies(client, gump_ids)
+        # With MainMisc.uop present ClassicUO reads gumps ONLY from gumpartLegacyMUL.uop (Gumpart.mul is ignored),
+        # so every gump goes to the UOP tool - ids not in it yet are added there as new entries.
+        if _is_uop_installation(client) and _has_uop_gumps(client):
+            uop_resident = set(gump_ids)
 
     if uop_resident:
         engines.add("gump_uop")
@@ -106,7 +125,16 @@ def sub_recipe(items, path):
         json.dump({"items": items}, f, indent=2, ensure_ascii=False)
 
 
+def _frozen_argv(argv):
+    """In the PyInstaller exe sys.executable is Nelderim.exe, not python: a script must go through
+    `--run-script` (otherwise the exe answers "Nieznana komenda" and the engine never starts)."""
+    if getattr(sys, "frozen", False) and len(argv) > 1 and argv[0] == sys.executable and str(argv[1]).lower().endswith(".py"):
+        return [argv[0], "--run-script", *argv[1:]]
+    return argv
+
+
 def run_tool(argv, dry):
+    argv = _frozen_argv(argv)
     printable = " ".join(
         (a if " " not in a else f'"{a}"') for a in argv)
     print(f"\n>>> {printable}")
@@ -238,17 +266,7 @@ def main():
             argv.append("--allow-link")
         rc_total |= run_tool(argv, dry=not a.apply) or 0
 
-    # ---- 2. gump-in-UOP -> uop_gump_patch.py ---------------------------
-    if gump_uop_items:
-        rp = os.path.join(tmpdir, "gump_uop.json")
-        sub_recipe(gump_uop_items, rp)
-        argv = [sys.executable, UOP_GUMP,
-                "--client", a.client, "--recipe", rp]
-        if a.apply:
-            argv.append("--apply")
-        rc_total |= run_tool(argv, dry=not a.apply) or 0
-
-    # ---- 3. monster anim -> vd_inject.py (one call per .vd) ------------
+    # ---- 2. monster anim -> vd_inject.py (one call per .vd) ------------
     for it in monster_items:
         vd_rel = it["vd"]
         vd_path = vd_rel if os.path.isabs(vd_rel) else os.path.join(base, vd_rel)
@@ -261,6 +279,22 @@ def main():
         if a.apply:
             argv.append("--apply")
         rc_total |= run_tool(argv, dry=not a.apply) or 0
+
+    # ---- 3. gump-in-UOP -> uop_gump_patch.py ---------------------------
+    # Runs LAST on purpose: it is the only engine that writes straight into the live client (the UOP is
+    # patched in place), every other engine writes to --out. So it must not run after another engine failed.
+    if gump_uop_items:
+        rp = os.path.join(tmpdir, "gump_uop.json")
+        sub_recipe(gump_uop_items, rp)
+        argv = [sys.executable, UOP_GUMP,
+                "--client", a.client, "--recipe", rp]
+        if a.apply:
+            argv.append("--apply")
+        if a.apply and rc_total:
+            print("\n[nelderim] SKIPPED uop_gump_patch.py: an earlier engine failed (see above) and this one "
+                  "writes into the live client in place. Fix the failure and run again.")
+        else:
+            rc_total |= run_tool(argv, dry=not a.apply) or 0
 
     # ---- deploy notes ---------------------------------------------------
     print("\n" + "=" * 68)
