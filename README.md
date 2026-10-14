@@ -95,6 +95,13 @@ Nie masz modelu? Kliknij **🎞 Z pliku .vd…**: program odtworzy przybliżoną
 ### F. Import do gry
 Gotowy `.vd` importujesz w **UOFiddlerze** (Animations → Animation Edit → Import from VD → Save), **na kopii klienta**.
 
+### G. Mam animację w kliencie i chcę do niej dodać gump (paperdoll) i ikonę (art)
+Krok 4 w **Dodawanie do klienta**: **📋 Pokaż już podpięte** (albo **Szukaj** dla nieprzypisanych) → zaznacz animacje, wpisz **ID przedmiotu**
+→ **🖼 Gump i art z klatki**. Albo wskaż własne PNG-i w kroku 2 (pola Ikona, Gump męski, Gump damski) i zrób **Na sucho** → **Zastosuj…**.
+- Gump ma mieć ok. **260×237 px** (ciało), a ikona kilkadziesiąt px. Obrazki znacznie większe program odrzuca z komunikatem.
+- Numer gumpu wynika z body: **męski = body + 50000, żeński = body + 60000**.
+- Przedmiot (`item_id`) jest wymagany, bo to on dostaje wpis w tiledata i ikonę.
+
 ---
 
 ## 4. Gdy coś nie działa
@@ -107,6 +114,9 @@ Gotowy `.vd` importujesz w **UOFiddlerze** (Animations → Animation Edit → Im
 | Brakuje bibliotek (numpy, Pillow) | Na ekranie **Start** kliknij **Zainstaluj** (tylko wersja bez exe) |
 | W narzędziach 2D błąd o starej wersji skryptów | Rozpakuj paczkę Levy'ego v2 do folderu toolkitu **z nadpisaniem** |
 | Przycisk **Wybierz…** nic nie robi (Linux) | `sudo apt install python3-tk` albo wpisz ścieżkę ręcznie |
+| W świecie widać ubranie, ale w paperdollu (okno postaci) go nie ma | Gump nie jest w `gumpartLegacyMUL.uop`. Klient z plikiem `MainMisc.uop` czyta gumpy **tylko** z UOP i ignoruje `Gumpart.mul`. Zapisz gump jeszcze raz przez **Dodawanie do klienta** (nowa wersja dopisuje go do UOP) i zrestartuj klienta |
+| „Nieznane zadanie” / „Nieznana komenda” | Działa stara wersja programu. Zamknij ją i uruchom nową (exe zbuduj od nowa przez `build_exe.bat`) |
+| Ścieżka z polskimi literami „nie istnieje” (np. `BezrÄ™ki`) | Wskaż plik jeszcze raz przyciskiem **Wybierz…** w nowej wersji programu |
 | Inny błąd | Kliknij **Szczegóły ▸** na dole strony i wklej całą treść osobie, która pomaga |
 
 ---
@@ -116,8 +126,10 @@ Gotowy `.vd` importujesz w **UOFiddlerze** (Animations → Animation Edit → Im
 - Nie zmienia klienta sam z siebie i nie modyfikuje skryptów serwera (C# w ServUO robisz osobno).
 - Nie sprawdza, jak przedmiot wygląda w grze. To zawsze sprawdzasz sam (po skopiowaniu plików do kopii klienta).
 - Nie obsługuje animacji leżących wyłącznie w plikach `.uop` ani body 401.
+- Nowych gumpów jest do **52** na jeden plik `gumpartLegacyMUL.uop` (tyle wolnych miejsc ma jego tablica bloków). Potem trzeba inaczej.
+- Gump i art z klatki animacji to **przybliżenie** (klatka ma ok. 60 px, paperdoll ok. 200 px). Dla szat wychodzi dobrze, dla broni i pasków to raczej podkład do ręcznej poprawki.
 
-**Sprawdzone w grze:** podpinanie animacji z `anim5.mul` przez `Bodyconv.def` + `mobtypes.txt` (wilkołak).
+**Sprawdzone w grze:** podpinanie animacji z `anim5.mul` przez `Bodyconv.def` + `mobtypes.txt` (wilkołak, szata humanoidalna 429); dopisywanie nowego gumpu (paperdoll) do `gumpartLegacyMUL.uop`.
 **Jeszcze niesprawdzone w grze:** model 3D (przymiarka i `.vd` z 3D) oraz odtwarzanie 3D z `.vd`. Traktuj je jako podgląd i weryfikuj wynik.
 
 ---

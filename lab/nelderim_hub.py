@@ -352,6 +352,22 @@ def cmd_anim_wire(cfg, n, slots=None, names=None, apply=False):
     return _pl(cfg, "anim_wire.py", *a)
 
 
+def cmd_anim_wired(cfg, n):
+    """anim_art.py --list-wired: animations of anim<n>.mul that Bodyconv.def already points at. Prints RESULT_JSON."""
+    return _pl(cfg, "anim_art.py", "--client", cfg["client"], "--file", str(n), "--list-wired")
+
+
+def cmd_anim_art(cfg, n, slot, body, name, out, have_dir="", item_id=""):
+    """anim_art.py: gump (male+female) + art PNG from the idle frame of an anim<n>.mul slot. Writes only PNGs into out."""
+    a = ["--client", cfg["client"], "--file", str(n), "--slot", str(int(slot)), "--body", str(int(body)),
+         "--name", name or "", "--out", str(out), "--json"]
+    if have_dir:
+        a += ["--have-dir", str(have_dir)]
+    if str(item_id).strip():
+        a += ["--item-id", str(item_id).strip()]
+    return _pl(cfg, "anim_art.py", *a)
+
+
 def cmd_anim_check(cfg, body):
     """anim_wire.py --check-body: what already uses a body id (defs, UOP frames / sequence, anim.mul)."""
     return _pl(cfg, "anim_wire.py", "--client", cfg["client"], "--check-body", str(int(body)))

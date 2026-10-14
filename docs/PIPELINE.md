@@ -27,8 +27,9 @@ The scripts can also be run directly (`python pipeline/nelderim_search.py ...`).
 
 `pipeline/nelderim_patch.py` reads one recipe, classifies each item, and routes it to whichever engine actually needs to
 touch it - `uopatch.py` for wearable art/gump/tiledata, `uop_gump_patch.py` when a gump id already lives in
-`gumpartLegacyMUL.uop` (UOP beats MUL - a MUL-only write there is silently ignored by the client), or `vd_inject.py` for
-a brand-new monster animation. Dry run is the default; `--apply` is required to write anything.
+`gumpartLegacyMUL.uop` (UOP beats MUL - a MUL-only write there is silently ignored by the client; with `MainMisc.uop`
+present that is true for every gump id, so all of them are routed here and new ones are added to the UOP), or
+`vd_inject.py` for a brand-new monster animation. Dry run is the default; `--apply` is required to write anything.
 
 ## Layout
 
@@ -95,6 +96,21 @@ use in `nelderim_core.py`, but worth having in one place:
 1. **UOP beats MUL.** If a gump/animation id already has an entry in a
    `.uop` file, writing to the matching `.mul` file has no visible effect
    in-game. Check UOP residency before deciding where to write.
+   **It is stronger than that for gumps:** when `MainMisc.uop` is present
+   (and the client is >= 7.0.0) ClassicUO's `GumpsLoader` reads gumps ONLY
+   from `gumpartLegacyMUL.uop` and never opens `Gumpart.mul`/`Gumpidx.mul`.
+   A *new* gump id written to the MUL pair is therefore invisible too, not
+   just ids that are already UOP-resident. Found 2026-10-14: the item showed
+   its worn animation in the world, but the paperdoll stayed bare.
+   `uop_gump_patch.py` now ADDS missing entries to the UOP (payload appended
+   at the end of the file, record written into a free slot of the last
+   block table, file count + header count bumped; room for `blkcap - used`
+   entries, 52 in this shard's file), and `nelderim_patch.py` routes every
+   gump there when `MainMisc.uop` exists. Art is the other way round: this
+   client has no `artLegacyMUL.uop` (only `tileart.uop`), so `art.mul` is read.
+   Verified on a copy of the UOP (all original entries byte-identical, new
+   ones decode correctly) and **in game (2026-10-14): the paperdoll shows the
+   new gump after the UOP entry was added.**
 2. **Resolution order matters.** `body.def` (hard redirect) →
    `AnimationFrame*.uop` → `Bodyconv.def` → `anim.mul`. A body listed in
    any earlier stage never reaches your `anim.mul` write.

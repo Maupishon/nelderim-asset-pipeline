@@ -385,6 +385,32 @@ def task(cfg, name, p):
         rng = str(p.get("range", "")).strip()
         if rng and not re.fullmatch(r"\d+-\d+", rng):
             raise ValueError("Zakres body wpisz jak 900-2000.")
+        try:
+            rec_items = json.loads(Path(p["recipe"]).read_text(encoding="utf-8")).get("items", [])
+        except (OSError, ValueError):
+            rec_items = []
+        no_id = [str(it.get("name") or "(bez nazwy)") for it in rec_items if not it.get("vd") and not str(it.get("item_id", "")).strip()]
+        if no_id:
+            raise ValueError("Te pozycje nie mają ID przedmiotu (item_id), a narzędzie go wymaga: " + ", ".join(no_id) +
+                             ". Wpisz je w kroku 2 (pole „item_id”, np. 0x2684) i zapisz recepturę.")
+        too_big = []
+        try:
+            from PIL import Image
+            rdir = Path(p["recipe"]).parent
+            for it in rec_items:
+                for fld, limit in (("art", 256), ("gump_male", 600), ("gump_female", 600)):
+                    f = str(it.get(fld) or "").strip()
+                    if f and not it.get("vd"):
+                        fp = Path(f) if os.path.isabs(f) else rdir / f
+                        if fp.is_file():
+                            w, h = Image.open(fp).size
+                            if max(w, h) > limit:
+                                too_big.append(f"{it.get('name') or '?'} / {fld}: {w}×{h} (max ok. {limit}) – {fp.name}")
+        except Exception:   # noqa: BLE001 - size check is advisory, the engines still validate
+            pass
+        if too_big:
+            raise ValueError("Te obrazki są za duże: " + "; ".join(too_big) +
+                             ". Gump paperdolla ma mieć ok. 260×237 px, a ikona (art) rzędu 44–100 px – przeskaluj PNG i wskaż go ponownie.")
         c = H.cmd_patch(cfg, p["recipe"], bool(p.get("apply")), p.get("missing", "stop"), rng)
         return run_job("Zastosowanie zmian" if p.get("apply") else "Przebieg na sucho", [lambda j: c])
     if name == "anim_check":
@@ -401,6 +427,39 @@ def task(cfg, name, p):
                 j.result.update(json.loads(m[-1][len("RESULT_JSON "):]))
         c["on_output"] = parse
         return run_job("Podpinanie animacji" if p.get("apply") else "Szukanie nieprzypisanych animacji", [lambda j: c])
+    if name == "anim_wired":
+        require("client")
+        c = H.cmd_anim_wired(cfg, int(p.get("file", 5)))
+
+        def parse(j, cap):
+            m = [x for x in cap if x.startswith("RESULT_JSON ")]
+            if m:
+                j.result.update(json.loads(m[-1][len("RESULT_JSON "):]))
+        c["on_output"] = parse
+        return run_job("Szukanie już podpiętych animacji", [lambda j: c])
+    if name == "anim_art":
+        require("client", "output")
+        rows = [r for r in (p.get("rows") or []) if r.get("body") is not None]
+        if not rows:
+            raise ValueError("Brak podpiętych animacji (potrzebne slot i body).")
+        have = str(H.workroot(cfg)) if cfg.get("toolkit") else ""
+        steps = []
+        for r in rows:
+            nm = str(r.get("name") or "").strip()
+            out = Path(cfg["output"]) / "anim_art" / f"{int(r['body'])}_{H.slugify(nm or 'anim')}"
+            it_id = str(r.get("item") or "").strip()
+            if it_id:
+                it_id = norm_item(it_id)
+            c = H.cmd_anim_art(cfg, int(p.get("file", 5)), int(r["slot"]), int(r["body"]), nm, out, have, it_id)
+            c["ok"] = (0, 1)
+
+            def parse(j, cap, out=str(out)):
+                m = [x for x in cap if x.startswith("RESULT_JSON ")]
+                if m:
+                    j.result.setdefault("items", []).append(json.loads(m[-1][len("RESULT_JSON "):]))
+            c["on_output"] = parse
+            steps.append(lambda j, c=c: c)
+        return run_job("Gump i art z klatki animacji", steps)
     if name == "uo3d_render":
         probs = H.model3d_problems(cfg)
         if probs:
@@ -462,7 +521,7 @@ def pack_job(cfg, p):
 
     def check(job):
         c = H.cmd_conv_check(cfg, target)
-        r = subprocess.run(c["argv"], cwd=c["cwd"], env=c["env"], capture_output=True, text=True, **NOWIN)
+        r = subprocess.run(c["argv"], cwd=c["cwd"], env=c["env"], capture_output=True, text=True, encoding="utf-8", errors="replace", **NOWIN)
         if "INMUL" not in r.stdout and not orig.exists():
             job.say(f"[!] Animacja {target} leży w innym pliku niż anim.mul. Wyciągnij ją UOFiddlerem (Animation Edit → ID {target} → "
                     f"Export to VD) i zapisz jako: {orig}")
@@ -641,7 +700,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, png, "image/png")
         if path == "/api/recipe":
             p = Path(q["path"])
-            return self.send(200, json.loads(p.read_text(encoding="utf-8")) if p.is_file() else {"items": []})
+            return self.send(200, fix_recipe_paths(json.loads(p.read_text(encoding="utf-8")), p.parent) if p.is_file() else {"items": []})
         return self.send(404, {"error": "nie ma takiego adresu"})
 
     def route_post(self):
@@ -837,7 +896,7 @@ def state(cfg):
 def deps(cfg):
     def ok(cmd):
         try:
-            r = subprocess.run(cmd["argv"], cwd=cmd["cwd"], env=cmd["env"], capture_output=True, text=True, timeout=60, **NOWIN)
+            r = subprocess.run(cmd["argv"], cwd=cmd["cwd"], env=cmd["env"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, **NOWIN)
             return "DEPS_OK" in r.stdout
         except (OSError, subprocess.SubprocessError):
             return False
@@ -846,10 +905,29 @@ def deps(cfg):
     return out
 
 
+def fix_recipe_paths(recipe, base):
+    """Repairs paths that were saved garbled by the old file picker (UTF-8 bytes read as cp1252: "Bezrďki" -> "BezrÄ™ki"),
+    but only when the repaired path exists and the stored one does not."""
+    for it in recipe.get("items", []):
+        for k, v in list(it.items()):
+            if not isinstance(v, str) or v.isascii():
+                continue
+            try:
+                fixed = v.encode("cp1252").decode("utf-8")
+            except (UnicodeError, ValueError):
+                continue
+            ok = lambda x: os.path.exists(x if os.path.isabs(x) else os.path.join(str(base), x))
+            if fixed != v and not ok(v) and ok(fixed):
+                it[k] = fixed
+    return recipe
+
+
 def pick(kind, title, filt):
     """Native file / folder dialog in a helper process (tkinter)."""
     try:
-        r = subprocess.run(self_cmd("--pick", kind, title, filt), capture_output=True, text=True, timeout=600, **NOWIN)
+        # the helper prints UTF-8; without an explicit encoding Windows decodes it with the ANSI code page ("ę" -> "Ä™")
+        r = subprocess.run(self_cmd("--pick", kind, title, filt), capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=600, **NOWIN)
         return r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
     except (OSError, subprocess.SubprocessError):
         return ""
