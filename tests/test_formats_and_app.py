@@ -71,3 +71,13 @@ def test_server_rejects_other_web_pages(tmp_path, monkeypatch, client):
         assert _raw(base, "POST", "/api/open", own, json.dumps({"path": str(tmp_path)}).encode())[0] == 403  # file outside the app's folders
     finally:
         srv.shutdown()
+
+
+def test_robe_from_gump_command_line():
+    import nelderim_hub as H
+    cfg = {"toolkit": "T", "client": "C"}
+    a = H.cmd_robe_from_gump(cfg, "g.png", "szata_x", "Szata X", "0x2684", 970, no_hood=True, actions="4 0")["argv"]
+    assert a[-1] == "0" and "--no-hood" in a
+    i = a.index("--actions"); assert a[i + 1:i + 3] == ["4", "0"]
+    assert a[a.index("--toolkit") + 1] == "T" and a[a.index("--key") + 1] == "szata_x"
+    assert "robe_from_gump.py" in " ".join(a)

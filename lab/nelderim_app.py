@@ -529,6 +529,22 @@ def task(cfg, name, p):
             j.result["dir"] = str(out)
         c["on_output"] = parse
         return run_job("Klasa C# dla ServUO", [lambda j: c])
+    if name == "robe":
+        require("toolkit", "client")
+        gump = str(p.get("gump") or "").strip()
+        if not gump or not Path(gump).is_file():
+            raise ValueError("Wskaż plik PNG z gumpem szaty (przezroczyste tło).")
+        key = H.slugify(p.get("name") or Path(gump).stem)
+        c = H.cmd_robe_from_gump(cfg, gump, key, p.get("title") or p.get("name") or "", norm_item(p.get("graphic") or "0x2684"),
+                                 int(p.get("base_anim") or 970), bool(p.get("no_hood")), p.get("actions", ""))
+
+        def parse(j, cap):
+            m = [x for x in cap if x.startswith("RESULT_VD ")]
+            if m:
+                j.result["vd"] = m[-1][len("RESULT_VD "):].strip()
+            j.result["lab"] = str(Path(cfg["toolkit"]) / "workspace" / "ultima-online" / key / "lab")
+        c["on_output"] = parse
+        return run_job("Szata z gumpu", [lambda j: c])
     if name == "anim_import":
         require("client", "output")
         vd = str(p.get("vd") or "").strip()

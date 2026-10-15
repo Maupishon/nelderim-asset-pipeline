@@ -162,6 +162,7 @@ use in `nelderim_core.py`, but worth having in one place:
   gump -> design (alpha bbox x4, LANCZOS) -> build_item (35 actions, face/hands cut) -> hood_blend -> `.vd`
   (`<toolkit>/workspace/ultima-online/vd/<key>_<base>.vd`). The .vd is a copy of the base slot layout: import it into an
   EMPTY slot, never into the base slot.
+* GUI: Ubranie 2D, step 6 "Szata z gumpu" (task `robe`) runs the same tool.
 * `anim_import.py` takes `--vd` / `--name` repeatedly: every file gets the next empty slot (from `--first-slot`, default 432)
   and the next free body; one cumulative `anim<N>.mul/.idx`, `Bodyconv.def`, `mobtypes.txt`. A body is skipped when its
   paperdoll gumps (+50000 / +60000) already exist in `gumpartLegacyMUL.uop` (the gump patch would overwrite another item's gump).

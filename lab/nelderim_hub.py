@@ -296,6 +296,19 @@ def cmd_build_item(cfg, graphic, design, out, key, title, hide, actions, cut="",
     return _tk(cfg, *a)
 
 
+def cmd_robe_from_gump(cfg, gump, key, title="", graphic="0x2684", base_anim=970, no_hood=False, actions=""):
+    """robe_from_gump.py: gump PNG -> design -> build_item -> hood_blend -> .vd. Prints RESULT_VD."""
+    a = ["--gump", str(gump), "--toolkit", cfg["toolkit"], "--client", cfg["client"], "--key", key,
+         "--graphic", str(graphic), "--base-anim", str(int(base_anim))]
+    if title:
+        a += ["--title", title]
+    if no_hood:
+        a.append("--no-hood")
+    if str(actions).strip():
+        a += ["--actions", *str(actions).split()]
+    return _pl(cfg, "robe_from_gump.py", *a)
+
+
 def cmd_hood_blend(cfg, lab):
     """hood_blend.py: match the hood of a hooded robe to the rest of the robe (in place, after build_item)."""
     masks = Path(cfg["toolkit"]) / "workspace/ultima-online/region-audit/all-actions-region-pass/frames"
