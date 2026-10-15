@@ -32,7 +32,7 @@ def test_app_server_state_and_page(tmp_path, monkeypatch, client):
     try:
         st = json.loads(urllib.request.urlopen(base + "/api/state").read())
         keys = [p["key"] for p in st["paths"]]
-        assert keys == ["client", "toolkit", "output", "bodyglb"]
+        assert keys == ["client", "toolkit", "output", "bodyglb", "studio", "blender"]
         assert next(p for p in st["paths"] if p["key"] == "client")["ok"]
         html = urllib.request.urlopen(base + "/").read().decode()
         assert "Nelderim Lab" in html
