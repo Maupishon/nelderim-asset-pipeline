@@ -288,6 +288,25 @@ BUILD.cloth = () => {
   btns(s4.body, ["▶ Zbuduj (próba)", () => build(f3b.actions.get()), "primary"], ["Zbuduj wszystkie 35", () => build("")], ["🌐 Podgląd", () => openLab(lab)]);
   const s5 = step(p, 5, "Zapisz do .vd", "Pakuje wynik do pliku dla UOFiddlera (z kopią poprzedniej wersji).");
   btns(s5.body, ["📦 Spakuj do .vd", async () => { if (!lab) return toast("Najpierw zbuduj.", "bad"); const j = await runTask("pack", { lab, outline: "" }); packResult(s5, j); }, "primary"]);
+
+  // ---- 6: a hooded robe straight from its paperdoll gump (everything in one go)
+  const s6 = step(p, 6, "Szata z gumpu (jednym kliknięciem)", "Dla szat z kapturem: z gotowego gumpu paperdolla (PNG, przezroczyste tło) program sam robi wzór, buduje wszystkie 35 akcji na bazie Hooded Shroud, dopasowuje kaptur i pakuje do .vd. Pomija kroki 1–5. Plik .vd wgrywasz potem do WOLNEGO miejsca (Dodawanie do klienta → krok 5), nie do miejsca bazy.");
+  const f6 = form(s6.body, [
+    { key: "gump", label: "Gump (PNG)", type: "file", filter: ".png", help: "Gump paperdolla szaty z przezroczystym tłem (np. 260×237). Program wycina szatę i powiększa ją ×4." },
+    { key: "name", label: "Nazwa pracy", help: "Np. szata-arcymaga. Z niej powstaje nazwa pliku .vd i folder pracy." },
+    { key: "graphic", label: "Przedmiot bazowy", def: "0x2684", help: "ID przedmiotu, którego animację przerabiamy (kształt). 0x2684 = Hooded Shroud." },
+    { key: "base_anim", label: "Animacja bazowa", def: "970", help: "Numer animacji tego przedmiotu (dla 0x2684 to 970)." },
+    { key: "no_hood", label: "Kaptur", type: "check", text: "NIE dopasowuj kaptura", help: "Zaznacz tylko, gdy szata nie ma kaptura." },
+    { key: "actions", label: "Akcje (próba)", placeholder: "puste = wszystkie 35", help: "Np. „4 0” na próbę. Puste = wszystkie 35 akcji." }]);
+  btns(s6.body, ["🧙 Zrób szatę z gumpu", async () => {
+    const v = f6.values(); if (!v.gump || !v.name) return toast("Wskaż gump i nazwę pracy.", "bad");
+    try {
+      const j = await runTask("robe", v, "Szata z gumpu");
+      if (j.status === "ok") { lab = j.result.lab; s6.ok(`Gotowe: ${j.result.vd}
+Obejrzyj w Podgląd .vd, potem wgraj do wolnego miejsca (Dodawanie do klienta → krok 5).`); }
+      else s6.bad("Nie udało się (Szczegóły).");
+    } catch (e) {}
+  }, "primary"], ["🌐 Podgląd przymiarki", () => openLab(lab)]);
 };
 async function checkImage(stepObj, image) {
   if (!image) return toast("Wskaż plik PNG.", "bad");
