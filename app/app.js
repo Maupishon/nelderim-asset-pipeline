@@ -570,29 +570,49 @@ BUILD.client = () => {
     ["🔗 Podepnij zaznaczone…", wire, "", "Dopisuje Bodyconv.def i mobtypes.txt do folderu wyników (z kopią obecnych)."],
     ["🖼 Gump i art z klatki", art, "", "Dla zaznaczonych robi z klatki animacji gump (męski i żeński, body+50000 / +60000) i ikonę art jako PNG w folderze wyników. Pomija animacje, dla których gump był już przygotowany w innym module. Niczego nie zmienia w kliencie."]);
 
-  // ---- 5: a People .vd into an EMPTY slot of anim2..5.mul (+ Bodyconv.def, mobtypes.txt)
-  const s5 = step(p, 5, "Wgraj animację .vd do wolnego miejsca (anim2–5.mul)", "Wkłada gotowy plik .vd (ludzie, 35 akcji × 5 kierunków) do pierwszego pustego miejsca wybranego pliku animacji i dopisuje Bodyconv.def i mobtypes.txt z wolnym body. Wszystko trafia do folderu wyników (anim_import) – klienta nie zmienia. Najpierw „Na sucho”.");
+  // ---- 5: People .vd files into EMPTY slots of anim2..5.mul (+ Bodyconv.def, mobtypes.txt), several at once
+  const s5 = step(p, 5, "Wgraj animacje .vd do wolnych miejsc (anim2–5.mul)", "Wkłada gotowe pliki .vd (ludzie, 35 akcji × 5 kierunków) do kolejnych pustych miejsc wybranego pliku animacji i dopisuje Bodyconv.def i mobtypes.txt z wolnymi body. Każdy plik dostaje własne miejsce i body. Wszystko trafia do folderu wyników (anim_import) – klienta nie zmienia. Najpierw „Na sucho”.");
   const f5 = form(s5.body, [
-    { key: "vd", label: "Plik .vd", type: "file", filter: ".vd", help: "Animacja typu ludzie (35 akcji × 5 kierunków), np. z „Spakuj do .vd”." },
-    { key: "file", label: "Plik animacji", type: "select", options: [["5", "anim5.mul"], ["4", "anim4.mul"], ["3", "anim3.mul"], ["2", "anim2.mul"]], help: "Do którego pliku dopisać. Blok trafia na koniec pliku, istniejące dane się nie przesuwają." },
-    { key: "name", label: "Nazwa", help: "Opis w Bodyconv.def / mobtypes.txt oraz nazwa folderu wyników." },
-    { key: "slot", label: "Miejsce (slot)", placeholder: "puste = pierwsze wolne", help: "Numer slotu people (400+). Puste = pierwsze puste i niepodpięte. Uwaga: 400–431 to zakres gargulców – lepiej wskazać slot dalej od podpiętych." },
-    { key: "body", label: "Body", placeholder: "puste = wolne body", help: "Numer body do podpięcia. Puste = program dobiera wolne (sprawdza body.def, Bodyconv.def, mobtypes.txt, UOP, tiledata)." }],
+    { key: "file", label: "Plik animacji", type: "select", options: [["5", "anim5.mul"], ["4", "anim4.mul"], ["3", "anim3.mul"], ["2", "anim2.mul"]], help: "Do którego pliku dopisać. Bloki trafiają na koniec pliku, istniejące dane się nie przesuwają." },
+    { key: "first_slot", label: "Szukaj miejsc od", placeholder: "432", help: "Od którego numeru miejsca (400+) szukać pierwszego pustego. 400–431 to zakres gargulców, dlatego domyślnie od 432. Dla jednego pliku możesz wskazać dokładne miejsce i body w tabeli." }],
     { file: restore("animfile", "5") });
+  const list5 = []; const wrap5 = el("div"); s5.body.append(wrap5);
+  const draw5 = () => {
+    wrap5.innerHTML = "";
+    if (!list5.length) { wrap5.append(el("div", { class: "muted", text: "Nie dodano jeszcze żadnego pliku .vd." })); return; }
+    const t = el("table", { class: "t" });
+    t.append(el("tr", {}, el("th", { text: "Plik .vd" }), el("th", { text: "Nazwa (opis w plikach .def)" }), el("th", { text: "Miejsce" }), el("th", { text: "Body" }), el("th", { text: "" })));
+    list5.forEach((it, i) => {
+      const nm = el("input", { type: "text", value: it.name, placeholder: "np. Szata arcymaga" }); nm.onchange = () => { it.name = nm.value.trim(); };
+      const sl = el("input", { type: "text", value: it.slot, placeholder: "auto", style: "width:70px" }); sl.onchange = () => { it.slot = sl.value.trim(); };
+      const bd = el("input", { type: "text", value: it.body, placeholder: "auto", style: "width:70px" }); bd.onchange = () => { it.body = bd.value.trim(); };
+      if (list5.length > 1) { sl.disabled = true; bd.disabled = true; sl.title = bd.title = "Miejsce i body ręcznie tylko przy jednym pliku."; }
+      t.append(el("tr", {}, el("td", { class: "mono", text: it.vd.split(/[\\/]/).pop(), title: it.vd }), el("td", {}, nm), el("td", {}, sl), el("td", {}, bd),
+        el("td", {}, el("button", { class: "small", text: "✕", title: "Usuń z listy", onclick: () => { list5.splice(i, 1); draw5(); } }))));
+    });
+    wrap5.append(t);
+  };
+  const add5 = async () => {
+    const pth = await pickPath("file", "Plik .vd (ludzie)", ".vd"); if (!pth) return;
+    if (list5.some((x) => x.vd === pth)) return toast("Ten plik jest już na liście.", "bad");
+    const stem = pth.split(/[\\/]/).pop().replace(/\.vd$/i, "").replace(/_\d{3,4}$/, "").replace(/_/g, " ");
+    list5.push({ vd: pth, name: stem, slot: "", body: "" }); draw5();
+  };
+  draw5();
   const imp = async (apply) => {
-    const v = f5.values(); if (!v.vd) return toast("Wskaż plik .vd.", "bad");
-    if (apply && !confirm("Dopisać animację do anim" + v.file + ".mul (kopia w folderze wyników anim_import) i wpisy do Bodyconv.def / mobtypes.txt?
-
-Do klienta (KOPII) kopiujesz pliki sam. Dopisany slot nie był jeszcze sprawdzony w grze – najpierw jedno body.")) return;
+    if (!list5.length) return toast("Dodaj co najmniej jeden plik .vd.", "bad");
+    const v = f5.values(); store("animfile", String(v.file));
+    if (apply && !confirm("Dopisać " + list5.length + " animację(e) do anim" + v.file + ".mul (kopia w folderze wyników anim_import) i wpisy do Bodyconv.def / mobtypes.txt?\n\nDo klienta (KOPII) kopiujesz pliki sam. Zapis sprawdzany jest bajt po bajcie, ale w grze najpierw sprawdź jedno body.")) return;
+    const items = list5.map((x) => ({ vd: x.vd, name: x.name, slot: x.slot ? +x.slot : null, body: x.body ? +x.body : null }));
     try {
-      const j = await runTask("anim_import", { ...v, slot: v.slot ? +v.slot : null, body: v.body ? +v.body : null, apply }, apply ? "Import animacji" : "Import animacji (na sucho)");
+      const j = await runTask("anim_import", { items, file: +v.file, first_slot: v.first_slot ? +v.first_slot : null, apply }, apply ? "Import animacji" : "Import animacji (na sucho)");
       if (j.status !== "ok") return s5.bad("Nie udało się – zobacz Szczegóły.");
-      const r = j.result;
-      if (apply) { s5.ok(`Zapisano w ${r.dir}: anim${v.file}.mul, anim${v.file}.idx, Bodyconv.def, mobtypes.txt. Slot ${r.slot}, body ${r.body}. Skopiuj do KOPII klienta i sprawdź w grze.`); showLog(true); }
-      else s5.info(`Na sucho: slot ${r.slot}, body ${r.body}. Nic nie zapisano.`);
+      const r = j.result, rows = (r.items || []).map((x) => `${x.name || "?"}: miejsce ${x.slot}, body ${x.body}`).join("\n");
+      if (apply) { s5.ok(`Zapisano w ${r.dir}: anim${v.file}.mul, anim${v.file}.idx, Bodyconv.def, mobtypes.txt.\n${rows}\nSkopiuj do KOPII klienta i sprawdź w grze.`); showLog(true); }
+      else s5.info(`Na sucho (nic nie zapisano):\n${rows}`);
     } catch (e) {}
   };
-  btns(s5.body, ["👁 Na sucho", () => imp(false), "primary"], ["✍ Zapisz do wyników…", () => imp(true)]);
+  btns(s5.body, ["➕ Dodaj plik .vd…", add5], ["👁 Na sucho", () => imp(false), "primary"], ["✍ Zapisz do wyników…", () => imp(true)]);
 };
 
 // ------------------------------------------------------------------ FIT LAB (3D)

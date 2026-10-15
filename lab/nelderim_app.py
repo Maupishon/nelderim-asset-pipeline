@@ -547,18 +547,25 @@ def task(cfg, name, p):
         return run_job("Szata z gumpu", [lambda j: c])
     if name == "anim_import":
         require("client", "output")
-        vd = str(p.get("vd") or "").strip()
-        if not vd or not Path(vd).is_file():
-            raise ValueError("Wskaż plik .vd (ludzie, 35 akcji x 5 kierunków).")
-        label = str(p.get("name") or "").strip()
-        out = Path(cfg["output"]) / "anim_import" / H.slugify(label or Path(vd).stem)
-        c = H.cmd_anim_import(cfg, vd, int(p.get("file", 5)), out, p.get("slot"), p.get("body"), label,
+        items = [{"vd": str(i.get("vd") or "").strip(), "name": str(i.get("name") or "").strip(),
+                  "slot": i.get("slot"), "body": i.get("body")} for i in (p.get("items") or [])]
+        if not items and str(p.get("vd") or "").strip():                      # older single-file form
+            items = [{"vd": str(p["vd"]).strip(), "name": str(p.get("name") or "").strip(), "slot": p.get("slot"), "body": p.get("body")}]
+        if not items:
+            raise ValueError("Dodaj co najmniej jeden plik .vd (ludzie, 35 akcji x 5 kierunków).")
+        for i in items:
+            if not i["vd"] or not Path(i["vd"]).is_file():
+                raise ValueError(f"Nie ma pliku: {i['vd'] or '(pusty)'}")
+        label = items[0]["name"] or Path(items[0]["vd"]).stem
+        out = Path(cfg["output"]) / "anim_import" / H.slugify(label if len(items) == 1 else f"{label}_i_{len(items) - 1}_inne")
+        c = H.cmd_anim_import(cfg, items, int(p.get("file", 5)), out, p.get("first_slot"),
                               bool(p.get("apply")), bool(p.get("overwrite")))
 
         def parse(j, cap):
             m = [x for x in cap if x.startswith("RESULT_JSON ")]
             if m:
-                j.result.update(json.loads(m[-1][len("RESULT_JSON "):]))
+                r = json.loads(m[-1][len("RESULT_JSON "):])
+                j.result["items"] = r if isinstance(r, list) else [r]
             j.result["dir"] = str(out)
         c["on_output"] = parse
         return run_job("Import animacji do anim%s.mul" % int(p.get("file", 5)) if p.get("apply") else "Import animacji (na sucho)", [lambda j: c])

@@ -1,5 +1,7 @@
 """.vd write/read round trip and the Nelderim Lab server answering."""
 import json, threading, urllib.request
+from pathlib import Path
+import pytest
 from http.server import ThreadingHTTPServer
 
 import numpy as np
@@ -81,3 +83,17 @@ def test_robe_from_gump_command_line():
     i = a.index("--actions"); assert a[i + 1:i + 3] == ["4", "0"]
     assert a[a.index("--toolkit") + 1] == "T" and a[a.index("--key") + 1] == "szata_x"
     assert "robe_from_gump.py" in " ".join(a)
+
+
+def test_app_js_is_valid_module():
+    """app.js is an ES module; a stray raw newline in a string once broke the whole UI (node --check on a .js file does not catch it)."""
+    import shutil, subprocess, tempfile
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not installed")
+    src = Path(__file__).resolve().parent.parent / "app" / "app.js"
+    with tempfile.TemporaryDirectory() as d:
+        mjs = Path(d) / "app.mjs"
+        mjs.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        r = subprocess.run([node, "--check", str(mjs)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr

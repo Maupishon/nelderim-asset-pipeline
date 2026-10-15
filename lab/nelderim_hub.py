@@ -396,15 +396,19 @@ def cmd_anim_wire(cfg, n, slots=None, names=None, apply=False):
     return _pl(cfg, "anim_wire.py", *a)
 
 
-def cmd_anim_import(cfg, vd, n, out, slot=None, body=None, name="", apply=False, overwrite=False):
-    """anim_import.py: People .vd -> empty slot of anim<n>.mul + Bodyconv.def/mobtypes.txt (dry run unless apply). Prints RESULT_JSON."""
-    a = ["--client", cfg["client"], "--vd", str(vd), "--file", str(int(n)), "--out", str(out), "--json"]
-    if slot not in (None, ""):
-        a += ["--slot", str(int(slot))]
-    if body not in (None, ""):
-        a += ["--body", str(int(body))]
-    if name:
-        a += ["--name", str(name)]
+def cmd_anim_import(cfg, items, n, out, first_slot=None, apply=False, overwrite=False):
+    """anim_import.py: People .vd files -> empty slots of anim<n>.mul + Bodyconv.def/mobtypes.txt (dry run unless apply).
+    items = [{vd, name, slot?, body?}]; slot / body only with exactly one item. Prints RESULT_JSON."""
+    a = ["--client", cfg["client"], "--file", str(int(n)), "--out", str(out), "--json"]
+    for it in items:
+        a += ["--vd", str(it["vd"]), "--name", str(it.get("name") or "")]
+    if len(items) == 1:
+        if it.get("slot") not in (None, ""):
+            a += ["--slot", str(int(it["slot"]))]
+        if it.get("body") not in (None, ""):
+            a += ["--body", str(int(it["body"]))]
+    if first_slot not in (None, ""):
+        a += ["--first-slot", str(int(first_slot))]
     if overwrite:
         a.append("--overwrite")
     if apply:
