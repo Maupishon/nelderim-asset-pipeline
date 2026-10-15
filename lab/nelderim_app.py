@@ -435,6 +435,22 @@ def task(cfg, name, p):
                 j.result.update(json.loads(m[-1][len("RESULT_JSON "):]))
         c["on_output"] = parse
         return run_job("Podpinanie animacji" if p.get("apply") else "Szukanie nieprzypisanych animacji", [lambda j: c])
+    if name == "servuo_class":
+        require("output")
+        rp = Path(str(p.get("recipe") or ""))
+        if not rp.is_file():
+            raise ValueError("Najpierw zapisz recepturę (krok 2).")
+        out = Path(cfg["output"]) / "servuo"
+        c = H.cmd_servuo_class(cfg, rp, out, cfg.get("serv") or "")
+        c["ok"] = (0, 1)
+
+        def parse(j, cap):
+            m = [x for x in cap if x.startswith("RESULT_JSON ")]
+            if m:
+                j.result.update(json.loads(m[-1][len("RESULT_JSON "):]))
+            j.result["dir"] = str(out)
+        c["on_output"] = parse
+        return run_job("Klasa C# dla ServUO", [lambda j: c])
     if name == "anim_wired":
         require("client")
         c = H.cmd_anim_wired(cfg, int(p.get("file", 5)))
