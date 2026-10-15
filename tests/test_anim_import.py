@@ -99,3 +99,27 @@ def test_refuses_taken_body(people_client, tmp_path):
     vd = make_vd(tmp_path / "r.vd")
     with pytest.raises(I.Problem, match="zajęte"):
         I.run(str(people_client), str(vd), 5, 470, 1975, "", str(tmp_path / "o"), False)   # 1975 is listed in AnimationSequence.uop
+
+
+def test_batch_gives_every_vd_its_own_slot_and_body(people_client, tmp_path):
+    vds = [make_vd(tmp_path / f"r{i}.vd") for i in range(3)]
+    out = tmp_path / "out"
+    rows = I.run_batch(str(people_client), [{"vd": str(v), "name": f"R{i}"} for i, v in enumerate(vds)], 5, str(out), True,
+                       first_slot=470)
+    assert [r["slot"] for r in rows] == [470, 471, 472]
+    assert len({r["body"] for r in rows}) == 3
+    refs = A.bodyconv_refs(str(out / "Bodyconv.def"))[5]
+    assert all(r["body"] in refs[r["slot"]] for r in rows)
+
+
+def test_body_whose_paperdoll_gumps_exist_is_skipped(people_client, tmp_path):
+    import uop_gump_patch as G
+    from conftest import myp
+    first = next(A.free_bodies(str(people_client), "HUMAN", set()))
+    myp(people_client / "gumpartLegacyMUL.uop",
+        [(G.uop_hash(G.gump_path(first + 50000)), b"x" * 8, 0)])
+    vd = make_vd(tmp_path / "r.vd")
+    r = I.run_batch(str(people_client), [{"vd": str(vd), "name": "R"}], 5, str(tmp_path / "o"), False)[0]
+    assert r["body"] != first                                 # its gump 50000+body would have been overwritten
+    with pytest.raises(I.Problem, match="nadpisałbyś"):
+        I.run_batch(str(people_client), [{"vd": str(vd), "body": first}], 5, str(tmp_path / "o"), False)

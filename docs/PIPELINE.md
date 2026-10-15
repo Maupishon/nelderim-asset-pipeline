@@ -156,6 +156,19 @@ use in `nelderim_core.py`, but worth having in one place:
 - CI: read-only token by default; only the exe job has `contents: write` (to publish the release).
 - Report security problems privately to the repository owner, not in a public issue.
 
+## robe_from_gump.py + batch anim_import + hair-hiding classes (2026-10-15)
+
+* `python nelderim.py robe --gump g.png --toolkit TK --client CL --key szata_x [--graphic 0x2684 --base-anim 970]`:
+  gump -> design (alpha bbox x4, LANCZOS) -> build_item (35 actions, face/hands cut) -> hood_blend -> `.vd`
+  (`<toolkit>/workspace/ultima-online/vd/<key>_<base>.vd`). The .vd is a copy of the base slot layout: import it into an
+  EMPTY slot, never into the base slot.
+* `anim_import.py` takes `--vd` / `--name` repeatedly: every file gets the next empty slot (from `--first-slot`, default 432)
+  and the next free body; one cumulative `anim<N>.mul/.idx`, `Bodyconv.def`, `mobtypes.txt`. A body is skipped when its
+  paperdoll gumps (+50000 / +60000) already exist in `gumpartLegacyMUL.uop` (the gump patch would overwrite another item's gump).
+* `servuo_item.py --hide-hair` (recipe key `hide_hair`): hooded robes remove the hair while worn and restore it on removal.
+* Art: a client whose `art.mul` has 2-byte stubs for an item has NO icon (this client reads `art.mul`, `tileart.uop` is not
+  used by ClassicUO). The recipe's `art` + `overwrite: true` writes it; the icons made from the gump are approximations.
+
 ## hood_blend.py - hood matched to the robe (2026-10-15)
 
 `python nelderim.py hood --lab <lab> --masks <region_ids frames>`; in the app: Ubranie 2D -> Zaawansowane -> "Kaptur".
