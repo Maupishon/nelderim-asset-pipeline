@@ -35,6 +35,9 @@ PATHS = {
                  "games/ultima-online/outfit-lab/build_item.py", True),
     "output":   ("Output folder for patched files", "dir", None, True),
     "bodyglb":  ("UO_Body_0x190.glb (3D body of UO_Model3D, folder model/)", "file", None, False),
+    # Content Studio of github.com/DatMoshu/SpriteMotion (Blender renders): optional, separate checkout
+    "studio":   ("SpriteMotion (upstream) folder with tools/uo-content/pipeline.py", "dir", "tools/uo-content/pipeline.py", False),
+    "blender":  ("blender.exe (Blender 4.2 or newer)", "file", None, False),
 }
 
 
@@ -119,6 +122,7 @@ _MARKS = {
     "client": lambda p: (p / "anim.idx").is_file() and (p / "tiledata.mul").is_file(),
     "toolkit": lambda p: (p / "games/ultima-online/outfit-lab/build_item.py").is_file(),
     "bodyglb": lambda p: (p / "model" / "UO_Body_0x190.glb").is_file(),
+    "studio": lambda p: (p / "tools/uo-content/pipeline.py").is_file(),
 }
 
 
@@ -387,6 +391,43 @@ def cmd_anim_art(cfg, n, slot, body, name, out, have_dir="", item_id=""):
     if str(item_id).strip():
         a += ["--item-id", str(item_id).strip()]
     return _pl(cfg, "anim_art.py", *a)
+
+
+def studio_python(cfg) -> list[str]:
+    """argv prefix of a Python with numpy + Pillow for SpriteMotion's Content Studio."""
+    if cfg.get("toolkit") and path_ok("toolkit", cfg.get("toolkit")):
+        return toolkit_argv(cfg)
+    if FROZEN:
+        real = find_python(need_deps=True)
+        return [real] if real else [sys.executable, "--py"]
+    return [sys.executable]
+
+
+def studio_env(cfg) -> dict:
+    env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
+    if cfg.get("blender"):
+        env["SPRITEMOTION_BLENDER"] = str(cfg["blender"])
+    return env
+
+
+def studio_ready(cfg) -> bool:
+    """`pipeline.py setup` has installed the canonical model into the studio folder."""
+    d = Path(cfg.get("studio") or "") / "workspace" / "ultima-online" / "canonical-model"
+    return d.is_dir() and any(d.iterdir())
+
+
+def cmd_studio_setup(cfg, source):
+    st = Path(cfg["studio"])
+    return {"argv": [*studio_python(cfg), str(st / "tools/uo-content/pipeline.py"), "setup", "--source", str(source)],
+            "cwd": str(st), "env": studio_env(cfg)}
+
+
+def cmd_studio_build(cfg, spec_path, asset=""):
+    st = Path(cfg["studio"])
+    a = [*studio_python(cfg), str(st / "tools/uo-content/pipeline.py"), "build", "--spec", str(spec_path)]
+    if asset:
+        a += ["--asset", str(asset)]
+    return {"argv": a, "cwd": str(st), "env": studio_env(cfg)}
 
 
 def cmd_servuo_class(cfg, recipe, out, serv=""):
