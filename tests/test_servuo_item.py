@@ -14,3 +14,13 @@ def test_hide_hair_class_hides_and_restores_and_versions():
     assert "writer.Write(1); // version" in cs and "if (version >= 1)" in cs
     assert cs.count("{") == cs.count("}")                      # braces balanced (no template leftovers)
     assert "{{" not in cs and "{fields}" not in cs
+
+
+def test_recipe_key_hide_hair_is_read(tmp_path):
+    import json
+    r = tmp_path / "r.json"
+    r.write_text(json.dumps({"items": [
+        {"name": "A", "item_id": "0x5390", "layer": 22, "hide_hair": True},
+        {"name": "B", "item_id": "0x5391", "layer": 22}]}), encoding="utf-8")
+    a, b = S.items_from_recipe(str(r))
+    assert a["hide_hair"] is True and b["hide_hair"] is False

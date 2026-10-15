@@ -459,12 +459,12 @@ BUILD.client = () => {
   const tbl = el("table", { class: "t" }); s2.body.append(tbl);
   const ed = el("div", { class: "card" }); s2.body.append(ed);
   let items = [], sel = -1;
-  const FIELDS = { wearable: [["name", "Nazwa"], ["item_id", "Item ID (0x..)"], ["anim", "Anim id"], ["layer", "Warstwa (layer)"], ["tile_name", "Nazwa w tiledata"], ["art", "Ikona (PNG)", "file"], ["gump_male", "Gump męski (PNG)", "file"], ["gump_female", "Gump damski (PNG)", "file"]],
+  const FIELDS = { wearable: [["name", "Nazwa"], ["item_id", "Item ID (0x..)"], ["anim", "Anim id"], ["layer", "Warstwa (layer)"], ["tile_name", "Nazwa w tiledata"], ["art", "Ikona (PNG)", "file"], ["gump_male", "Gump męski (PNG)", "file"], ["gump_female", "Gump damski (PNG)", "file"], ["hide_hair", "Kaptur", "check"]],
     monster: [["name", "Nazwa"], ["vd", "Plik .vd", "file"], ["body", "Body (puste = automatycznie)"]] };
   const FIELD_HELP = { name: "Nazwa pozycji w recepturze (dla Ciebie i w raporcie).", item_id: "Numer grafiki przedmiotu, np. 0x2683 (z UOFiddlera → Items).",
     anim: "Numer animacji na postaci (animId). Puste = z tiledata albo pierwszy wolny – sprawdź „Wolne ID animacji”.", layer: "Warstwa w tiledata (np. 22 = szata, 20 = płaszcz). Puste = jak w tiledata.",
     tile_name: "Nazwa przedmiotu zapisywana w tiledata.mul.", art: "Ikona przedmiotu (PNG z przezroczystym tłem).", gump_male: "Gump paperdolla męski (PNG, np. gump_<id>_male.png / gump_<id>_meski.png z zakładki Gump).",
-    gump_female: "Gump paperdolla damski (PNG). Puste = brak.", vd: "Plik .vd z animacją potwora (eksport UOFiddlera).", body: "Numer body potwora. Puste = program wybierze wolny („Zaproponuj wolny slot”)." };
+    gump_female: "Gump paperdolla damski (PNG). Puste = brak.", hide_hair: "Szata z kapturem: klasa C# (ServUO) chowa włosy po założeniu i przywraca po zdjęciu. Dotyczy tylko generatora klas.", vd: "Plik .vd z animacją potwora (eksport UOFiddlera).", body: "Numer body potwora. Puste = program wybierze wolny („Zaproponuj wolny slot”)." };
   const kindOf = (it) => (it.vd !== undefined ? "monster" : "wearable");
   const drawT = () => {
     tbl.innerHTML = ""; tbl.append(el("tr", {}, el("th", { text: "#" }), el("th", { text: "Nazwa" }), el("th", { text: "Rodzaj" }), el("th", { text: "ID / plik" })));
@@ -474,7 +474,7 @@ BUILD.client = () => {
     ed.innerHTML = ""; if (sel < 0) { ed.append(el("div", { class: "muted", text: "Wybierz pozycję z listy albo dodaj nową." })); return; }
     const it = items[sel]; const k = kindOf(it);
     ed.append(el("h2", { class: "sec", text: k === "monster" ? "Potwór z pliku .vd" : "Przedmiot do noszenia" }));
-    for (const [key, label, type] of FIELDS[k]) { const f = field(ed, { key, label, type: type || "text", help: FIELD_HELP[key] || label }, it[key] ?? ""); f.input.addEventListener("change", () => { const v = f.get(); if (v === "") delete it[key]; else it[key] = ["anim", "layer", "body"].includes(key) && /^\d+$/.test(v) ? +v : v; drawT(); }); }
+    for (const [key, label, type] of FIELDS[k]) { const f = field(ed, { key, label, type: type || "text", help: FIELD_HELP[key] || label, text: type === "check" ? "chowaj włosy po założeniu" : undefined }, it[key] ?? ""); f.input.addEventListener("change", () => { const v = f.get(); if (v === "" || v === false) delete it[key]; else if (v === true) it[key] = true; else it[key] = ["anim", "layer", "body"].includes(key) && /^\d+$/.test(v) ? +v : v; drawT(); }); }
     if (k === "monster") btns(ed, ["Zaproponuj wolny slot", async () => { if (!it.vd) return toast("Najpierw wskaż plik .vd.", "bad"); const j = await runTask("suggest_slot", { vd: it.vd }); if (j.result.body) { it.body = j.result.body; drawE(); drawT(); toast("Wolny body: " + j.result.body, "ok"); } else toast("Nie znalazłem propozycji – zobacz Szczegóły.", "bad"); }]);
   };
   btns(s2.body, ["Wczytaj", async () => { const pth = fpath.get(); if (!pth) return; const r = await api.get("/api/recipe?path=" + encodeURIComponent(pth)); items = r.items || []; sel = items.length ? 0 : -1; drawT(); drawE(); store("recipe", pth); }],
