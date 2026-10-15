@@ -102,6 +102,24 @@ Zakładka **Model 3D (Blender)**: w Ustawieniach wskaż folder pobrany z [DatMos
 (4.2+; sprawdzone z 5.2), kliknij **Przygotuj Content Studio** (raz), potem **Zbuduj w Blenderze**. Wynik (`.vd`, przegląd, walidacja) trafia do wyników → `studio`.
 Krok 5 na tej samej stronie robi **ikonę (art) z modelu 3D** bez Blendera.
 
+### J. Mam gump szaty z kapturem i chcę zrobić z niej przedmiot do gry (krok po kroku)
+Cały tor dla szat z kapturem (sprawdzony w grze na sześciu szatach). Potrzebujesz: **gump paperdolla** szaty jako PNG z przezroczystym tłem (ok. 260×237 px),
+numer wolnego **ID przedmiotu** i nazwę.
+1. **Ubranie 2D** → krok 6 **Szata z gumpu**: wskaż gump, wpisz nazwę, kliknij **🧙 Zrób szatę z gumpu**. Program sam robi wzór, buduje 35 akcji
+   na bazie Hooded Shroud, dopasowuje kaptur (ten sam odcień i faktura co szata, bez linii odcięcia, głowa zakryta) i pakuje do `.vd`.
+   Najpierw możesz wpisać w „Akcje” np. `4 0` na próbę. Obejrzyj wynik w **Podgląd .vd**.
+2. **Dodawanie do klienta** → krok 5: **➕ Dodaj plik .vd…** (po jednym pliku na szatę), **👁 Na sucho**, potem **✍ Zapisz do wyników…**.
+   Każdy plik dostaje własne wolne miejsce w `anim5.mul` i własne body (program omija body, których gumpy już istnieją).
+3. Zapisz recepturę (krok 2): dla każdej szaty `ID przedmiotu`, **animacja = przydzielone body**, warstwa **22**, flaga **Wearable**,
+   gump męski = **body + 50000**, damski = **body + 60000**, ikona (PNG). Zrób **Na sucho** i **Zastosuj…**.
+4. Klasa C#: żeby kaptur chował włosy (po zdjęciu wracają), użyj `python nelderim.py servuo --recipe <receptura.json> --hide-hair --out <folder>`
+   (w oknie nie ma jeszcze pola na to; przycisk **🧾 Klasa C# (ServUO)** robi klasę bez chowania włosów). Skopiuj `.cs` na serwer i zbuduj.
+5. Do **KOPII klienta** skopiuj: `anim5.mul`, `anim5.idx`, `Bodyconv.def`, `mobtypes.txt`, `tiledata.mul`, `art.mul`, `artidx.mul` i `Nelderim_manifest.json`.
+   Gumpy są już wpisane do `gumpartLegacyMUL.uop` w folderze klienta ustawionym w programie.
+- Tej samej kopii klienta używaj do wszystkiego: zapis gumpów idzie **w miejscu** (z kopią `.orig_backup`).
+- Do gry nie uruchamiaj klienta przez launcher, jeśli ma sumy kontrolne plików: może przywrócić oryginalny UOP.
+- Ikona to przybliżenie z gumpu; jeśli chcesz własną, wskaż PNG w polu **Ikona**.
+
 ### F. Import do gry
 Gotowy `.vd` importujesz w **UOFiddlerze** (Animations → Animation Edit → Import from VD → Save), **na kopii klienta**.
 

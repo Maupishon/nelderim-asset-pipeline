@@ -5,6 +5,11 @@ out*/
 backup/
 _nelderim_gui_recipe.json
 
+# build output (PyInstaller; build_exe.bat)
+build/
+dist/
+Nelderim.spec
+
 # Python
 __pycache__/
 *.pyc
