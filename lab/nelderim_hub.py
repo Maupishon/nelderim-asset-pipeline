@@ -377,6 +377,22 @@ def cmd_anim_wire(cfg, n, slots=None, names=None, apply=False):
     return _pl(cfg, "anim_wire.py", *a)
 
 
+def cmd_anim_import(cfg, vd, n, out, slot=None, body=None, name="", apply=False, overwrite=False):
+    """anim_import.py: People .vd -> empty slot of anim<n>.mul + Bodyconv.def/mobtypes.txt (dry run unless apply). Prints RESULT_JSON."""
+    a = ["--client", cfg["client"], "--vd", str(vd), "--file", str(int(n)), "--out", str(out), "--json"]
+    if slot not in (None, ""):
+        a += ["--slot", str(int(slot))]
+    if body not in (None, ""):
+        a += ["--body", str(int(body))]
+    if name:
+        a += ["--name", str(name)]
+    if overwrite:
+        a.append("--overwrite")
+    if apply:
+        a.append("--apply")
+    return _pl(cfg, "anim_import.py", *a)
+
+
 def cmd_anim_wired(cfg, n):
     """anim_art.py --list-wired: animations of anim<n>.mul that Bodyconv.def already points at. Prints RESULT_JSON."""
     return _pl(cfg, "anim_art.py", "--client", cfg["client"], "--file", str(n), "--list-wired")

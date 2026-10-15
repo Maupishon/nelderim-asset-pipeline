@@ -549,6 +549,30 @@ BUILD.client = () => {
   btns(s4.body, ["🔍 Szukaj", scan, "primary", "Przegląda plik i pokazuje nieprzypisane animacje z proponowanym body. Niczego nie zapisuje."],
     ["🔗 Podepnij zaznaczone…", wire, "", "Dopisuje Bodyconv.def i mobtypes.txt do folderu wyników (z kopią obecnych)."],
     ["🖼 Gump i art z klatki", art, "", "Dla zaznaczonych robi z klatki animacji gump (męski i żeński, body+50000 / +60000) i ikonę art jako PNG w folderze wyników. Pomija animacje, dla których gump był już przygotowany w innym module. Niczego nie zmienia w kliencie."]);
+
+  // ---- 5: a People .vd into an EMPTY slot of anim2..5.mul (+ Bodyconv.def, mobtypes.txt)
+  const s5 = step(p, 5, "Wgraj animację .vd do wolnego miejsca (anim2–5.mul)", "Wkłada gotowy plik .vd (ludzie, 35 akcji × 5 kierunków) do pierwszego pustego miejsca wybranego pliku animacji i dopisuje Bodyconv.def i mobtypes.txt z wolnym body. Wszystko trafia do folderu wyników (anim_import) – klienta nie zmienia. Najpierw „Na sucho”.");
+  const f5 = form(s5.body, [
+    { key: "vd", label: "Plik .vd", type: "file", filter: ".vd", help: "Animacja typu ludzie (35 akcji × 5 kierunków), np. z „Spakuj do .vd”." },
+    { key: "file", label: "Plik animacji", type: "select", options: [["5", "anim5.mul"], ["4", "anim4.mul"], ["3", "anim3.mul"], ["2", "anim2.mul"]], help: "Do którego pliku dopisać. Blok trafia na koniec pliku, istniejące dane się nie przesuwają." },
+    { key: "name", label: "Nazwa", help: "Opis w Bodyconv.def / mobtypes.txt oraz nazwa folderu wyników." },
+    { key: "slot", label: "Miejsce (slot)", placeholder: "puste = pierwsze wolne", help: "Numer slotu people (400+). Puste = pierwsze puste i niepodpięte. Uwaga: 400–431 to zakres gargulców – lepiej wskazać slot dalej od podpiętych." },
+    { key: "body", label: "Body", placeholder: "puste = wolne body", help: "Numer body do podpięcia. Puste = program dobiera wolne (sprawdza body.def, Bodyconv.def, mobtypes.txt, UOP, tiledata)." }],
+    { file: restore("animfile", "5") });
+  const imp = async (apply) => {
+    const v = f5.values(); if (!v.vd) return toast("Wskaż plik .vd.", "bad");
+    if (apply && !confirm("Dopisać animację do anim" + v.file + ".mul (kopia w folderze wyników anim_import) i wpisy do Bodyconv.def / mobtypes.txt?
+
+Do klienta (KOPII) kopiujesz pliki sam. Dopisany slot nie był jeszcze sprawdzony w grze – najpierw jedno body.")) return;
+    try {
+      const j = await runTask("anim_import", { ...v, slot: v.slot ? +v.slot : null, body: v.body ? +v.body : null, apply }, apply ? "Import animacji" : "Import animacji (na sucho)");
+      if (j.status !== "ok") return s5.bad("Nie udało się – zobacz Szczegóły.");
+      const r = j.result;
+      if (apply) { s5.ok(`Zapisano w ${r.dir}: anim${v.file}.mul, anim${v.file}.idx, Bodyconv.def, mobtypes.txt. Slot ${r.slot}, body ${r.body}. Skopiuj do KOPII klienta i sprawdź w grze.`); showLog(true); }
+      else s5.info(`Na sucho: slot ${r.slot}, body ${r.body}. Nic nie zapisano.`);
+    } catch (e) {}
+  };
+  btns(s5.body, ["👁 Na sucho", () => imp(false), "primary"], ["✍ Zapisz do wyników…", () => imp(true)]);
 };
 
 // ------------------------------------------------------------------ FIT LAB (3D)
