@@ -296,6 +296,12 @@ def cmd_build_item(cfg, graphic, design, out, key, title, hide, actions, cut="",
     return _tk(cfg, *a)
 
 
+def cmd_hood_blend(cfg, lab):
+    """hood_blend.py: match the hood of a hooded robe to the rest of the robe (in place, after build_item)."""
+    masks = Path(cfg["toolkit"]) / "workspace/ultima-online/region-audit/all-actions-region-pass/frames"
+    return _pl(cfg, "hood_blend.py", "--lab", str(lab), "--masks", str(masks), "--force")
+
+
 def cmd_verify(cfg, lab):
     """Exit code 1 also happens when item pixels differ from the original (normal): read the JSON, not the code."""
     c = _tk(cfg, "games/ultima-online/outfit-lab/verify.py", lab)

@@ -319,11 +319,13 @@ def task(cfg, name, p):
                              "Skopiuj aktualny outfit-lab (README → Aktualizacja toolkitu).")
         if not str(p.get("image") or "").strip() and not (p.get("cut") or p.get("fray_only")):
             raise ValueError("Wskaż obrazek albo ustaw „Skróć o” / „Tylko postrzęp”.")
-        return run_job("Budowanie przymiarki", [lambda j: H.cmd_build_item(cfg, norm_item(p["graphic"]), p.get("image", ""), str(out), key,
-                                                                             p.get("title", ""), p.get("hide", ""), p.get("actions", ""),
-                                                                             p.get("cut", ""), p.get("fray", ""), bool(p.get("fray_only")),
-                                                                             bool(p.get("planar")), p.get("back", ""))],
-                       finish=lambda j: j.result.update(lab=str(out)))
+        steps = [lambda j: H.cmd_build_item(cfg, norm_item(p["graphic"]), p.get("image", ""), str(out), key,
+                                            p.get("title", ""), p.get("hide", ""), p.get("actions", ""),
+                                            p.get("cut", ""), p.get("fray", ""), bool(p.get("fray_only")),
+                                            bool(p.get("planar")), p.get("back", ""))]
+        if p.get("hood"):
+            steps.append(lambda j: H.cmd_hood_blend(cfg, out))
+        return run_job("Budowanie przymiarki", steps, finish=lambda j: j.result.update(lab=str(out)))
     if name == "weapon2d":
         require("toolkit", "client")
         if not H.toolkit_has_axisfit(cfg):

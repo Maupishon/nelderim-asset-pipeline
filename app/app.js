@@ -275,6 +275,7 @@ BUILD.cloth = () => {
     { key: "cut", label: "Skróć o (np. 0.25)", help: "Skraca zwisające ubranie (pelerynę, szatę) o ten ułamek długości i postrzępia nowy koniec. Puste = bez cięcia. Wtedy obrazek jest opcjonalny." },
     { key: "fray", label: "Postrzępienie (0–1)", def: "0.07", help: "Jak poszarpany ma być nowy koniec (ułamek długości). Działa z „Skróć o” albo „Tylko postrzęp”." },
     { key: "fray_only", label: "Tylko postrzęp", type: "check", text: "postrzęp istniejący koniec bez skracania", help: "Obrazek jest wtedy opcjonalny." },
+    { key: "hood", label: "Kaptur", type: "check", text: "dopasuj kaptur do reszty szaty", help: "Dla szat z kapturem (np. Hooded Shroud 0x2684): po zbudowaniu kaptur dostaje ten sam odcień i fakturę co reszta szaty, bez linii odcięcia na barkach, a głowa jest zakryta. Kształt i fałdy kaptura zostają z oryginału." },
     { key: "planar", label: "Płaski obrazek", type: "check", text: "osobny obrazek na plecy", help: "Obrazek jest płaski: na kierunkach, gdzie widać plecy, użyj osobnego obrazka (poniżej) albo „auto” (pasek z wzoru)." },
     { key: "back", label: "Obrazek na plecy", type: "file", filter: ".png,.webp", help: "Tylko z „Płaski obrazek”. Puste = auto (pasek z głównego wzoru)." }]);
   const s4 = step(p, 4, "Zbuduj i obejrzyj", "Na próbę kilka akcji, potem wszystkie.");
