@@ -16,6 +16,9 @@ def main(argv=None):
     ap.add_argument("--kind", required=True, choices=sorted(set(engine.EXTENTS) | set(engine.wp.CLASS_OF_KIND) | {"shield"})); ap.add_argument("--out", required=True)
     ap.add_argument("--name", default="item"); ap.add_argument("--actions", nargs="*", type=int, default=[])
     ap.add_argument("--turn", type=float, default=0); ap.add_argument("--scale", type=float, default=0)
+    ap.add_argument("--pre-rot", default="", help="orient the model first: degrees about X,Y,Z, e.g. 90,0,0, or 'auto' (long axis -> +Y, hilt down)")
+    ap.add_argument("--flip", action="store_true", help="the weapon is held by the blade: turn it upside down (swap hilt and tip)")
+    ap.add_argument("--fatten", type=float, default=1.0, help="thicken a very slender weapon: scale of the cross-section (X, Z), e.g. 2.5")
     ap.add_argument("--skip", default=""); ap.add_argument("--saturation", type=float, default=1.0)
     ap.add_argument("--outline", type=float, default=0.38); ap.add_argument("--margin", type=float, default=0.01)
     ap.add_argument("--metal", choices=["auto", "yes", "no"], default="auto")
@@ -44,7 +47,9 @@ def main(argv=None):
     keys = engine.wp.load_shield_keys(a.shield_keys or engine.wp.find_shield_keys(a.body))
     item = engine.Item(a.item, a.kind, body, turn=a.turn, scale=a.scale, skip=[s for s in a.skip.split(",") if s],
                        saturation=a.saturation, metal={"auto": None, "yes": True, "no": False}[a.metal], motion=motion,
-                       shield_keys=keys, ref=a.weapon_ref, roll_deg=a.roll, adjust=json.loads(a.adjust) if a.adjust else None)
+                       shield_keys=keys, ref=a.weapon_ref, roll_deg=a.roll, adjust=json.loads(a.adjust) if a.adjust else None,
+                       pre_rot=("auto" if a.pre_rot.strip().lower() == "auto" else [float(x) for x in a.pre_rot.split(",")]) if a.pre_rot else None,
+                       fatten_k=a.fatten, flip=a.flip)
     body_masks = engine.vdread.alpha_masks(a.body_vd) if a.body_vd and os.path.isfile(a.body_vd) else None
     horse_masks = engine.vdread.alpha_masks(a.horse_vd) if horse else None
     engine.say("ciało: " + ("dokładna sylwetka z oryginału (EXACT_BODY)" if body_masks else "tylko model 3D") + "; koń: " + ("tak" if horse_masks else "nie"))

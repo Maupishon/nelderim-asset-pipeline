@@ -59,9 +59,27 @@ def _edge(img, factor):
     return out
 
 
-def render_icon(path, size=44, yaw=-35.0, skip=(), supersample=8, saturation=1.0, outline=0.55):
+def render_icon(path, size=44, yaw=-35.0, skip=(), supersample=8, saturation=1.0, outline=0.55,
+                align=False, fatten=1.0, flip=False, tilt=0.0, face=False):
+    """align: stand a long object (weapon) along +Y, hilt down; fatten: thicken it; flip: swap hilt and tip;
+    tilt: lay it over by this many degrees about the view axis (-45 = the classic diagonal item icon);
+    face: look at it straight from the front (the camera's elevation is cancelled)."""
     from . import engine          # shade(); imported late, engine pulls in the whole skinning stack
     m = statmesh.load(path, tuple(skip))
+    if align:
+        engine.align_long_axis(m)
+    if flip:
+        m.pos = m.pos * np.array([-1.0, -1.0, 1.0]); m.nrm = m.nrm * np.array([-1.0, -1.0, 1.0])
+    if fatten and abs(float(fatten) - 1.0) > 1e-9:
+        engine.fatten(m, float(fatten))
+    if tilt:
+        th = np.radians(tilt)
+        Rz = np.array([[np.cos(th), -np.sin(th), 0], [np.sin(th), np.cos(th), 0], [0, 0, 1]])
+        m.pos = m.pos @ Rz.T; m.nrm = m.nrm @ Rz.T
+    if face:
+        e = np.radians(28.45)
+        Rx = np.array([[1, 0, 0], [0, np.cos(e), np.sin(e)], [0, -np.sin(e), np.cos(e)]])
+        m.pos = m.pos @ Rx.T; m.nrm = m.nrm @ Rx.T
     if len(m.tri) == 0:
         raise ValueError("Model nie zawiera żadnej siatki.")
     if m.vcol is not None and float(np.max(m.vcol)) < 0.05:
