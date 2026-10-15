@@ -112,8 +112,8 @@ numer wolnego **ID przedmiotu** i nazwę.
    Każdy plik dostaje własne wolne miejsce w `anim5.mul` i własne body (program omija body, których gumpy już istnieją).
 3. Zapisz recepturę (krok 2): dla każdej szaty `ID przedmiotu`, **animacja = przydzielone body**, warstwa **22**, flaga **Wearable**,
    gump męski = **body + 50000**, damski = **body + 60000**, ikona (PNG). Zrób **Na sucho** i **Zastosuj…**.
-4. Klasa C#: żeby kaptur chował włosy (po zdjęciu wracają), użyj `python nelderim.py servuo --recipe <receptura.json> --hide-hair --out <folder>`
-   (w oknie nie ma jeszcze pola na to; przycisk **🧾 Klasa C# (ServUO)** robi klasę bez chowania włosów). Skopiuj `.cs` na serwer i zbuduj.
+4. W recepturze zaznacz przy szacie pole **Kaptur** (chowaj włosy po założeniu; po zdjęciu wracają), potem kliknij **🧾 Klasa C# (ServUO)**.
+   Skopiuj `.cs` na serwer i zbuduj. Bez zaznaczenia klasa włosów nie rusza.
 5. Do **KOPII klienta** skopiuj: `anim5.mul`, `anim5.idx`, `Bodyconv.def`, `mobtypes.txt`, `tiledata.mul`, `art.mul`, `artidx.mul` i `Nelderim_manifest.json`.
    Gumpy są już wpisane do `gumpartLegacyMUL.uop` w folderze klienta ustawionym w programie.
 - Tej samej kopii klienta używaj do wszystkiego: zapis gumpów idzie **w miejscu** (z kopią `.orig_backup`).
