@@ -156,6 +156,29 @@ use in `nelderim_core.py`, but worth having in one place:
 - CI: read-only token by default; only the exe job has `contents: write` (to publish the release).
 - Report security problems privately to the repository owner, not in a public issue.
 
+## anim_import.py - People .vd into an empty anim2..5.mul slot (2026-10-15)
+
+`python nelderim.py animimport --client <copy> --vd robe.vd --file 5 [--slot N] [--body N] --out DIR [--apply]`.
+Picks the first empty People slot (all 175 idx records unused, no Bodyconv.def line) or `--slot`, a free body
+(`anim_wire.free_bodies`), appends the 175 blocks to the end of `anim<N>.mul`, rewrites the idx records, then writes
+Bodyconv.def + mobtypes.txt via `anim_wire.apply_plan`. Writes only to `--out`; re-reads every record and compares bytes.
+Slots 400-431 are the gargoyle range (wired in Bodyconv.def though empty) - prefer a slot far from wired ones.
+Worn item needs no Equipconv.def: tiledata `anim` = body id, paperdoll gump = body + 50000 / 60000.
+Not verified in game for a freshly appended slot.
+
+## ServUO class generator, Content Studio bridge, 3D icon (2026-10-15)
+
+* `pipeline/servuo_item.py` - one `<Class>.cs` per wearable of a recipe, written to the output folder (never to the server).
+  Base class by layer (BaseOuterTorso, BaseCloak, BaseHat, ... of ServUO 5.8). Checked: compiles against this shard's
+  `Server.dll` / `Scripts.dll`. Not tested in game.
+* Content Studio bridge (`lab/nelderim_hub.py: cmd_studio_*`, page "Model 3D (Blender)"): runs
+  `tools/uo-content/pipeline.py` of a separate SpriteMotion checkout with `SPRITEMOTION_BLENDER` set and copies
+  `item.vd` + review into `<output>/studio/<name>/`. Settings keys `studio` and `blender`. Verified with Blender 5.2.2
+  and the example helmet preview (125 frames, validation passed); `third_party/UO_Model3D_v13` stays in that checkout.
+* `uo3d/icon.py` / `cli_icon.py` - inventory icon from a 3D model with the animation renderer's rasterizer and lighting;
+  ignores a nearly-all-zero `COLOR_0` layer (CC0 starter models carry one). SpriteMotion's own `inventory.png` is only the
+  idle frame shrunk to 44 px, so this is new.
+
 ## Aktualizacja toolkitu 2D (SpriteMotion upstream)
 
 The toolkit used by the 2D tabs (`Ubranie 2D`, `Broń 2D`, `Gump`) is a snapshot of
