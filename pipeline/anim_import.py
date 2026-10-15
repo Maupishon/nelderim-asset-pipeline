@@ -9,7 +9,7 @@ anim_import.py - put a People (.vd, 35 actions x 5 directions) animation into an
 
 WHAT IT DOES
   1. Reads the .vd (header int32, 175 records <lookup,length,extra> with ABSOLUTE offsets inside the .vd, then the blocks).
-  2. Picks the lowest EMPTY People slot of anim<N>.idx (all 175 records unused, no Bodyconv.def line points at it) or
+  2. Picks the lowest EMPTY People slot from 432 up of anim<N>.idx (all 175 records unused, no Bodyconv.def line points at it) or
      takes --slot (refused when it holds data, unless --overwrite).
   3. Picks a free body id (anim_wire.free_bodies: body.def, Bodyconv.def, mobtypes.txt, AnimationFrame*.uop,
      AnimationSequence.uop, tiledata/Equipconv, empty anim.mul span) or takes --body (same checks).
@@ -72,7 +72,7 @@ def run(client, vd, n, slot, body, name, out, apply_, overwrite=False):
     refs = W.bodyconv_refs(C.find(client, "Bodyconv.def"))[n]
 
     if slot is None:
-        s = 400
+        s = 432                              # 400-431 is the gargoyle range (wired in Bodyconv.def, often empty): not used for auto-pick
         while W.slot_layout(n, s)[0] + PEOPLE_RECS <= count:
             if slot_empty(idx, count, s, n) and not refs.get(s):
                 slot = s

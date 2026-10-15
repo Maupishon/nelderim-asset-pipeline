@@ -527,6 +527,23 @@ def task(cfg, name, p):
             j.result["dir"] = str(out)
         c["on_output"] = parse
         return run_job("Klasa C# dla ServUO", [lambda j: c])
+    if name == "anim_import":
+        require("client", "output")
+        vd = str(p.get("vd") or "").strip()
+        if not vd or not Path(vd).is_file():
+            raise ValueError("Wskaż plik .vd (ludzie, 35 akcji x 5 kierunków).")
+        label = str(p.get("name") or "").strip()
+        out = Path(cfg["output"]) / "anim_import" / H.slugify(label or Path(vd).stem)
+        c = H.cmd_anim_import(cfg, vd, int(p.get("file", 5)), out, p.get("slot"), p.get("body"), label,
+                              bool(p.get("apply")), bool(p.get("overwrite")))
+
+        def parse(j, cap):
+            m = [x for x in cap if x.startswith("RESULT_JSON ")]
+            if m:
+                j.result.update(json.loads(m[-1][len("RESULT_JSON "):]))
+            j.result["dir"] = str(out)
+        c["on_output"] = parse
+        return run_job("Import animacji do anim%s.mul" % int(p.get("file", 5)) if p.get("apply") else "Import animacji (na sucho)", [lambda j: c])
     if name == "anim_wired":
         require("client")
         c = H.cmd_anim_wired(cfg, int(p.get("file", 5)))
