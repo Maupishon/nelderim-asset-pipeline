@@ -156,6 +156,16 @@ use in `nelderim_core.py`, but worth having in one place:
 - CI: read-only token by default; only the exe job has `contents: write` (to publish the release).
 - Report security problems privately to the repository owner, not in a public issue.
 
+## anim_import.py - People .vd into an empty anim2..5.mul slot (2026-10-15)
+
+`python nelderim.py animimport --client <copy> --vd robe.vd --file 5 [--slot N] [--body N] --out DIR [--apply]`.
+Picks the first empty People slot (all 175 idx records unused, no Bodyconv.def line) or `--slot`, a free body
+(`anim_wire.free_bodies`), appends the 175 blocks to the end of `anim<N>.mul`, rewrites the idx records, then writes
+Bodyconv.def + mobtypes.txt via `anim_wire.apply_plan`. Writes only to `--out`; re-reads every record and compares bytes.
+Slots 400-431 are the gargoyle range (wired in Bodyconv.def though empty) - prefer a slot far from wired ones.
+Worn item needs no Equipconv.def: tiledata `anim` = body id, paperdoll gump = body + 50000 / 60000.
+Not verified in game for a freshly appended slot.
+
 ## ServUO class generator, Content Studio bridge, 3D icon (2026-10-15)
 
 * `pipeline/servuo_item.py` - one `<Class>.cs` per wearable of a recipe, written to the output folder (never to the server).
