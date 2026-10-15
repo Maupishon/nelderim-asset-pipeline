@@ -222,6 +222,13 @@ def main():
                 out[f] = os.path.abspath(os.path.join(base, out[f]))
         return out
 
+    # Same class of trap as the gumps, for static art: with MainMisc.uop AND artLegacyMUL.uop present ClassicUO
+    # (ArtLoader) reads art from the UOP and never opens art.mul, so uopatch's art.mul write would be invisible.
+    # (SpriteMotion's equipment.py reports the same case.) Only a warning: this tool has no UOP art writer yet.
+    if any(it.get("art") for it in items) and _is_uop_installation(a.client) and _has_file(a.client, "artLegacyMUL.uop"):
+        print("[WARN ] this client has artLegacyMUL.uop: art written to art.mul is IGNORED by ClassicUO "
+              "(art is read from the UOP). Import the icon through a UOP art tool (e.g. UOFiddler).")
+
     wearable_items, gump_uop_items, monster_items = [], [], []
     for it in items:
         engines, uop_resident = classify(it, a.client)

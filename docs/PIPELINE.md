@@ -156,3 +156,22 @@ use in `nelderim_core.py`, but worth having in one place:
 - CI: read-only token by default; only the exe job has `contents: write` (to publish the release).
 - Report security problems privately to the repository owner, not in a public issue.
 
+## Aktualizacja toolkitu 2D (SpriteMotion upstream)
+
+The toolkit used by the 2D tabs (`Ubranie 2D`, `Broń 2D`, `Gump`) is a snapshot of
+[DatMoshu/SpriteMotion](https://github.com/DatMoshu/SpriteMotion) plus Levy's overlay. Upstream `outfit-lab` is newer.
+Updated on 2026-10-15 (in the toolkit, **not** in this repo; old files backed up to
+`<toolkit>/_backup_before_upstream_20261015/`):
+
+* replaced: `outfit-lab/build.py`, `build_item.py`, `make_gump.py`, `region-masks/uo.py`;
+* added: `merge_items.py`, `make_gump_cloak.py`, `build_plate_armor.py`, `build_overalls.py`, `ITEMS.md`;
+* `build.py` got a local compatibility patch: `--lightsaber` is still accepted next to `--energy-blade` and
+  `fit_lightsaber = fit_energy_blade`, so the hub and the older `build_spartan.py` / `build_tracksuit.py` keep working;
+* new `build_item.py` options exposed in the app (Ubranie 2D, advanced): `--cut`, `--fray`, `--fray-only`, `--planar`, `--back`;
+* `make_gump.py` now names its files `gump_<id>_male.png`, `gump_<id>_female.png`, `comparison.png` (the app accepts both
+  these and the old `porownanie.png`).
+
+Inventory art: upstream's `inventory.png` is the idle frame cropped, shrunk to 44 px and alpha-thresholded - the same
+approach as `pipeline/anim_art.py`, so there was nothing to port. `nelderim_patch.py` now warns when the client has
+`artLegacyMUL.uop` (art would be read from the UOP, `art.mul` ignored). SpriteMotion's own license is MIT; its
+`third_party/UO_Model3D_v13` is **not** and is not copied here.

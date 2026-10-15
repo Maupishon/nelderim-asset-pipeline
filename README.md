@@ -114,6 +114,7 @@ Krok 4 w **Dodawanie do klienta**: **📋 Pokaż już podpięte** (albo **Szukaj
 | Brakuje bibliotek (numpy, Pillow) | Na ekranie **Start** kliknij **Zainstaluj** (tylko wersja bez exe) |
 | W narzędziach 2D błąd o starej wersji skryptów | Rozpakuj paczkę Levy'ego v2 do folderu toolkitu **z nadpisaniem** |
 | Przycisk **Wybierz…** nic nie robi (Linux) | `sudo apt install python3-tk` albo wpisz ścieżkę ręcznie |
+| „Toolkit ma starą wersję build_item.py” (cięcie, postrzęp, osobny tył) | Zaktualizuj `games/ultima-online/outfit-lab` i `region-masks/uo.py` w toolkicie z [DatMoshu/SpriteMotion](https://github.com/DatMoshu/SpriteMotion) (kopia zapasowa starych plików!). Szczegóły: `docs/PIPELINE.md` → „Aktualizacja toolkitu” |
 | W świecie widać ubranie, ale w paperdollu (okno postaci) go nie ma | Gump nie jest w `gumpartLegacyMUL.uop`. Klient z plikiem `MainMisc.uop` czyta gumpy **tylko** z UOP i ignoruje `Gumpart.mul`. Zapisz gump jeszcze raz przez **Dodawanie do klienta** (nowa wersja dopisuje go do UOP) i zrestartuj klienta |
 | „Nieznane zadanie” / „Nieznana komenda” | Działa stara wersja programu. Zamknij ją i uruchom nową (exe zbuduj od nowa przez `build_exe.bat`) |
 | Ścieżka z polskimi literami „nie istnieje” (np. `BezrÄ™ki`) | Wskaż plik jeszcze raz przyciskiem **Wybierz…** w nowej wersji programu |

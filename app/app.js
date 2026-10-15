@@ -227,12 +227,17 @@ BUILD.cloth = () => {
   const a = adv(s3.body);
   const f3b = form(a, [{ key: "hide", label: "Odsłoń części ciała", def: "1 5", help: "1 = twarz, 5 = dłonie. Puste = nic nie odsłaniaj." },
     { key: "actions", label: "Akcje (próba)", def: "0 4 9 13 16", help: "0 chód, 4 stanie, 9 cięcie, 13 cięcie 2h, 16 czar. Puste = wszystkie 35." },
-    { key: "title", label: "Tytuł podglądu", help: "Napis na stronie podglądu." }]);
+    { key: "title", label: "Tytuł podglądu", help: "Napis na stronie podglądu." },
+    { key: "cut", label: "Skróć o (np. 0.25)", help: "Skraca zwisające ubranie (pelerynę, szatę) o ten ułamek długości i postrzępia nowy koniec. Puste = bez cięcia. Wtedy obrazek jest opcjonalny." },
+    { key: "fray", label: "Postrzępienie (0–1)", def: "0.07", help: "Jak poszarpany ma być nowy koniec (ułamek długości). Działa z „Skróć o” albo „Tylko postrzęp”." },
+    { key: "fray_only", label: "Tylko postrzęp", type: "check", text: "postrzęp istniejący koniec bez skracania", help: "Obrazek jest wtedy opcjonalny." },
+    { key: "planar", label: "Płaski obrazek", type: "check", text: "osobny obrazek na plecy", help: "Obrazek jest płaski: na kierunkach, gdzie widać plecy, użyj osobnego obrazka (poniżej) albo „auto” (pasek z wzoru)." },
+    { key: "back", label: "Obrazek na plecy", type: "file", filter: ".png,.webp", help: "Tylko z „Płaski obrazek”. Puste = auto (pasek z głównego wzoru)." }]);
   const s4 = step(p, 4, "Zbuduj i obejrzyj", "Na próbę kilka akcji, potem wszystkie.");
   let lab = null;
   const build = async (acts) => {
     const v = { ...f1.values(), ...f2.values(), ...f3.values(), ...f3b.values() };
-    if (!v.graphic || !v.image || !v.name) return toast("Uzupełnij kroki 1–3.", "bad");
+    if (!v.graphic || !v.name || (!v.image && !v.cut && !v.fray_only)) return toast("Uzupełnij kroki 1–3 (obrazek jest opcjonalny tylko przy „Skróć o” / „Tylko postrzęp”).", "bad");
     try { const j = await runTask("build_item", { ...v, actions: acts }); if (j.status === "ok") { lab = j.result.lab; s4.ok("Zbudowane: " + lab); } else s4.bad("Nie udało się (podpowiedź na dole)."); } catch (e) {}
   };
   btns(s4.body, ["▶ Zbuduj (próba)", () => build(f3b.actions.get()), "primary"], ["Zbuduj wszystkie 35", () => build("")], ["🌐 Podgląd", () => openLab(lab)]);
@@ -394,7 +399,7 @@ BUILD.client = () => {
     monster: [["name", "Nazwa"], ["vd", "Plik .vd", "file"], ["body", "Body (puste = automatycznie)"]] };
   const FIELD_HELP = { name: "Nazwa pozycji w recepturze (dla Ciebie i w raporcie).", item_id: "Numer grafiki przedmiotu, np. 0x2683 (z UOFiddlera → Items).",
     anim: "Numer animacji na postaci (animId). Puste = z tiledata albo pierwszy wolny – sprawdź „Wolne ID animacji”.", layer: "Warstwa w tiledata (np. 22 = szata, 20 = płaszcz). Puste = jak w tiledata.",
-    tile_name: "Nazwa przedmiotu zapisywana w tiledata.mul.", art: "Ikona przedmiotu (PNG z przezroczystym tłem).", gump_male: "Gump paperdolla męski (PNG, np. gump_<id>_meski.png z zakładki Gump).",
+    tile_name: "Nazwa przedmiotu zapisywana w tiledata.mul.", art: "Ikona przedmiotu (PNG z przezroczystym tłem).", gump_male: "Gump paperdolla męski (PNG, np. gump_<id>_male.png / gump_<id>_meski.png z zakładki Gump).",
     gump_female: "Gump paperdolla damski (PNG). Puste = brak.", vd: "Plik .vd z animacją potwora (eksport UOFiddlera).", body: "Numer body potwora. Puste = program wybierze wolny („Zaproponuj wolny slot”)." };
   const kindOf = (it) => (it.vd !== undefined ? "monster" : "wearable");
   const drawT = () => {
