@@ -259,9 +259,30 @@ def cmd_build_set(cfg, out, design, sword, config, actions):
     return _tk(cfg, *a)
 
 
-def cmd_build_item(cfg, graphic, design, out, key, title, hide, actions):
+def toolkit_has_cut(cfg) -> bool:
+    """build_item.py of the upstream outfit-lab (--cut / --fray / --planar / --back)."""
+    try:
+        return "--planar" in (Path(cfg["toolkit"]) / "games/ultima-online/outfit-lab/build_item.py").read_text(
+            encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+
+
+def cmd_build_item(cfg, graphic, design, out, key, title, hide, actions, cut="", fray="", fray_only=False, planar=False, back=""):
     a = ["games/ultima-online/outfit-lab/build_item.py", "--source", cfg["client"], "--graphic", graphic,
-         "--design", design, "--out", out, "--key", key]
+         "--out", out, "--key", key]
+    if str(design).strip():
+        a += ["--design", design]
+    if str(cut).strip():
+        a += ["--cut", str(cut).strip()]
+    if str(fray).strip():
+        a += ["--fray", str(fray).strip()]
+    if fray_only:
+        a.append("--fray-only")
+    if planar:
+        a.append("--planar")
+        if str(back).strip():
+            a += ["--back", str(back).strip()]
     if title.strip():
         a += ["--title", title]
     if actions.strip():

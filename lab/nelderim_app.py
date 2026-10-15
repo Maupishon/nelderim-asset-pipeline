@@ -310,8 +310,16 @@ def task(cfg, name, p):
     if name == "build_item":
         require("toolkit", "client")
         out = lab_dir(cfg, p["name"]); key = H.slugify(p["name"])
-        return run_job("Budowanie przymiarki", [lambda j: H.cmd_build_item(cfg, norm_item(p["graphic"]), p["image"], str(out), key,
-                                                                             p.get("title", ""), p.get("hide", ""), p.get("actions", ""))],
+        extra = {k: p.get(k) for k in ("cut", "fray", "fray_only", "planar", "back") if p.get(k)}
+        if extra and not H.toolkit_has_cut(cfg):
+            raise ValueError("Toolkit ma starą wersję build_item.py (bez cięcia, strzępienia i osobnego tyłu). "
+                             "Skopiuj aktualny outfit-lab (README → Aktualizacja toolkitu).")
+        if not str(p.get("image") or "").strip() and not (p.get("cut") or p.get("fray_only")):
+            raise ValueError("Wskaż obrazek albo ustaw „Skróć o” / „Tylko postrzęp”.")
+        return run_job("Budowanie przymiarki", [lambda j: H.cmd_build_item(cfg, norm_item(p["graphic"]), p.get("image", ""), str(out), key,
+                                                                             p.get("title", ""), p.get("hide", ""), p.get("actions", ""),
+                                                                             p.get("cut", ""), p.get("fray", ""), bool(p.get("fray_only")),
+                                                                             bool(p.get("planar")), p.get("back", ""))],
                        finish=lambda j: j.result.update(lab=str(out)))
     if name == "weapon2d":
         require("toolkit", "client")
@@ -358,7 +366,7 @@ def task(cfg, name, p):
             th, ra, sh, fb, ol = "", "0.15", "3,-9", "106", True
         return run_job("Tworzenie gumpu", [lambda j: H.cmd_make_gump(cfg, str(p["anim"]), p["image"], str(out), th, ra, "bottom", sh, fb, ol,
                                                                      p.get("gid", ""))],
-                       finish=lambda j: j.result.update(dir=str(out), image=str(out / "porownanie.png")))
+                       finish=lambda j: j.result.update(dir=str(out), image=str(next((out / n for n in ("porownanie.png", "comparison.png") if (out / n).is_file()), out / "porownanie.png"))))
     if name == "search":
         require("client")
         mode = p.get("mode", "item")
