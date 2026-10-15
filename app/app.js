@@ -243,6 +243,18 @@ BUILD.studio = () => {
     } catch (e) {}
   }, "primary"], ["🌐 Podgląd przeglądu", () => openLab(res && res.review)]);
   step(p, 4, "Co dalej", "Wynik to plik .vd. Obejrzyj w Podgląd .vd, zaimportuj w UOFiddlerze na kopii klienta, potem Dodawanie do klienta (gump, art, klasa C#).");
+  const s5 = step(p, 5, "Ikona (art) z modelu 3D", "Rysuje ikonę przedmiotu z modelu 3D (bez Blendera) – lepsza niż pomniejszona klatka animacji. Wynik wskażesz w recepturze w polu Ikona.");
+  const f5 = form(s5.body, [
+    { key: "item", label: "Model 3D", type: "file", filter: ".glb,.gltf,.obj,.fbx", help: "Ten sam model, z którego robisz animację." },
+    { key: "name", label: "Nazwa ikony", help: "Plik: wyniki → icon → <nazwa>.png." },
+    { key: "size", label: "Rozmiar (px)", def: "44", help: "Dłuższy bok ikony. 44 to typowy rozmiar ikon przedmiotów." },
+    { key: "yaw", label: "Obrót (°)", def: "-35", help: "Z której strony patrzymy. 0 = z przodu, -35 = lekko z boku (domyślnie)." },
+    { key: "skip", label: "Pomiń elementy", help: "Nazwy elementów modelu oddzielone przecinkami (np. ciało, które nie ma być na ikonie)." }]);
+  const img5 = el("img", { style: "display:none;image-rendering:pixelated;margin-top:8px;background:#0a0c10;border-radius:4px;max-height:132px", alt: "" }); s5.body.append(img5);
+  btns(s5.body, ["🖼 Zrób ikonę", async () => {
+    const v = f5.values(); if (!v.item) return toast("Wskaż model 3D.", "bad");
+    try { const j = await runTask("icon", v, "Ikona z modelu 3D"); if (j.status === "ok") { s5.ok("Gotowe: " + j.result.png + "\nWskaż ten plik w recepturze (Dodawanie do klienta → Ikona)."); img5.src = "/api/file?path=" + encodeURIComponent(j.result.png) + "&t=" + Date.now(); img5.style.display = "block"; } else s5.bad("Nie udało się (Szczegóły)."); } catch (e) {}
+  }, "primary"]);
 };
 
 // ---- 2D cloth (Levy's texture transfer)

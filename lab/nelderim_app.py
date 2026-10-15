@@ -438,6 +438,23 @@ def task(cfg, name, p):
                 j.result.update(json.loads(m[-1][len("RESULT_JSON "):]))
         c["on_output"] = parse
         return run_job("Podpinanie animacji" if p.get("apply") else "Szukanie nieprzypisanych animacji", [lambda j: c])
+    if name == "icon":
+        require("output")
+        item = str(p.get("item") or "").strip()
+        if not item or not Path(item).is_file():
+            raise ValueError("Wskaż plik modelu 3D (.glb, .gltf, .obj, .fbx).")
+        slug = H.slugify(p.get("name") or Path(item).stem)
+        out = Path(cfg["output"]) / "icon" / f"{slug}.png"
+        size = int(p.get("size") or 44)
+        c = H.cmd_icon(cfg, item, out, size, float(p.get("yaw") or -35),
+                       [s.strip() for s in str(p.get("skip") or "").split(",") if s.strip()])
+
+        def parse(j, cap):
+            m = [x for x in cap if x.startswith("RESULT_PNG ")]
+            if m:
+                j.result["png"] = m[-1][len("RESULT_PNG "):].strip()
+        c["on_output"] = parse
+        return run_job("Ikona z modelu 3D", [lambda j: c])
     if name == "studio_setup":
         require("studio")
         src = Path(str(cfg.get("bodyglb") or "")).parent.parent      # UO_Model3D folder (model/UO_Body_0x190.glb)

@@ -13,6 +13,7 @@ Tools from the command line (same scripts the app runs; `<tool> --help` for opti
     python nelderim.py wire    --client <klient> --file 5 [--apply]                      (anim_wire.py)
     python nelderim.py art     --client <klient> --file 5 --slot 489 --body 429 --out wyniki   (anim_art.py)
     python nelderim.py servuo  --recipe r.json --out wyniki [--serv <ServUO>]                (servuo_item.py)
+    python nelderim.py icon    --item model.glb --out icon.png [--size 44]               (uo3d/cli_icon.py)
     python nelderim.py uopatch | gumppatch ...                                          (uopatch.py, uop_gump_patch.py)
     python nelderim.py uo3d    --body ... --item ... --kind ...                          (uo3d/cli_render.py)
     python nelderim.py vd2glb  --body ... --vd ... --out ...                             (uo3d/cli_vd2glb.py)
@@ -66,7 +67,7 @@ def _utf8_console():
 
 
 TOOLS = {"search": "pipeline/nelderim_search.py", "patch": "pipeline/nelderim_patch.py", "inject": "pipeline/vd_inject.py",
-         "wire": "pipeline/anim_wire.py", "art": "pipeline/anim_art.py", "servuo": "pipeline/servuo_item.py", "uopatch": "pipeline/uopatch.py", "gumppatch": "pipeline/uop_gump_patch.py",
+         "wire": "pipeline/anim_wire.py", "art": "pipeline/anim_art.py", "servuo": "pipeline/servuo_item.py", "icon": "uo3d/cli_icon.py", "uopatch": "pipeline/uopatch.py", "gumppatch": "pipeline/uop_gump_patch.py",
          "uo3d": "uo3d/cli_render.py", "vd2glb": "uo3d/cli_vd2glb.py"}
 
 

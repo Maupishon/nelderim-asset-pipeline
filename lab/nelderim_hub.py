@@ -723,6 +723,17 @@ def cmd_vd2glb(cfg, vd, out, kind="", action=4, voxel=0.02):
             "env": dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")}
 
 
+def cmd_icon(cfg, item, out, size=44, yaw=-35.0, skip=(), outline=0.55):
+    """uo3d/cli_icon.py: static-art icon from a 3D model (no Blender). Prints RESULT_PNG."""
+    script = Path(uo3d_script()).with_name("cli_icon.py")
+    a = [str(script), "--item", str(item), "--out", str(out), "--size", str(int(size)), "--yaw", str(yaw),
+         "--outline", str(outline)]
+    if skip:
+        a += ["--skip", ",".join(skip)]
+    return {"argv": self_script_cmd(*a), "cwd": str(HERE),
+            "env": dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")}
+
+
 def cmd_uo3d(cfg, spec: dict):
     """uo3d/cli_render.py (no Blender): spec keys item, kind, out, name, actions [ints], turn, scale, skip [..], saturation, outline."""
     a = [str(uo3d_script()), "--body", cfg["bodyglb"], "--item", spec["item"], "--kind", spec["kind"], "--out", spec["out"],
