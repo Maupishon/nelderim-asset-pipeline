@@ -156,6 +156,19 @@ use in `nelderim_core.py`, but worth having in one place:
 - CI: read-only token by default; only the exe job has `contents: write` (to publish the release).
 - Report security problems privately to the repository owner, not in a public issue.
 
+## ServUO class generator, Content Studio bridge, 3D icon (2026-10-15)
+
+* `pipeline/servuo_item.py` - one `<Class>.cs` per wearable of a recipe, written to the output folder (never to the server).
+  Base class by layer (BaseOuterTorso, BaseCloak, BaseHat, ... of ServUO 5.8). Checked: compiles against this shard's
+  `Server.dll` / `Scripts.dll`. Not tested in game.
+* Content Studio bridge (`lab/nelderim_hub.py: cmd_studio_*`, page "Model 3D (Blender)"): runs
+  `tools/uo-content/pipeline.py` of a separate SpriteMotion checkout with `SPRITEMOTION_BLENDER` set and copies
+  `item.vd` + review into `<output>/studio/<name>/`. Settings keys `studio` and `blender`. Verified with Blender 5.2.2
+  and the example helmet preview (125 frames, validation passed); `third_party/UO_Model3D_v13` stays in that checkout.
+* `uo3d/icon.py` / `cli_icon.py` - inventory icon from a 3D model with the animation renderer's rasterizer and lighting;
+  ignores a nearly-all-zero `COLOR_0` layer (CC0 starter models carry one). SpriteMotion's own `inventory.png` is only the
+  idle frame shrunk to 44 px, so this is new.
+
 ## Aktualizacja toolkitu 2D (SpriteMotion upstream)
 
 The toolkit used by the 2D tabs (`Ubranie 2D`, `Broń 2D`, `Gump`) is a snapshot of

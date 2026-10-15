@@ -92,6 +92,16 @@ Nie masz modelu? Kliknij **🎞 Z pliku .vd…**: program odtworzy przybliżoną
 ### E. Chcę tylko obejrzeć plik `.vd`
 **Podgląd .vd** → wybierz plik. Pokaże 5 kierunków wybranej akcji z ciałem pod spodem.
 
+### H. Chcę klasę C# przedmiotu dla ServUO
+W **Dodawanie do klienta**, krok 2, kliknij **🧾 Klasa C# (ServUO)**. Dla każdego przedmiotu z `item_id` i warstwą powstaje plik `<Klasa>.cs`
+w folderze wyników → `servuo`. Skopiuj go do `Scripts/Nelderim/Items/` (sam program nie dotyka serwera), zbuduj serwer i sprawdź w grze.
+Warstwa decyduje o klasie bazowej (np. 22 → `BaseOuterTorso`, 20 → `BaseCloak`, 6 → `BaseHat`). Broń i biżuteria nie są obsługiwane.
+
+### I. Mam model 3D i Blendera: dokładniejszy render
+Zakładka **Model 3D (Blender)**: w Ustawieniach wskaż folder pobrany z [DatMoshu/SpriteMotion](https://github.com/DatMoshu/SpriteMotion) i `blender.exe`
+(4.2+; sprawdzone z 5.2), kliknij **Przygotuj Content Studio** (raz), potem **Zbuduj w Blenderze**. Wynik (`.vd`, przegląd, walidacja) trafia do wyników → `studio`.
+Krok 5 na tej samej stronie robi **ikonę (art) z modelu 3D** bez Blendera.
+
 ### F. Import do gry
 Gotowy `.vd` importujesz w **UOFiddlerze** (Animations → Animation Edit → Import from VD → Save), **na kopii klienta**.
 
