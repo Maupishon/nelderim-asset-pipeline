@@ -129,7 +129,7 @@ async function lookup(stepObj, graphic, onAnim) {
 
 // ------------------------------------------------------------------ navigation
 const PAGES = [
-  ["start", "🏠", "Start"], ["fit", "🧊", "Model 3D (Fit Lab)"], ["cloth", "👕", "Ubranie 2D (obrazek)"], ["weapon", "⚔", "Broń 2D (obrazek)"],
+  ["start", "🏠", "Start"], ["fit", "🧊", "Model 3D (Fit Lab)"], ["studio", "🎨", "Model 3D (Blender)"], ["cloth", "👕", "Ubranie 2D (obrazek)"], ["weapon", "⚔", "Broń 2D (obrazek)"],
   ["gump", "🖼", "Gump (lalka)"], ["pack", "📦", "Spakuj do .vd"], ["set", "🧩", "Zestaw z arkusza"], ["vd", "🎞", "Podgląd .vd"],
   ["client", "🛠", "Dodawanie do klienta"], ["settings", "⚙", "Ustawienia"], ["help", "❓", "Pomoc"],
 ];
@@ -211,6 +211,50 @@ BUILD.help = () => {
 <li>Nowy przedmiot w kliencie: „Dodawanie do klienta” (receptura → na sucho → zastosuj).</li></ol>
 <h2 class="sec">Model 3D – sterowanie</h2>
 <p>Lewy przycisk myszy: obrót widoku, prawy: przesuwanie, kółko: przybliżenie. Suwaki „Slot fit” po prawej przesuwają/obracają/skalują przedmiot względem automatycznego dopasowania. Ctrl+Z / Ctrl+Y: cofnij / ponów.</p>` }));
+};
+
+// ---- Content Studio (SpriteMotion upstream + Blender)
+BUILD.studio = () => {
+  const p = page("studio", "🎨 Model 3D w Blenderze (Content Studio)", "Dokładniejszy silnik niż Fit Lab: Blender renderuje 35 akcji × 5 kierunków, z ukrywaniem ciała i walidacją. Wymaga Blendera 4.2+ i folderu SpriteMotion (Ustawienia).");
+  const have = (k) => (S.paths.find((x) => x.key === k) || {}).ok;
+  const s0 = step(p, 1, "Przygotowanie (raz)", "Folder SpriteMotion i blender.exe w Ustawieniach, potem jednorazowo Przygotuj. Wymaga też pliku UO_Body_0x190.glb w Ustawieniach.");
+  s0.body.append(el("div", { class: "check" }, el("span", { class: "dot " + (have("studio") ? "ok" : "bad") }), "Folder SpriteMotion"));
+  s0.body.append(el("div", { class: "check" }, el("span", { class: "dot " + (have("blender") ? "ok" : "bad") }), "blender.exe"));
+  btns(s0.body, ["⚙ Przygotuj Content Studio", async () => { try { const j = await runTask("studio_setup", {}, "Przygotowanie Content Studio"); if (j.status === "ok") s0.ok("Gotowe."); else s0.bad("Nie udało się – Szczegóły."); } catch (e) {} }, "", "Instaluje ciało 3D i narzędzia renderu w folderze SpriteMotion (jednorazowo)."]);
+  const s1 = step(p, 2, "Co budować?", "Model 3D (GLB, FBX, STL, BLEND) albo szablon proceduralny (kolor).");
+  const f1 = form(s1.body, [
+    { key: "name", label: "Nazwa pracy", help: "Np. helm-srebrny. Wyniki trafią do folderu wyników → studio." },
+    { key: "part", label: "Część", type: "select", options: [["helm", "hełm"], ["chest", "tors / zbroja"], ["arms", "ramiona"], ["gloves", "rękawice"], ["legs", "nogi"], ["boots", "buty"], ["robe", "szata"], ["cloak", "peleryna"], ["skirt", "spódnica"], ["weapon", "broń"], ["shield", "tarcza"], ["bow", "łuk"], ["quiver", "kołczan"]], help: "Gdzie na ciele leży przedmiot." },
+    { key: "model", label: "Model 3D (opcjonalnie)", type: "file", filter: ".glb,.fbx,.stl,.blend", help: "Puste = szablon proceduralny w podanym kolorze." },
+    { key: "color", label: "Kolor (#RRGGBB)", help: "Dla szablonu proceduralnego, np. #aebaca. Puste = szary." },
+    { key: "mode", label: "Tryb", type: "select", options: [["preview", "próba (5 akcji)"], ["full", "pełny (35 akcji)"]], help: "Najpierw próba." }]);
+  const adv1 = adv(s1.body);
+  const f1b = form(adv1, [{ key: "scale", label: "Skala", help: "Mnożnik, np. 1.1." }, { key: "offset_x", label: "Przesunięcie X (m)" }, { key: "offset_y", label: "Przesunięcie Y (m)" }, { key: "offset_z", label: "Przesunięcie Z (m)" },
+    { key: "rotate_x", label: "Obrót X (°)" }, { key: "rotate_y", label: "Obrót Y (°)" }, { key: "rotate_z", label: "Obrót Z (°)" }]);
+  const s2 = step(p, 3, "Zbuduj", "Render w Blenderze trwa od kilkudziesięciu sekund (próba) do kilkunastu minut (pełny).");
+  let res = null;
+  btns(s2.body, ["▶ Zbuduj w Blenderze", async () => {
+    const v = { ...f1.values(), ...f1b.values() };
+    if (!v.name) return toast("Podaj nazwę pracy.", "bad");
+    try {
+      const j = await runTask("studio_build", v, "Model 3D w Blenderze");
+      if (j.status === "ok") { res = j.result; const val = res.validation || {}; s2.ok(`Gotowe: ${res.vd}\nKlatek: ${val.frames}, bloków: ${val.blocks}, przycięte: ${(val.clipped_frames || []).length}, puste: ${(val.empty_frames || []).length}.\nNie sprawdzone w grze.`); VD.open(res.vd); }
+      else s2.bad("Nie udało się (Szczegóły na dole).");
+    } catch (e) {}
+  }, "primary"], ["🌐 Podgląd przeglądu", () => openLab(res && res.review)]);
+  step(p, 4, "Co dalej", "Wynik to plik .vd. Obejrzyj w Podgląd .vd, zaimportuj w UOFiddlerze na kopii klienta, potem Dodawanie do klienta (gump, art, klasa C#).");
+  const s5 = step(p, 5, "Ikona (art) z modelu 3D", "Rysuje ikonę przedmiotu z modelu 3D (bez Blendera) – lepsza niż pomniejszona klatka animacji. Wynik wskażesz w recepturze w polu Ikona.");
+  const f5 = form(s5.body, [
+    { key: "item", label: "Model 3D", type: "file", filter: ".glb,.gltf,.obj,.fbx", help: "Ten sam model, z którego robisz animację." },
+    { key: "name", label: "Nazwa ikony", help: "Plik: wyniki → icon → <nazwa>.png." },
+    { key: "size", label: "Rozmiar (px)", def: "44", help: "Dłuższy bok ikony. 44 to typowy rozmiar ikon przedmiotów." },
+    { key: "yaw", label: "Obrót (°)", def: "-35", help: "Z której strony patrzymy. 0 = z przodu, -35 = lekko z boku (domyślnie)." },
+    { key: "skip", label: "Pomiń elementy", help: "Nazwy elementów modelu oddzielone przecinkami (np. ciało, które nie ma być na ikonie)." }]);
+  const img5 = el("img", { style: "display:none;image-rendering:pixelated;margin-top:8px;background:#0a0c10;border-radius:4px;max-height:132px", alt: "" }); s5.body.append(img5);
+  btns(s5.body, ["🖼 Zrób ikonę", async () => {
+    const v = f5.values(); if (!v.item) return toast("Wskaż model 3D.", "bad");
+    try { const j = await runTask("icon", v, "Ikona z modelu 3D"); if (j.status === "ok") { s5.ok("Gotowe: " + j.result.png + "\nWskaż ten plik w recepturze (Dodawanie do klienta → Ikona)."); img5.src = "/api/file?path=" + encodeURIComponent(j.result.png) + "&t=" + Date.now(); img5.style.display = "block"; } else s5.bad("Nie udało się (Szczegóły)."); } catch (e) {}
+  }, "primary"]);
 };
 
 // ---- 2D cloth (Levy's texture transfer)
@@ -417,6 +461,7 @@ BUILD.client = () => {
     ["+ Przedmiot", () => { items.push({ name: "Nowy przedmiot" }); sel = items.length - 1; drawT(); drawE(); }], ["+ Potwór (.vd)", () => { items.push({ name: "Nowy potwór", vd: "" }); sel = items.length - 1; drawT(); drawE(); }],
     ["Usuń", () => { if (sel >= 0) { items.splice(sel, 1); sel = Math.min(sel, items.length - 1); drawT(); drawE(); } }],
     ["{ } Pokaż JSON", () => { const w = window.open("", "_blank"); if (w) { w.document.title = "Receptura"; const pre = w.document.createElement("pre"); pre.textContent = JSON.stringify({ items }, null, 2); w.document.body.append(pre); } }, "", "Podgląd receptury w formacie JSON (tak jak zapisze się do pliku)."],
+    ["🧾 Klasa C# (ServUO)", async () => { const pth = fpath.get(); if (!pth) return toast("Podaj i zapisz recepturę.", "bad"); await api.post("/api/recipe", { path: pth, items }); const j = await runTask("servuo_class", { recipe: pth }, "Klasa C# dla ServUO"); const r = j.result.items || []; const ok = r.filter((x) => x.file).length, bad = r.filter((x) => x.error); if (ok) toast(`Klasy C#: ${ok} w ${j.result.dir}` + (bad.length ? `, błędy: ${bad.length} (Szczegóły)` : "") + ". Skompiluj w ServUO i sprawdź w grze.", bad.length ? "bad" : "ok"); else toast("Nie powstała żadna klasa – zobacz Szczegóły (potrzebny item_id i warstwa).", "bad"); showLog(true); }, "", "Generuje plik .cs dla każdego przedmiotu z receptury (ServUO 5.8). Zapisuje do folderu wyników, nie do serwera."],
     ["💾 Zapisz recepturę", async () => { const pth = fpath.get(); if (!pth) return toast("Podaj plik receptury.", "bad"); await api.post("/api/recipe", { path: pth, items }); store("recipe", pth); toast("Zapisano.", "ok"); }, "primary"]);
   drawT(); drawE();
   const s3 = step(p, 3, "Na sucho, potem zastosuj", "„Na sucho” niczego nie zapisuje. Przeczytaj wynik i ostrzeżenia (WARN).");

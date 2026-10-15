@@ -32,12 +32,15 @@ import nelderim_hub as H
 APP_DIR = H.HERE / "app"
 NOWIN = {"creationflags": 0x08000000} if os.name == "nt" else {}
 PL = {"client": "Folder klienta UO (kopia!)", "toolkit": "Folder toolkitu SpriteMotion",
-      "output": "Folder na wyniki dodawania", "bodyglb": "Plik UO_Body_0x190.glb"}
+      "output": "Folder na wyniki dodawania", "bodyglb": "Plik UO_Body_0x190.glb",
+      "studio": "Folder SpriteMotion (Content Studio, opcjonalnie)", "blender": "Plik blender.exe (opcjonalnie)"}
 PATH_HELP = {
     "client": "Folder z grą (KOPIA klienta!), gdzie leżą anim.idx, anim.mul, tiledata.mul, Equipconv.def.",
     "toolkit": "Folder SpriteMotion-UO-Toolkit (tam gdzie pyproject.toml) z paczką Levy'ego v2. Potrzebny do metod 2D.",
     "output": "Gdzie zapisywać wyniki dodawania do klienta.",
-    "bodyglb": "UO_Body_0x190.glb z projektu UO_Model3D (folder model). Potrzebny do metody 3D. Blender nie jest potrzebny."}
+    "bodyglb": "UO_Body_0x190.glb z projektu UO_Model3D (folder model). Potrzebny do metody 3D. Blender nie jest potrzebny.",
+    "studio": "Folder pobrany z GitHuba DatMoshu/SpriteMotion (tam gdzie tools/uo-content). Tylko do metody Model 3D (Blender).",
+    "blender": "blender.exe (Blender 4.2 lub nowszy). Tylko do metody Model 3D (Blender)."}
 
 
 def self_cmd(*args) -> list[str]:
@@ -435,6 +438,95 @@ def task(cfg, name, p):
                 j.result.update(json.loads(m[-1][len("RESULT_JSON "):]))
         c["on_output"] = parse
         return run_job("Podpinanie animacji" if p.get("apply") else "Szukanie nieprzypisanych animacji", [lambda j: c])
+    if name == "icon":
+        require("output")
+        item = str(p.get("item") or "").strip()
+        if not item or not Path(item).is_file():
+            raise ValueError("Wskaż plik modelu 3D (.glb, .gltf, .obj, .fbx).")
+        slug = H.slugify(p.get("name") or Path(item).stem)
+        out = Path(cfg["output"]) / "icon" / f"{slug}.png"
+        size = int(p.get("size") or 44)
+        c = H.cmd_icon(cfg, item, out, size, float(p.get("yaw") or -35),
+                       [s.strip() for s in str(p.get("skip") or "").split(",") if s.strip()])
+
+        def parse(j, cap):
+            m = [x for x in cap if x.startswith("RESULT_PNG ")]
+            if m:
+                j.result["png"] = m[-1][len("RESULT_PNG "):].strip()
+        c["on_output"] = parse
+        return run_job("Ikona z modelu 3D", [lambda j: c])
+    if name == "studio_setup":
+        require("studio")
+        src = Path(str(cfg.get("bodyglb") or "")).parent.parent      # UO_Model3D folder (model/UO_Body_0x190.glb)
+        if not (src / "model").is_dir():
+            raise ValueError("Najpierw ustaw w Ustawieniach plik UO_Body_0x190.glb (folder UO_Model3D).")
+        return run_job("Przygotowanie Content Studio", [lambda j: H.cmd_studio_setup(cfg, src)])
+    if name == "studio_build":
+        require("studio")
+        if not cfg.get("blender") or not Path(str(cfg["blender"])).is_file():
+            raise ValueError("Wskaż w Ustawieniach plik blender.exe (Blender 4.2 lub nowszy).")
+        if not H.studio_ready(cfg):
+            raise ValueError("Content Studio nie jest przygotowane. Kliknij Przygotuj Content Studio (jednorazowo).")
+        slug = H.slugify(p.get("name") or "przedmiot")
+        asset = str(p.get("model") or "").strip()
+        if asset and not Path(asset).is_file():
+            raise ValueError("Nie ma takiego pliku modelu: " + asset)
+        spec = {"name": p.get("name") or slug, "prompt": p.get("prompt", ""), "part": p.get("part", "helm"),
+                "mode": p.get("mode", "preview"), "fit": "auto"}
+        if str(p.get("color") or "").strip():
+            spec["color"] = str(p["color"]).strip()
+        for k in ("scale", "offset_x", "offset_y", "offset_z", "rotate_x", "rotate_y", "rotate_z"):
+            if str(p.get(k) or "").strip():
+                spec[k] = float(p[k])
+        root = Path(cfg["output"]) / "studio"
+        sp = root / "_spec" / f"{slug}.json"
+        sp.parent.mkdir(parents=True, exist_ok=True)
+        sp.write_text(json.dumps(spec, indent=2, ensure_ascii=False), encoding="utf-8")
+        c = H.cmd_studio_build(cfg, sp, asset)
+
+        def parse(j, cap):
+            for ln in cap:
+                s_ = ln.strip()
+                if s_ and os.path.isabs(s_) and os.path.isfile(os.path.join(s_, "job.json")):
+                    j.result["job"] = s_
+
+        c["on_output"] = parse
+
+        def finish_copy(j):
+            jd = j.result.get("job")
+            if not jd or not (Path(jd) / "item.vd").is_file():
+                raise RuntimeError("Blender nie zwrócił item.vd - zobacz log powyżej.")
+            dst = root / slug
+            dst.mkdir(parents=True, exist_ok=True)
+            vd, backup, note = H.safe_copy(Path(jd) / "item.vd", dst / f"{slug}.vd")
+            for fn in ("contact-sheet.png", "inventory.png", "validation.json", "IMPORT-README.txt"):
+                if (Path(jd) / fn).is_file():
+                    shutil.copy2(Path(jd) / fn, dst / fn)
+            if (Path(jd) / "review").is_dir():
+                shutil.copytree(Path(jd) / "review", dst / "review", dirs_exist_ok=True)
+            try:
+                j.result["validation"] = json.loads((Path(jd) / "validation.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                pass
+            j.result.update(vd=str(vd), dir=str(dst), review=str(dst / "review"), contact=str(dst / "contact-sheet.png"))
+            j.say(f"Gotowe: {vd}" + (f" (kopia poprzedniego: {backup})" if backup else ""))
+        return run_job("Model 3D w Blenderze", [lambda j: c, py(finish_copy)])
+    if name == "servuo_class":
+        require("output")
+        rp = Path(str(p.get("recipe") or ""))
+        if not rp.is_file():
+            raise ValueError("Najpierw zapisz recepturę (krok 2).")
+        out = Path(cfg["output"]) / "servuo"
+        c = H.cmd_servuo_class(cfg, rp, out, cfg.get("serv") or "")
+        c["ok"] = (0, 1)
+
+        def parse(j, cap):
+            m = [x for x in cap if x.startswith("RESULT_JSON ")]
+            if m:
+                j.result.update(json.loads(m[-1][len("RESULT_JSON "):]))
+            j.result["dir"] = str(out)
+        c["on_output"] = parse
+        return run_job("Klasa C# dla ServUO", [lambda j: c])
     if name == "anim_wired":
         require("client")
         c = H.cmd_anim_wired(cfg, int(p.get("file", 5)))
