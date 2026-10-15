@@ -59,95 +59,128 @@ def slot_empty(idx, count, slot, n):
     return True
 
 
-def run(client, vd, n, slot, body, name, out, apply_, overwrite=False):
+def gump_hashes_in_use(client):
+    """hashes of the paperdoll gumps already present in gumpartLegacyMUL.uop (None when there is none / it cannot be read)."""
+    for nm in os.listdir(client):
+        if nm.lower() == "gumpartlegacymul.uop":
+            try:
+                import uop_gump_patch as G
+                u = G.UopFile(os.path.join(client, nm))
+                ents = set(u.entries)
+                u.close()
+                return ents, G
+            except (OSError, SystemExit, struct.error):
+                return None
+    return None
+
+
+def run_batch(client, items, n, out, apply_, overwrite=False, first_slot=432):
+    """items = [{"vd", "name", "slot"?, "body"?}, ...] -> one anim<N>.mul / .idx / Bodyconv.def / mobtypes.txt in `out`.
+    Slots and bodies are chosen one after another, so every robe gets its own and the output stays cumulative."""
     say = lambda k, m: print(f"[{k:7}] {m}", flush=True)       # noqa: E731
-    d, recs = read_vd(vd)
-    npop = sum(1 for lk, ln, _ in recs if lk >= 0 and ln > 0)
-    say("VD", f"{os.path.basename(vd)}: {npop}/{PEOPLE_RECS} bloków akcja/kierunek")
     ip, mp = C.find(client, f"anim{n}.idx"), C.find(client, f"anim{n}.mul")
     if not ip or not mp:
         raise Problem(f"Brak anim{n}.idx / anim{n}.mul w kliencie.")
     idx = bytearray(open(ip, "rb").read())
     count = len(idx) // REC
     refs = W.bodyconv_refs(C.find(client, "Bodyconv.def"))[n]
-
-    if slot is None:
-        s = 432                              # 400-431 is the gargoyle range (wired in Bodyconv.def, often empty): not used for auto-pick
-        while W.slot_layout(n, s)[0] + PEOPLE_RECS <= count:
-            if slot_empty(idx, count, s, n) and not refs.get(s):
-                slot = s
-                break
-            s += 1
-        if slot is None:
-            raise Problem(f"anim{n}.idx nie ma pustego slotu people.")
-        say("SLOT", f"anim{n}: pierwszy pusty slot people = {slot}")
-    else:
-        if refs.get(slot):
-            raise Problem(f"slot {slot} jest już podpięty w Bodyconv.def do body {refs[slot]}")
-        if not slot_empty(idx, count, slot, n) and not overwrite:
-            raise Problem(f"slot {slot} w anim{n} ma już dane (--overwrite, jeśli to ma być nadpisane; kopia zapasowa jest)")
-        say("SLOT", f"anim{n}: wybrany slot {slot}")
-    start, _ = W.slot_layout(n, slot)
-
     uop = W.UopIndex(client)
-    if body is None:
-        body = next(W.free_bodies(client, "HUMAN", set(), uop=uop), None)
+    taken_slots, taken_bodies, plan = set(), set(), []
+    gumps = gump_hashes_in_use(client)
+
+    def gump_free(b):
+        """paperdoll gumps b+50000 / b+60000 must not exist yet, or the patch would overwrite another item's gump."""
+        if not gumps:
+            return True
+        ents, G = gumps
+        return not any(G.uop_hash(G.gump_path(b + base)) in ents for base in (50000, 60000))
+
+    for it in items:
+        d, recs = read_vd(it["vd"])
+        npop = sum(1 for lk, ln, _ in recs if lk >= 0 and ln > 0)
+        slot, body = it.get("slot"), it.get("body")
+        if slot is None:
+            s = first_slot
+            while W.slot_layout(n, s)[0] + PEOPLE_RECS <= count:
+                if slot_empty(idx, count, s, n) and not refs.get(s) and s not in taken_slots:
+                    slot = s
+                    break
+                s += 1
+            if slot is None:
+                raise Problem(f"anim{n}.idx nie ma pustego slotu people.")
+        else:
+            if refs.get(slot) or slot in taken_slots:
+                raise Problem(f"slot {slot} jest już podpięty w Bodyconv.def do body {refs.get(slot)}")
+            if not slot_empty(idx, count, slot, n) and not overwrite:
+                raise Problem(f"slot {slot} w anim{n} ma już dane (--overwrite, jeśli to ma być nadpisane; kopia zapasowa jest)")
         if body is None:
-            raise Problem("Brak wolnego body (HUMAN).")
-        say("BODY", f"wolne body = {body}")
-    else:
-        gen = W.free_bodies(client, "HUMAN", set(), lo=body, hi=body + 1, uop=uop)
-        if next(gen, None) != body:
-            raise Problem(f"body {body} jest zajęte (body.def / Bodyconv.def / mobtypes.txt / UOP / tiledata) albo ma dane w anim.mul")
-        say("BODY", f"body {body} wolne")
-    say("PLAN", f"anim{n}.idx rekordy {start}..{start + PEOPLE_RECS - 1}, {npop} bloków dopisanych na końcu anim{n}.mul; "
-                f"Bodyconv.def: {body} -> anim{n} slot {slot}; mobtypes.txt: {body} HUMAN")
+            body = next((b for b in W.free_bodies(client, "HUMAN", taken_bodies, uop=uop) if gump_free(b)), None)
+            if body is None:
+                raise Problem("Brak wolnego body (HUMAN).")
+        else:
+            if not gump_free(body):
+                raise Problem(f"body {body}: gumpy {body + 50000} / {body + 60000} już są w gumpartLegacyMUL.uop (nadpisałbyś cudzy paperdoll)")
+            if body in taken_bodies or next(W.free_bodies(client, "HUMAN", taken_bodies, lo=body, hi=body + 1, uop=uop), None) != body:
+                raise Problem(f"body {body} jest zajęte (body.def / Bodyconv.def / mobtypes.txt / UOP / tiledata) albo ma dane w anim.mul")
+        taken_slots.add(slot); taken_bodies.add(body)
+        say("PLAN", f"{os.path.basename(it['vd'])}: {npop} bloków -> anim{n} slot {slot}, body {body}"
+                    + (f" ({it['name']})" if it.get("name") else ""))
+        plan.append((it, d, recs, slot, body))
     if not apply_:
         say("PLAN", "na sucho - nic nie zapisano (--apply)")
-        return {"slot": slot, "body": body}
+        return [{"slot": p[3], "body": p[4], "name": p[0].get("name", "")} for p in plan]
 
     os.makedirs(out, exist_ok=True)
     bdir = C.backup_client_files(client, out, [f"anim{n}.idx"])         # the big .mul is only appended to; idx backup is enough
     out_mul, out_idx = os.path.join(out, f"anim{n}.mul"), os.path.join(out, f"anim{n}.idx")
+    import shutil
     shutil.copyfile(mp, out_mul)
-    new = []
+    written = []
     with open(out_mul, "r+b") as mo:
         mo.seek(0, os.SEEK_END)
-        for k, (lk, ln, _e) in enumerate(recs):
-            if lk < 0 or ln <= 0:
-                struct.pack_into("<iii", idx, (start + k) * REC, -1, -1, 0)
-                continue
-            off = mo.tell()
-            mo.write(d[lk:lk + ln])
-            struct.pack_into("<iii", idx, (start + k) * REC, off, ln, 0)
-            new.append((k, off, ln))
+        for it, d, recs, slot, body in plan:
+            start, _ = W.slot_layout(n, slot)
+            for k, (lk, ln, _e) in enumerate(recs):
+                if lk < 0 or ln <= 0:
+                    struct.pack_into("<iii", idx, (start + k) * REC, -1, -1, 0)
+                    continue
+                off = mo.tell()
+                mo.write(d[lk:lk + ln])
+                struct.pack_into("<iii", idx, (start + k) * REC, off, ln, 0)
+                written.append((start + k, off, ln, d[lk:lk + ln]))
     open(out_idx, "wb").write(idx)
 
-    # verify: every record points at bytes equal to the .vd block
-    chk = open(out_idx, "rb").read()
+    chk = open(out_idx, "rb").read()                                   # verify: every record points at its block
     with open(out_mul, "rb") as f:
-        for k, off, ln in new:
-            lk, l2, _ = struct.unpack_from("<iii", chk, (start + k) * REC)
+        for rec, off, ln, blk in written:
+            lk, l2, _ = struct.unpack_from("<iii", chk, rec * REC)
             f.seek(lk)
-            if (lk, l2) != (off, ln) or f.read(ln) != d[recs[k][0]:recs[k][0] + ln]:
-                raise Problem(f"weryfikacja nie przeszła: rekord {k}")
-    say("OK", f"zapisano {len(new)} bloków; anim{n}.mul {os.path.getsize(mp)} -> {os.path.getsize(out_mul)} B; weryfikacja OK")
+            if (lk, l2) != (off, ln) or f.read(ln) != blk:
+                raise Problem(f"weryfikacja nie przeszła: rekord {rec}")
+    say("OK", f"zapisano {len(written)} bloków ({len(plan)} animacji); anim{n}.mul {os.path.getsize(mp)} -> "
+              f"{os.path.getsize(out_mul)} B; weryfikacja OK")
 
-    row = {"slot": slot, "body": body, "type": "HUMAN", "name": name or ""}
-    bd2, _man, ver = W.apply_plan(client, n, [row], out)
+    rows = [{"slot": slot, "body": body, "type": "HUMAN", "name": it.get("name") or ""} for it, _d, _r, slot, body in plan]
+    bd2, _man, ver = W.apply_plan(client, n, rows, out)
     C.update_manifest(client, out, [f"anim{n}.idx", f"anim{n}.mul"])
     say("OK", f"Bodyconv.def + mobtypes.txt w {out} (manifest v{ver}); kopie: {bdir or bd2}")
-    return {"slot": slot, "body": body, "out": out}
+    return [{"slot": r["slot"], "body": r["body"], "name": r["name"], "out": out} for r in rows]
+
+
+def run(client, vd, n, slot, body, name, out, apply_, overwrite=False):
+    r = run_batch(client, [{"vd": vd, "name": name, "slot": slot, "body": body}], n, out, apply_, overwrite)[0]
+    return r
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--client", required=True)
-    ap.add_argument("--vd", required=True)
+    ap.add_argument("--vd", required=True, action="append", help="may be given several times (one slot + body each)")
     ap.add_argument("--file", type=int, choices=[2, 3, 4, 5], default=5)
     ap.add_argument("--slot", type=int)
     ap.add_argument("--body", type=int)
-    ap.add_argument("--name", default="")
+    ap.add_argument("--name", action="append", default=[], help="one per --vd, same order")
+    ap.add_argument("--first-slot", type=int, default=432, help="where the automatic slot search starts")
     ap.add_argument("--out", default="")
     ap.add_argument("--overwrite", action="store_true")
     ap.add_argument("--apply", action="store_true")
@@ -156,7 +189,11 @@ def main(argv=None):
     if a.apply and not a.out:
         ap.error("--apply wymaga --out")
     try:
-        r = run(a.client, a.vd, a.file, a.slot, a.body, a.name, a.out, a.apply, a.overwrite)
+        if len(a.vd) > 1 and (a.slot or a.body):
+            ap.error("--slot / --body tylko przy jednym --vd")
+        items = [{"vd": v, "name": (a.name[i] if i < len(a.name) else ""), "slot": a.slot, "body": a.body} for i, v in enumerate(a.vd)]
+        r = run_batch(a.client, items, a.file, a.out, a.apply, a.overwrite, a.first_slot)
+        r = r if len(r) > 1 else r[0]
     except Problem as e:
         print(f"[BŁĄD  ] {e}")
         return 1
