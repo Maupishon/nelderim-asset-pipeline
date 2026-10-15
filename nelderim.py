@@ -67,7 +67,7 @@ def _utf8_console():
 
 
 TOOLS = {"search": "pipeline/nelderim_search.py", "patch": "pipeline/nelderim_patch.py", "inject": "pipeline/vd_inject.py",
-         "wire": "pipeline/anim_wire.py", "animimport": "pipeline/anim_import.py", "art": "pipeline/anim_art.py", "servuo": "pipeline/servuo_item.py", "icon": "uo3d/cli_icon.py", "uopatch": "pipeline/uopatch.py", "gumppatch": "pipeline/uop_gump_patch.py",
+         "wire": "pipeline/anim_wire.py", "animimport": "pipeline/anim_import.py", "hood": "pipeline/hood_blend.py", "art": "pipeline/anim_art.py", "servuo": "pipeline/servuo_item.py", "icon": "uo3d/cli_icon.py", "uopatch": "pipeline/uopatch.py", "gumppatch": "pipeline/uop_gump_patch.py",
          "uo3d": "uo3d/cli_render.py", "vd2glb": "uo3d/cli_vd2glb.py"}
 
 

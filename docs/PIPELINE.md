@@ -156,6 +156,14 @@ use in `nelderim_core.py`, but worth having in one place:
 - CI: read-only token by default; only the exe job has `contents: write` (to publish the release).
 - Report security problems privately to the repository owner, not in a public issue.
 
+## hood_blend.py - hood matched to the robe (2026-10-15)
+
+`python nelderim.py hood --lab <lab> --masks <region_ids frames>`; in the app: Ubranie 2D -> Zaawansowane -> "Kaptur".
+Post-processes the build_item atlases in place: the hood keeps the original silhouette and folds, its tone and grain
+come from plain cloth just under the hood (brightness only, same .65 + .55 L shading as `fit_texture`), the seam is
+blended over 6 rows and the face opening is filled dark. Result checked by eye on the alchemist robe (Hooded Shroud);
+`hood_blend.json` in the lab blocks a second pass. Needs the toolkit's region masks (label 1 = face, 5 = hands).
+
 ## anim_import.py - People .vd into an empty anim2..5.mul slot (2026-10-15)
 
 `python nelderim.py animimport --client <copy> --vd robe.vd --file 5 [--slot N] [--body N] --out DIR [--apply]`.
