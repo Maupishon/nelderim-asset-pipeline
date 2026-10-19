@@ -40,3 +40,29 @@ def test_fatten_scales_only_the_cross_section():
     y0 = np.ptp(m.pos[:, 1]); x0 = np.ptp(m.pos[:, 0])
     engine.fatten(m, 3.0)
     assert abs(np.ptp(m.pos[:, 1]) - y0) < 1e-9 and np.ptp(m.pos[:, 0]) > 2.5 * x0
+
+
+def _img(mask, rgb=(200, 100, 50)):
+    img = np.zeros(mask.shape + (4,), np.uint8)
+    img[mask, :3] = rgb
+    img[mask, 3] = 255
+    return img
+
+
+def test_smooth_alpha_removes_spikes_and_fills_notches():
+    m = np.zeros((20, 20), bool)
+    m[5:15, 5:15] = True
+    m[4, 9] = True                                   # 1 px spike on the top edge
+    m[8, 5] = False                                  # 1 px notch in the left edge
+    out = engine.smooth_alpha(_img(m), 1)
+    a = out[..., 3] > 0
+    assert not a[4, 9]                               # spike gone
+    assert a[8, 5] and out[8, 5, :3].tolist() == [200, 100, 50]   # notch filled with the neighbours' colour
+    assert a[10, 10] and a.sum() >= 95
+
+
+def test_lift_dark_leaves_no_near_black_pixels_and_keeps_transparency():
+    m = np.zeros((6, 6), bool); m[2:4, 2:4] = True
+    out = engine.lift_dark(_img(m, (3, 5, 9)), 24)
+    assert out[m][:, :3].min() >= 24 and (out[~m][:, 3] == 0).all()
+    assert engine.lift_dark(_img(m, (3, 5, 9)), 0)[m][:, :3].max() == 9

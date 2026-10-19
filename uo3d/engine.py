@@ -499,6 +499,37 @@ def outline(img, factor):
     return img
 
 
+def smooth_alpha(img, passes=1):
+    """smooth a ragged silhouette (saw teeth, 1 px spikes and notches): a pixel is kept when at least 5 of the 9 pixels
+    around it (itself included) are opaque. Pixels that appear take the mean colour of their opaque neighbours."""
+    img = img.copy()
+    for _ in range(int(passes)):
+        a = img[..., 3] > 0
+        p = np.pad(a.astype(np.int16), 1)
+        cnt = sum(p[1 + dy:p.shape[0] - 1 + dy, 1 + dx:p.shape[1] - 1 + dx] for dy in (-1, 0, 1) for dx in (-1, 0, 1))
+        new = cnt >= 5
+        gained = new & ~a
+        if gained.any():
+            pc = np.pad(img[..., :3].astype(np.float32) * a[..., None], ((1, 1), (1, 1), (0, 0)))
+            s = sum(pc[1 + dy:pc.shape[0] - 1 + dy, 1 + dx:pc.shape[1] - 1 + dx] for dy in (-1, 0, 1) for dx in (-1, 0, 1))
+            cn = np.maximum(cnt, 1)                  # the pixel itself is not opaque, so cnt = opaque neighbours
+            img[gained, :3] = (s[gained] / cn[gained][:, None]).astype(np.uint8)
+            img[gained, 3] = 255
+        img[a & ~new, 3] = 0
+        img[a & ~new, :3] = 0
+    return img
+
+
+def lift_dark(img, floor):
+    """no near-black pixels: every opaque pixel gets at least `floor` in each channel (edges of a dark item stay visible)."""
+    if floor <= 0:
+        return img
+    a = img[..., 3] > 0
+    img = img.copy()
+    img[a, :3] = np.maximum(img[a, :3], int(floor))
+    return img
+
+
 def clean(img, fill=4, min_piece=8):
     """fill tiny holes, drop tiny detached bits (needs scipy for the second; skipped without it)."""
     a = img[..., 3] > 0
@@ -542,8 +573,9 @@ HORSE_ACTION = {23: 0, 24: 1, 25: 2, 26: 2, 27: 2, 28: 2, 29: 2}      # rider ac
 class FrameRenderer:
     """Renders single frames of the item layer (shared by the full render and the live previews of the app)."""
 
-    def __init__(self, body, item, margin=0.01, outline_f=0.38, body_masks=None, horse_masks=None):
+    def __init__(self, body, item, margin=0.01, outline_f=0.38, body_masks=None, horse_masks=None, smooth=0, min_dark=0):
         self.body, self.item = body, item
+        self.smooth, self.min_dark = smooth, min_dark
         self.margin, self.outline_f = margin, outline_f
         self.body_masks, self.horse_masks = body_masks, horse_masks
         g = body.g
@@ -595,17 +627,19 @@ class FrameRenderer:
             _, adep = R.raster(xyb, zb, g.tri, W, H)
             npoke = int(((adep < dep - 0.003) & (tid >= 0)).sum())
         img[hide] = 0
-        img = clean(outline(img, self.outline_f))
+        if self.smooth:
+            img = smooth_alpha(img, self.smooth)
+        img = lift_dark(clean(outline(img, self.outline_f)), self.min_dark)
         return img, npoke
 
 
 def render_layer(body, item, actions, out_path, outline_f=0.38, margin=0.01, progress=None, body_masks=None, horse_masks=None,
-                 cloth_sim=None):
+                 cloth_sim=None, smooth=0, min_dark=0):
     """Render the item layer of every (action, direction, frame) to a .vd.
     body_masks: {(action, dir): [bool mask]} silhouettes of the original body (anim 400): the body hides the item exactly along them (EXACT_BODY).
     horse_masks: same for the original horse (mounted actions): the horse hides the part of the item behind the saddle."""
     from .vdwrite import write_vd
-    fr = FrameRenderer(body, item, margin, outline_f, body_masks, horse_masks)
+    fr = FrameRenderer(body, item, margin, outline_f, body_masks, horse_masks, smooth, min_dark)
     blocks = {}
     total = sum(5 * ACTION_FRAMES[a] for a in actions); done = 0; t0 = time.time()
     for a in actions:
