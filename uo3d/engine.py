@@ -128,9 +128,72 @@ def nearest(points, ref, chunk=2000):
     return out_i, out_d
 
 
+def pre_rotate(m, deg):
+    """orient a model that is not glTF Y-up: rotate the whole mesh (degrees about X, then Y, then Z, right-handed)
+    before anything else. A weapon must end up standing along +Y with its hilt at the bottom."""
+    rx, ry, rz = (math.radians(float(a)) for a in deg)
+    cx, sx, cy, sy, cz, sz = math.cos(rx), math.sin(rx), math.cos(ry), math.sin(ry), math.cos(rz), math.sin(rz)
+    Rx = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]])
+    Ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]])
+    Rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]])
+    R = Rz @ Ry @ Rx
+    m.pos = m.pos @ R.T
+    m.nrm = m.nrm @ R.T
+    return m
+
+
+def align_long_axis(m):
+    """rotate the mesh so its long axis (PCA) stands along +Y with the hilt at the bottom. The hilt end is the end
+    nearest to the widest cross-section (the guard); returns the rotation matrix that was applied."""
+    P = m.pos
+    c = P.mean(0)
+    w, V = np.linalg.eigh(np.cov((P - c).T))
+    a = V[:, int(np.argmax(w))]                          # long axis
+    t = (P - c) @ a
+    u = np.cross(a, [0.0, 1.0, 0.0]) if abs(a[1]) < 0.9 else np.cross(a, [1.0, 0.0, 0.0])
+    u = u / np.linalg.norm(u)
+    v = np.cross(a, u)
+    n = 24
+    edges = np.linspace(t.min(), t.max(), n + 1)
+    best, width = 0, -1.0
+    for i in range(n):
+        s = (t >= edges[i]) & (t <= edges[i + 1])
+        if s.sum() < 3:
+            continue
+        q = (P[s] - c) - np.outer(t[s], a)
+        wd = float(max(np.ptp(q @ u), np.ptp(q @ v)))     # extent of this slab (its own centre, so a curved or tilted blade does not look wide)
+        if wd > width:
+            width, best = wd, 0.5 * (edges[i] + edges[i + 1])
+    if abs(best - t.min()) > abs(best - t.max()):        # the guard is near the max end: that end becomes the hilt
+        a = -a
+    up = np.array([0.0, 1.0, 0.0])
+    v = np.cross(a, up)
+    s_, c_ = np.linalg.norm(v), float(a @ up)
+    if s_ < 1e-9:
+        R = np.eye(3) if c_ > 0 else np.diag([1.0, -1.0, -1.0])
+    else:
+        k = v / s_
+        K = np.array([[0, -k[2], k[1]], [k[2], 0, -k[0]], [-k[1], k[0], 0]])
+        R = np.eye(3) + s_ * K + (1 - c_) * (K @ K)
+    # the tip goes to +Y: a (hilt -> tip) must map to +Y
+    m.pos = (m.pos - c) @ R.T
+    m.nrm = m.nrm @ R.T
+    return R
+
+
+def fatten(m, k):
+    """scale the two axes perpendicular to the blade (X and Z) by k about the blade axis; Y (length) is untouched."""
+    if abs(k - 1.0) < 1e-9:
+        return m
+    c = m.pos.mean(0)
+    m.pos[:, 0] = (m.pos[:, 0] - c[0]) * k + c[0]
+    m.pos[:, 2] = (m.pos[:, 2] - c[2]) * k + c[2]
+    return m
+
+
 class Item:
     def __init__(self, path, kind, body, turn=0, scale=0.0, skip=(), saturation=1.0, metal=None, shift=(0.0, 0.0, 0.0),
-                 motion=None, shield_keys=None, ref=None, roll_deg=None, adjust=None):
+                 motion=None, shield_keys=None, ref=None, roll_deg=None, adjust=None, pre_rot=None, fatten_k=1.0, flip=False):
         self.kind = kind
         self.body = body
         self.rigid = None
@@ -138,6 +201,15 @@ class Item:
         self.cloth_t = None
         self.adjust = adjust or {}
         m = statmesh.load(path, skip)
+        if pre_rot == "auto":
+            align_long_axis(m)
+        elif pre_rot and any(abs(float(a)) > 1e-9 for a in pre_rot):
+            m = pre_rotate(m, pre_rot)
+        if flip:                                             # hilt and tip the wrong way round: turn the model upside down
+            m.pos = m.pos * np.array([-1.0, -1.0, 1.0])
+            m.nrm = m.nrm * np.array([-1.0, -1.0, 1.0])
+        if fatten_k and abs(float(fatten_k) - 1.0) > 1e-9:
+            fatten(m, float(fatten_k))
         self.mesh = m
         P = m.pos.copy()
         if kind in wp.CLASS_OF_KIND or kind == "shield":
