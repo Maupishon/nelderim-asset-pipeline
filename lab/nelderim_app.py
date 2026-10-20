@@ -536,7 +536,8 @@ def task(cfg, name, p):
             raise ValueError("Wskaż plik PNG z gumpem szaty (przezroczyste tło).")
         key = H.slugify(p.get("name") or Path(gump).stem)
         c = H.cmd_robe_from_gump(cfg, gump, key, p.get("title") or p.get("name") or "", norm_item(p.get("graphic") or "0x2684"),
-                                 int(p.get("base_anim") or 970), bool(p.get("no_hood")), p.get("actions", ""))
+                                 int(p.get("base_anim") or 970), bool(p.get("no_hood")), p.get("actions", ""),
+                                 float(str(p.get("shade_transfer") or 0).replace(",", ".") or 0))
 
         def parse(j, cap):
             m = [x for x in cap if x.startswith("RESULT_VD ")]

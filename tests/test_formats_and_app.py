@@ -83,6 +83,9 @@ def test_robe_from_gump_command_line():
     i = a.index("--actions"); assert a[i + 1:i + 3] == ["4", "0"]
     assert a[a.index("--toolkit") + 1] == "T" and a[a.index("--key") + 1] == "szata_x"
     assert "robe_from_gump.py" in " ".join(a)
+    assert "--shade-transfer" not in a
+    b = H.cmd_robe_from_gump(cfg, "g.png", "szata_x", shade_transfer=1.5)["argv"]
+    assert b[b.index("--shade-transfer") + 1] == "1.5"
 
 
 def test_app_js_is_valid_module():

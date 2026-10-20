@@ -297,6 +297,7 @@ BUILD.cloth = () => {
     { key: "graphic", label: "Przedmiot bazowy", def: "0x2684", help: "ID przedmiotu, którego animację przerabiamy (kształt). 0x2684 = Hooded Shroud." },
     { key: "base_anim", label: "Animacja bazowa", def: "970", help: "Numer animacji tego przedmiotu (dla 0x2684 to 970)." },
     { key: "no_hood", label: "Kaptur", type: "check", text: "NIE dopasowuj kaptura", help: "Zaznacz tylko, gdy szata nie ma kaptura." },
+    { key: "shade_transfer", label: "Cieniowanie", placeholder: "1.5 (puste = wyłączone)", help: "Przenosi cienie z oryginalnej szaty (pachy, wnętrze rękawów, pas), żeby nowa szata nie wyglądała na płaską. 1.5 = kontrast oryginału; 2.5 i więcej jest już za plamiste." },
     { key: "actions", label: "Akcje (próba)", placeholder: "puste = wszystkie 35", help: "Np. „4 0” na próbę. Puste = wszystkie 35 akcji." }]);
   btns(s6.body, ["🧙 Zrób szatę z gumpu", async () => {
     const v = f6.values(); if (!v.gump || !v.name) return toast("Wskaż gump i nazwę pracy.", "bad");
