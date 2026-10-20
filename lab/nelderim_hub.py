@@ -296,8 +296,8 @@ def cmd_build_item(cfg, graphic, design, out, key, title, hide, actions, cut="",
     return _tk(cfg, *a)
 
 
-def cmd_robe_from_gump(cfg, gump, key, title="", graphic="0x2684", base_anim=970, no_hood=False, actions=""):
-    """robe_from_gump.py: gump PNG -> design -> build_item -> hood_blend -> .vd. Prints RESULT_VD."""
+def cmd_robe_from_gump(cfg, gump, key, title="", graphic="0x2684", base_anim=970, no_hood=False, actions="", shade_transfer=0):
+    """robe_from_gump.py: gump PNG -> design -> build_item -> hood_blend -> shade_transfer -> .vd. Prints RESULT_VD."""
     a = ["--gump", str(gump), "--toolkit", cfg["toolkit"], "--client", cfg["client"], "--key", key,
          "--graphic", str(graphic), "--base-anim", str(int(base_anim))]
     if title:
@@ -306,6 +306,8 @@ def cmd_robe_from_gump(cfg, gump, key, title="", graphic="0x2684", base_anim=970
         a.append("--no-hood")
     if str(actions).strip():
         a += ["--actions", *str(actions).split()]
+    if shade_transfer and float(shade_transfer) > 0:
+        a += ["--shade-transfer", str(float(shade_transfer))]
     return _pl(cfg, "robe_from_gump.py", *a)
 
 
