@@ -123,3 +123,25 @@ def test_body_whose_paperdoll_gumps_exist_is_skipped(people_client, tmp_path):
     assert r["body"] != first                                 # its gump 50000+body would have been overwritten
     with pytest.raises(I.Problem, match="nadpisałbyś"):
         I.run_batch(str(people_client), [{"vd": str(vd), "body": first}], 5, str(tmp_path / "o"), False)
+
+
+def test_overwrite_replaces_an_already_wired_animation_in_place(people_client, tmp_path):
+    first = make_vd(tmp_path / "a.vd")
+    out1 = tmp_path / "out1"
+    r1 = I.run_batch(str(people_client), [{"vd": str(first), "name": "R"}], 5, str(out1), True, first_slot=470)[0]
+    for f in ("anim5.mul", "anim5.idx", "Bodyconv.def", "mobtypes.txt"):            # "deploy" into the client
+        (people_client / f).write_bytes((out1 / f).read_bytes())
+    # without --overwrite the wired slot is refused
+    second = make_vd(tmp_path / "b.vd")
+    with pytest.raises(I.Problem, match="podpięty"):
+        I.run_batch(str(people_client), [{"vd": str(second), "slot": r1["slot"]}], 5, str(tmp_path / "o"), False)
+    out2 = tmp_path / "out2"
+    r2 = I.run_batch(str(people_client), [{"vd": str(second), "slot": r1["slot"]}], 5, str(out2), True, overwrite=True)[0]
+    assert r2["replace"] is True and r2["body"] == r1["body"] and r2["slot"] == r1["slot"]
+    live = (people_client / "anim5.mul").read_bytes()
+    mul, idx = (out2 / "anim5.mul").read_bytes(), (out2 / "anim5.idx").read_bytes()
+    assert mul[:len(live)] == live and len(mul) > len(live)                         # appended, nothing moved
+    start = PEOPLE_FIRST + (r1["slot"] - 400) * 175
+    lk, ln, _ = struct.unpack_from("<iii", idx, start * 12)
+    assert lk >= len(live)                                                          # the record points at the new block
+    assert not (out2 / "Bodyconv.def").exists()                                     # already wired: no new def lines

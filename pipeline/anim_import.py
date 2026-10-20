@@ -99,6 +99,11 @@ def run_batch(client, items, n, out, apply_, overwrite=False, first_slot=432):
         d, recs = read_vd(it["vd"])
         npop = sum(1 for lk, ln, _ in recs if lk >= 0 and ln > 0)
         slot, body = it.get("slot"), it.get("body")
+        replace = False
+        if slot is not None and overwrite and refs.get(slot):           # redo an animation that is already imported
+            if body is not None and body not in refs[slot]:
+                raise Problem(f"slot {slot} jest podpięty do body {refs[slot]}, a podano body {body}")
+            body, replace = refs[slot][0], True
         if slot is None:
             s = first_slot
             while W.slot_layout(n, s)[0] + PEOPLE_RECS <= count:
@@ -108,12 +113,14 @@ def run_batch(client, items, n, out, apply_, overwrite=False, first_slot=432):
                 s += 1
             if slot is None:
                 raise Problem(f"anim{n}.idx nie ma pustego slotu people.")
-        else:
+        elif not replace:
             if refs.get(slot) or slot in taken_slots:
                 raise Problem(f"slot {slot} jest już podpięty w Bodyconv.def do body {refs.get(slot)}")
             if not slot_empty(idx, count, slot, n) and not overwrite:
                 raise Problem(f"slot {slot} w anim{n} ma już dane (--overwrite, jeśli to ma być nadpisane; kopia zapasowa jest)")
-        if body is None:
+        if replace:
+            pass                                                         # the body is already wired to this slot
+        elif body is None:
             body = next((b for b in W.free_bodies(client, "HUMAN", taken_bodies, uop=uop) if gump_free(b)), None)
             if body is None:
                 raise Problem("Brak wolnego body (HUMAN).")
@@ -124,11 +131,11 @@ def run_batch(client, items, n, out, apply_, overwrite=False, first_slot=432):
                 raise Problem(f"body {body} jest zajęte (body.def / Bodyconv.def / mobtypes.txt / UOP / tiledata) albo ma dane w anim.mul")
         taken_slots.add(slot); taken_bodies.add(body)
         say("PLAN", f"{os.path.basename(it['vd'])}: {npop} bloków -> anim{n} slot {slot}, body {body}"
-                    + (f" ({it['name']})" if it.get("name") else ""))
-        plan.append((it, d, recs, slot, body))
+                    + (f" ({it['name']})" if it.get("name") else "") + (" [ZASTĘPUJE istniejącą animację]" if replace else ""))
+        plan.append((it, d, recs, slot, body, replace))
     if not apply_:
         say("PLAN", "na sucho - nic nie zapisano (--apply)")
-        return [{"slot": p[3], "body": p[4], "name": p[0].get("name", "")} for p in plan]
+        return [{"slot": p[3], "body": p[4], "name": p[0].get("name", ""), "replace": p[5]} for p in plan]
 
     os.makedirs(out, exist_ok=True)
     bdir = C.backup_client_files(client, out, [f"anim{n}.idx"])         # the big .mul is only appended to; idx backup is enough
@@ -138,7 +145,7 @@ def run_batch(client, items, n, out, apply_, overwrite=False, first_slot=432):
     written = []
     with open(out_mul, "r+b") as mo:
         mo.seek(0, os.SEEK_END)
-        for it, d, recs, slot, body in plan:
+        for it, d, recs, slot, body, _rep in plan:
             start, _ = W.slot_layout(n, slot)
             for k, (lk, ln, _e) in enumerate(recs):
                 if lk < 0 or ln <= 0:
@@ -160,11 +167,17 @@ def run_batch(client, items, n, out, apply_, overwrite=False, first_slot=432):
     say("OK", f"zapisano {len(written)} bloków ({len(plan)} animacji); anim{n}.mul {os.path.getsize(mp)} -> "
               f"{os.path.getsize(out_mul)} B; weryfikacja OK")
 
-    rows = [{"slot": slot, "body": body, "type": "HUMAN", "name": it.get("name") or ""} for it, _d, _r, slot, body in plan]
-    bd2, _man, ver = W.apply_plan(client, n, rows, out)
-    C.update_manifest(client, out, [f"anim{n}.idx", f"anim{n}.mul"])
-    say("OK", f"Bodyconv.def + mobtypes.txt w {out} (manifest v{ver}); kopie: {bdir or bd2}")
-    return [{"slot": r["slot"], "body": r["body"], "name": r["name"], "out": out} for r in rows]
+    rows = [{"slot": slot, "body": body, "type": "HUMAN", "name": it.get("name") or ""}
+            for it, _d, _r, slot, body, rep in plan if not rep]           # replaced slots are already wired
+    if rows:
+        bd2, _man, ver = W.apply_plan(client, n, rows, out)
+        C.update_manifest(client, out, [f"anim{n}.idx", f"anim{n}.mul"])
+        say("OK", f"Bodyconv.def + mobtypes.txt w {out} (manifest v{ver}); kopie: {bdir or bd2}")
+    else:
+        C.update_manifest(client, out, [f"anim{n}.idx", f"anim{n}.mul"])
+        say("OK", "animacje zastąpione w miejscu; Bodyconv.def i mobtypes.txt bez zmian (są już w kliencie)")
+    return [{"slot": slot, "body": body, "name": it.get("name") or "", "out": out, "replace": rep}
+            for it, _d, _r, slot, body, rep in plan]
 
 
 def run(client, vd, n, slot, body, name, out, apply_, overwrite=False):

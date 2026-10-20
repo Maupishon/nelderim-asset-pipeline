@@ -17,6 +17,8 @@ def main(argv=None):
     ap.add_argument("--name", default="item"); ap.add_argument("--actions", nargs="*", type=int, default=[])
     ap.add_argument("--turn", type=float, default=0); ap.add_argument("--scale", type=float, default=0)
     ap.add_argument("--pre-rot", default="", help="orient the model first: degrees about X,Y,Z, e.g. 90,0,0, or 'auto' (long axis -> +Y, hilt down)")
+    ap.add_argument("--smooth", type=int, default=0, help="wygładź postrzępioną sylwetkę (liczba przebiegów, np. 1-2)")
+    ap.add_argument("--min-dark", type=int, default=0, help="najciemniejszy dozwolony kolor w każdym kanale 0-255 (np. 24): brak prawie czarnych krawędzi")
     ap.add_argument("--flip", action="store_true", help="the weapon is held by the blade: turn it upside down (swap hilt and tip)")
     ap.add_argument("--fatten", type=float, default=1.0, help="thicken a very slender weapon: scale of the cross-section (X, Z), e.g. 2.5")
     ap.add_argument("--skip", default=""); ap.add_argument("--saturation", type=float, default=1.0)
@@ -66,7 +68,7 @@ def main(argv=None):
             last[0] = pct; engine.say(f"postęp {pct}%")
     out = os.path.join(a.out, a.name + ".vd")
     engine.render_layer(body, item, acts, out, outline_f=a.outline, margin=a.margin, progress=prog, body_masks=body_masks,
-                        horse_masks=horse_masks, cloth_sim=sim)
+                        horse_masks=horse_masks, cloth_sim=sim, smooth=a.smooth, min_dark=a.min_dark)
     print("RESULT_VD " + out, flush=True)
 
 
