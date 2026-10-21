@@ -168,6 +168,7 @@ Krok 4 w **Dodawanie do klienta**: **📋 Pokaż już podpięte** (albo **Szukaj
 - Komendy, układ folderów, format receptury, zasady bezpieczeństwa, pułapki formatów: [`docs/PIPELINE.md`](docs/PIPELINE.md)
 - Zasady pracy z Claude Code (ścieżki, nakładka Levy'ego, model 3D): [`CLAUDE.md`](CLAUDE.md)
 - Pomysły z zewnętrznych repo (UniMate: animacje stworów z tekstu): [`docs/UNIMATE.md`](docs/UNIMATE.md)
+- Co wziąć z UO_Model3D v13.5 (ciało 54 kości, zasady wiązania i renderu, gump z 3D, testy): [`docs/UO_MODEL3D.md`](docs/UO_MODEL3D.md)
 - Testy: `python -m pip install pytest numpy pillow && python -m pytest tests` (sztuczny klient, bez plików gry)
 - Narzędzia z wiersza poleceń: `python nelderim.py search | patch | inject | wire | uo3d | vd2glb …` (też `Nelderim.exe …`); `--help` pokazuje opcje
 
