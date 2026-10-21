@@ -125,3 +125,16 @@ def load_actions(path):
             continue
         out[int(k)] = {"clip": v} if isinstance(v, str) else dict(v)
     return out
+
+
+PROMPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "examples", "creature_prompts.json")
+
+
+def action_template(anim_type="high", clip_names=None):
+    """action map for `anim_type` from examples/creature_prompts.json: every UO action with its prompt, default frames and loop.
+    clip_names (optional {action: clip}) fills in the model's clips; otherwise "clip" is the UO group name to be renamed."""
+    tab = json.load(open(PROMPTS, encoding="utf-8"))[anim_type]
+    out = {}
+    for k, v in tab.items():
+        out[k] = dict(v, clip=(clip_names or {}).get(int(k)) or v["name"])
+    return out

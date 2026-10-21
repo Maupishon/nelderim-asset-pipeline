@@ -1,0 +1,218 @@
+{
+ "_opis": "Akcja UO -> nazwa grupy z ClassicUO -> prompt w stylu UniMate -> domyślna liczba klatek / pętla. Nazwy i numery grup: AnimationsLoader.cs w ClassicUO (enum HighAnimationGroup, LowAnimationGroup), sprawdzone 2026-10-21. Znaczenie grup Misc1-4, Unknown i liczby klatek to domyślne ZGADYWANIA: dopasuj do oryginalnych potworów w kliencie. Chód i bieg: 'in place', bo UO przesuwa postać sam.",
+ "_styl_promptu": "krótko, 'An object ...', jeden ruch; model UniMate był uczony na takich opisach",
+ "high": {
+  "0": {
+   "name": "Walk",
+   "prompt": "An object walks in place.",
+   "frames": 10,
+   "loop": true
+  },
+  "1": {
+   "name": "Stand",
+   "prompt": "An object stands still and breathes.",
+   "frames": 6,
+   "loop": true
+  },
+  "2": {
+   "name": "Die1",
+   "prompt": "An object falls to the side and lies still.",
+   "frames": 8,
+   "loop": false
+  },
+  "3": {
+   "name": "Die2",
+   "prompt": "An object collapses forward and lies still.",
+   "frames": 8,
+   "loop": false
+  },
+  "4": {
+   "name": "Attack1",
+   "prompt": "An object bites forward.",
+   "frames": 7,
+   "loop": false
+  },
+  "5": {
+   "name": "Attack2",
+   "prompt": "An object strikes forward with one limb.",
+   "frames": 7,
+   "loop": false
+  },
+  "6": {
+   "name": "Attack3",
+   "prompt": "An object lunges forward and strikes.",
+   "frames": 7,
+   "loop": false
+  },
+  "7": {
+   "name": "Misc1",
+   "prompt": "An object roars.",
+   "frames": 7,
+   "loop": false
+  },
+  "8": {
+   "name": "Misc2",
+   "prompt": "An object shakes its body.",
+   "frames": 7,
+   "loop": false
+  },
+  "9": {
+   "name": "Misc3",
+   "prompt": "An object rears up and lowers itself again.",
+   "frames": 7,
+   "loop": false
+  },
+  "10": {
+   "name": "Stumble",
+   "prompt": "An object stumbles backward.",
+   "frames": 6,
+   "loop": false
+  },
+  "11": {
+   "name": "SlapGround",
+   "prompt": "An object slams the ground with a limb.",
+   "frames": 7,
+   "loop": false
+  },
+  "12": {
+   "name": "Cast",
+   "prompt": "An object raises its limbs and casts.",
+   "frames": 8,
+   "loop": false
+  },
+  "13": {
+   "name": "GetHit1",
+   "prompt": "An object flinches when hit.",
+   "frames": 4,
+   "loop": false
+  },
+  "14": {
+   "name": "Misc4",
+   "prompt": "An object looks around.",
+   "frames": 7,
+   "loop": false
+  },
+  "15": {
+   "name": "GetHit2",
+   "prompt": "An object recoils sharply when hit.",
+   "frames": 4,
+   "loop": false
+  },
+  "16": {
+   "name": "GetHit3",
+   "prompt": "An object staggers when hit.",
+   "frames": 5,
+   "loop": false
+  },
+  "17": {
+   "name": "Fidget1",
+   "prompt": "An object looks to the left and to the right.",
+   "frames": 8,
+   "loop": false
+  },
+  "18": {
+   "name": "Fidget2",
+   "prompt": "An object shifts its weight from side to side.",
+   "frames": 8,
+   "loop": false
+  },
+  "19": {
+   "name": "Fly",
+   "prompt": "An object flies in place, flapping its wings.",
+   "frames": 8,
+   "loop": true
+  },
+  "20": {
+   "name": "Land",
+   "prompt": "An object lands on the ground from the air.",
+   "frames": 7,
+   "loop": false
+  },
+  "21": {
+   "name": "DieInFlight",
+   "prompt": "An object falls from the air and lies still.",
+   "frames": 8,
+   "loop": false
+  }
+ },
+ "low": {
+  "0": {
+   "name": "Walk",
+   "prompt": "An object walks in place.",
+   "frames": 10,
+   "loop": true
+  },
+  "1": {
+   "name": "Run",
+   "prompt": "An object runs in place.",
+   "frames": 8,
+   "loop": true
+  },
+  "2": {
+   "name": "Stand",
+   "prompt": "An object stands still and breathes.",
+   "frames": 6,
+   "loop": true
+  },
+  "3": {
+   "name": "Eat",
+   "prompt": "An object lowers its head and eats from the ground.",
+   "frames": 8,
+   "loop": false
+  },
+  "4": {
+   "name": "Unknown",
+   "prompt": "An object stands alert and looks around.",
+   "frames": 7,
+   "loop": false
+  },
+  "5": {
+   "name": "Attack1",
+   "prompt": "An object bites forward.",
+   "frames": 7,
+   "loop": false
+  },
+  "6": {
+   "name": "Attack2",
+   "prompt": "An object strikes forward with one limb.",
+   "frames": 7,
+   "loop": false
+  },
+  "7": {
+   "name": "Attack3",
+   "prompt": "An object lunges forward and strikes.",
+   "frames": 7,
+   "loop": false
+  },
+  "8": {
+   "name": "Die1",
+   "prompt": "An object falls to the side and lies still.",
+   "frames": 8,
+   "loop": false
+  },
+  "9": {
+   "name": "Fidget1",
+   "prompt": "An object scratches itself.",
+   "frames": 8,
+   "loop": false
+  },
+  "10": {
+   "name": "Fidget2",
+   "prompt": "An object looks around.",
+   "frames": 8,
+   "loop": false
+  },
+  "11": {
+   "name": "LieDown",
+   "prompt": "An object lies down on the ground.",
+   "frames": 7,
+   "loop": false
+  },
+  "12": {
+   "name": "Die2",
+   "prompt": "An object collapses forward and lies still.",
+   "frames": 8,
+   "loop": false
+  }
+ }
+}
