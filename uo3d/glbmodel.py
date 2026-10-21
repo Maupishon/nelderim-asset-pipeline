@@ -52,12 +52,25 @@ class GLB:
         self.pos = self.acc(a["POSITION"]).astype(float)
         self.nrm = self.acc(a["NORMAL"]).astype(float)
         self.uv = self.acc(a["TEXCOORD_0"]).astype(float) if "TEXCOORD_0" in a else None
-        self.jnt = self.acc(a["JOINTS_0"]).astype(int)
-        w = self.acc(a["WEIGHTS_0"]).astype(float)
+        jl, wl, k = [], [], 0
+        while f"JOINTS_{k}" in a:                       # all influences (body_export.py writes up to 8)
+            jl.append(self.acc(a[f"JOINTS_{k}"]).astype(int)); wl.append(self.acc(a[f"WEIGHTS_{k}"]).astype(float)); k += 1
+        self.jnt = np.concatenate(jl, 1); w = np.concatenate(wl, 1)
+        self.uo3d = (js.get("extras") or {}).get("uo3d") or {}
+        nondeform = set(self.uo3d.get("nondeform", ()))
+        if nondeform:                                   # Blender ignores the groups of bones that do not deform (v13 clavicles)
+            bad = np.array([self.nodes[j].get("name", "") in nondeform for j in self.joints])
+            w = np.where(bad[self.jnt], 0.0, w)
         self.wgt = w / np.maximum(w.sum(1, keepdims=True), 1e-9)
         self.tri = self.acc(prim["indices"]).astype(int).reshape(-1, 3)
         self.anims = {an["name"]: an for an in js["animations"]}
         self._cache = {}
+        self.baked = {}                                 # action -> (first scene frame, (frames, joints, 4, 4) world matrices), body_export.py
+        for name, b in (self.uo3d.get("pose") or {}).items():
+            bv = js["bufferViews"][b["bufferView"]]
+            arr = np.frombuffer(self.bin, np.float32, count=b["count"] * len(self.joints) * 16, offset=bv.get("byteOffset", 0))
+            self.baked[name] = (int(b["first"]), arr.reshape(b["count"], len(self.joints), 4, 4).astype(float))
+        self.bones = self.uo3d.get("bones") or {}       # rest head / tail of every bone (glTF space), body_export.py
 
     def _topo(self):
         out, seen = [], set()
@@ -104,7 +117,19 @@ class GLB:
         return max(self._sampler(a, c)[0][-1] for c in a["channels"])
 
     def pose(self, name, t):
-        """world matrices (4x4, row-major) of all nodes at time t of animation `name` (None = rest)."""
+        """world matrices (4x4, row-major) of all nodes at time t of animation `name` (None = rest).
+        A body exported by body_export.py carries Blender's own joint matrices per scene frame: used between two frames linearly."""
+        if name is not None and name in self.baked:
+            f0, M = self.baked[name]
+            f = min(max(t * 24.0 - f0, 0.0), len(M) - 1.0)
+            i = int(np.floor(f)); u = f - i
+            J = M[i] if u < 1e-6 or i + 1 >= len(M) else M[i] * (1 - u) + M[i + 1] * u
+            if "rest" not in self._cache:
+                self._cache["rest"] = self.pose(None, 0.0)
+            W = list(self._cache["rest"])
+            for k, j in enumerate(self.joints):
+                W[j] = J[k]
+            return W
         trs = [[r[0].copy(), r[1].copy(), r[2].copy()] for r in self.rest]
         if name is not None:
             an = self.anims[name]

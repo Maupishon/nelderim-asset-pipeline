@@ -189,7 +189,7 @@ class M3D:
             bm = cls.mask(ex["body_vd"]) if P.get("exact", True) else None
             hm = cls.mask(ex["horse_vd"]) if P.get("horse", True) else None
             cls.item = item
-            cls.fr = E.FrameRenderer(body, item, body_masks=bm, horse_masks=hm)
+            cls.fr = E.FrameRenderer(body, item, body_masks=bm, horse_masks=hm, opts=H.look_opts(P))
             cls.params = dict(P)
             if P.get("cloth") and P["kind"] in ("robe", "skirt", "cloak"):
                 from uo3d import cloth
@@ -457,6 +457,25 @@ def task(cfg, name, p):
                 j.result["png"] = m[-1][len("RESULT_PNG "):].strip()
         c["on_output"] = parse
         return run_job("Ikona z modelu 3D", [lambda j: c])
+    if name == "body_export":
+        if not cfg.get("blender") or not Path(str(cfg["blender"])).is_file():
+            raise ValueError("Wskaż w Ustawieniach plik blender.exe (Blender 4.2 lub nowszy).")
+        blend = Path(str(p.get("blend") or "").strip())
+        if blend.suffix.lower() != ".blend" or not blend.is_file():
+            raise ValueError("Wskaż plik UO_Body_0x190.blend (folder model projektu UO_Model3D).")
+        out = blend.with_suffix(".glb")
+
+        def parse(j, cap):
+            m = [x for x in cap if x.startswith("RESULT_GLB ")]
+            if m:
+                j.result["glb"] = m[-1][len("RESULT_GLB "):].strip()
+
+        def done(j):
+            if j.result.get("glb") and Path(j.result["glb"]).is_file():
+                cfg["bodyglb"] = j.result["glb"]; H.save_config(cfg)
+                M3D.body = None
+        c = H.cmd_body_export(cfg, blend, out); c["on_output"] = parse
+        return run_job("Ciało 3D z .blend", [lambda j: c], finish=done)
     if name == "studio_setup":
         require("studio")
         src = Path(str(cfg.get("bodyglb") or "")).parent.parent      # UO_Model3D folder (model/UO_Body_0x190.glb)
@@ -615,7 +634,7 @@ def task(cfg, name, p):
                     body_vd=ex["body_vd"] if p.get("exact", True) else None, horse_vd=ex["horse_vd"] if p.get("horse", True) else None,
                     cloth=bool(p.get("cloth")) and p["kind"] in ("robe", "skirt", "cloak"), roll=p.get("roll") or None,
                     adjust={"off": [float(v) / 100 for v in p.get("off", [0, 0, 0])], "rot": [float(v) for v in p.get("rot", [0, 0, 0])],
-                            "scl": float(p.get("scl", 100)) / 100, "fit": bool(p.get("fit", True))})
+                            "scl": float(p.get("scl", 100)) / 100, "fit": bool(p.get("fit", True))}, look=H.look_opts(p))
         def parse(j, cap):
             m = [x for x in cap if "RESULT_VD" in x]
             if m:

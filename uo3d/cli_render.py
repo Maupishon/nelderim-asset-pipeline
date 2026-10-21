@@ -32,6 +32,13 @@ def main(argv=None):
     ap.add_argument("--roll", type=float, default=None, help="weapon roll offset in degrees (overrides --weapon-ref)")
     ap.add_argument("--cloth", action="store_true", help="simulate the cloth of robe / skirt / cloak (slower)")
     ap.add_argument("--adjust", default="", help="manual slot fit JSON: {\"off\": [x,y,z] m, \"rot\": [rx,ry,rz] deg, \"scl\": factor, \"fit\": true}")
+    ap.add_argument("--contrast", type=float, default=None, help="krzywa kontrastu przedmiotu (1 = brak; szata/spódnica domyślnie 1.5)")
+    ap.add_argument("--contrast-pivot", type=float, default=None, help="szarość 0..1, której kontrast nie zmienia (domyślnie 0.49)")
+    ap.add_argument("--edge-floor", type=int, default=None, help="obwódka nie ciemniejsza niż ta wartość 0-255 (np. 24 dla czarnych przedmiotów)")
+    ap.add_argument("--hide-erode", type=int, default=None, help="dłonie i głowa zasłaniają przedmiot o tyle px mniej (np. 1 dla szat)")
+    ap.add_argument("--legs-under", action="store_const", const=True, default=None, help="nogi nigdy nie zasłaniają przedmiotu (długa szata)")
+    ap.add_argument("--shade-body", type=float, default=None, help="cień styku przy dłoniach/ramionach/głowie 0..1 (np. 0.4)")
+    ap.add_argument("--shade-width", type=float, default=None, help="szerokość cienia styku w px (domyślnie 3)")
     a = ap.parse_args(argv)
     horse = os.path.isfile(a.horse_vd) if a.horse_vd else False
     acts = a.actions or [i for i in range(35) if horse or i not in engine.MOUNTED]
@@ -68,7 +75,9 @@ def main(argv=None):
             last[0] = pct; engine.say(f"postęp {pct}%")
     out = os.path.join(a.out, a.name + ".vd")
     engine.render_layer(body, item, acts, out, outline_f=a.outline, margin=a.margin, progress=prog, body_masks=body_masks,
-                        horse_masks=horse_masks, cloth_sim=sim, smooth=a.smooth, min_dark=a.min_dark)
+                        horse_masks=horse_masks, cloth_sim=sim, smooth=a.smooth, min_dark=a.min_dark,
+                        opts=dict(contrast=a.contrast, contrast_pivot=a.contrast_pivot, edge_floor=a.edge_floor, hide_erode=a.hide_erode,
+                                  legs_under=a.legs_under, shade_body=a.shade_body, shade_width=a.shade_width))
     print("RESULT_VD " + out, flush=True)
 
 

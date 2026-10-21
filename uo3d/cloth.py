@@ -23,6 +23,8 @@ PIN_BELOW = 0.05       # vertices with cloth share below this stay on the chains
 def make_sim(body, item):
     g = body.g
     t = item.cloth_t
+    if t is None:                                               # no cloth chains in the body (v13+): uo3d.hang moves the cloth instead
+        return None
     free = t > PIN_BELOW
     if not free.any():
         return None

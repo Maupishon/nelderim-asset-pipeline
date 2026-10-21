@@ -754,6 +754,12 @@ def model3d_problems(cfg) -> list[str]:
     return out
 
 
+def cmd_body_export(cfg, blend, out):
+    """uo3d/body_export.py inside Blender: UO_Model3D .blend -> .glb with the exact bone poses baked in. Prints RESULT_GLB."""
+    return {"argv": [str(cfg["blender"]), "-b", str(blend), "-P", str(HERE / "uo3d" / "body_export.py"), "--", "--out", str(out)],
+            "cwd": str(HERE), "env": dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")}
+
+
 def cmd_vd2glb(cfg, vd, out, kind="", action=4, voxel=0.02):
     """uo3d/cli_vd2glb.py: item .vd (UO sprites) -> .glb already placed on the body (for the Fit Lab). Prints RESULT_GLB."""
     a = [str(HERE / "uo3d" / "cli_vd2glb.py"), "--body", cfg["bodyglb"], "--vd", vd, "--out", out, "--action", str(action),
@@ -773,6 +779,18 @@ def cmd_icon(cfg, item, out, size=44, yaw=-35.0, skip=(), outline=0.55):
         a += ["--skip", ",".join(skip)]
     return {"argv": self_script_cmd(*a), "cwd": str(HERE),
             "env": dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")}
+
+
+def look_opts(p):
+    """render options of the Fit Lab (empty field = the default of the kind, uo3d.engine.render_options)"""
+    def num(k, f):
+        v = str(p.get(k, "")).strip().replace(",", ".")
+        try:
+            return f(float(v)) if v else None
+        except ValueError:
+            return None
+    return dict(contrast=num("contrast", float), edge_floor=num("edge_floor", int), hide_erode=num("erode", int),
+                shade_body=num("shade", float), legs_under=True if p.get("legs_under") else None)
 
 
 def cmd_uo3d(cfg, spec: dict):
@@ -796,6 +814,12 @@ def cmd_uo3d(cfg, spec: dict):
         a += ["--roll", str(spec["roll"])]
     if spec.get("adjust"):
         a += ["--adjust", json.dumps(spec["adjust"])]
+    look = spec.get("look") or {}
+    for k, flag in (("contrast", "--contrast"), ("edge_floor", "--edge-floor"), ("hide_erode", "--hide-erode"), ("shade_body", "--shade-body")):
+        if look.get(k) is not None:
+            a += [flag, str(look[k])]
+    if look.get("legs_under"):
+        a.append("--legs-under")
     return {"argv": self_script_cmd(*a), "cwd": str(HERE),
             "env": dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")}
 

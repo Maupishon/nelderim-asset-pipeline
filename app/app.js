@@ -192,6 +192,11 @@ BUILD.settings = async () => {
   }
   btns(p, ["💾 Zapisz", async () => { const v = {}; for (const k in F) v[k] = F[k].get(); await api.post("/api/config", v); toast("Zapisano.", "ok"); built.settings = false; show("settings"); }, "primary"],
     ["🔍 Wykryj automatycznie", async () => { const r = await api.post("/api/autodetect"); toast("Wykryto: " + (Object.keys(r.found).length || "nic nowego")); show("settings"); }]);
+  const bc = el("div", { class: "card" }); p.append(bc);
+  bc.append(el("h2", { class: "sec", text: "Ciało 3D z pliku .blend (UO_Model3D v13+)" }),
+    el("div", { class: "hint", text: "Robi UO_Body_0x190.glb z dokładnymi pozami kości policzonymi przez Blendera (bez tego nowy model ma do 2 px błędu w ruchu). Potrzebny blender.exe w polu wyżej. Wynik trafia obok pliku .blend i od razu jest ustawiany jako ciało 3D." }));
+  const fb = field(bc, { key: "blend", label: "Plik UO_Body_0x190.blend", help: "Z folderu model projektu UO_Model3D (pobranego z GitHuba).", type: "file", filter: ".blend" }, restore("bodyblend", ""));
+  btns(bc, ["🧍 Zrób .glb z .blend", async () => { store("bodyblend", fb.get()); try { const j = await runTask("body_export", { blend: fb.get() }, "Ciało 3D z .blend"); if (j.status === "ok") { toast("Gotowe: " + (j.result.glb || ""), "ok"); built.settings = false; show("settings"); } } catch (e) {} }, "", "Eksport ciała + wypieczone pozy + sprawdzenie (błąd w mm)."]);
 };
 
 BUILD.help = () => {
@@ -745,6 +750,13 @@ const FIT = {
     kv("Nasycenie", sat, "1 = kolory modelu, 0 = szarości (przedmiot farbowany w grze).");
     const sk = el("input", { type: "text", value: P.skip, placeholder: "np. eyes,body" }); sk.onchange = () => { P.skip = sk.value; this.change(); };
     kv("Pomiń", sk, "Elementy pliku do pominięcia (fragmenty nazw, po przecinku).");
+    sec("Wygląd UO");
+    const num = (label, key, ph, tip) => { const i = el("input", { type: "text", value: P[key] ?? "", placeholder: ph }); i.onchange = () => { P[key] = i.value.trim(); this.change(); }; kv(label, i, tip); };
+    num("Kontrast", "contrast", "auto", "Ciemniejsze fałdy, jaśniejsze światła jak na rysowanych szatach UO. Puste = szata/spódnica 1.5, reszta 1 (bez zmian).");
+    num("Cień styku", "shade", "0", "0–1: przyciemnia przedmiot obok dłoni, ramion i głowy, które go zasłaniają (np. 0.4).");
+    num("Dłonie/głowa mniej", "erode", "0", "Dłonie i głowa zasłaniają przedmiot o tyle pikseli mniej: mniej dziur przy mankietach i kołnierzu (szaty: 1).");
+    num("Obwódka min.", "edge_floor", "0", "Obwódka nie ciemniejsza niż ta wartość 0–255 (czarny przedmiot: 24, bez twardej czarnej linii).");
+    chk("Nogi pod przedmiotem", "legs_under", "Nogi nigdy nie zasłaniają przedmiotu (długa szata: stopa lub kolano z przodu nie wycina dziury).");
     sec("Mierz (poke px)");
     side.append(el("div", { class: "hint", text: "Piksele, w których ciało przebija przez przedmiot, w zaznaczonych akcjach × 5 kierunków." }));
     const acts = el("div", { class: "acts" }); const sel = new Set(restore("measure", [0, 2, 4, 9, 16]));
