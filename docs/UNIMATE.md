@@ -3,7 +3,9 @@
 Źródło: <https://github.com/Friedrich-M/UniMate> (SIGGRAPH Asia 2026, przejrzane 2026-10-20, commit HEAD z `--depth 1`).
 Co to jest: model tekst → ruch dla **dowolnego szkieletu** (dwunogi, czworonogi, ptaki, ryby, owady, węże, obiekty).
 Wejście: zrigowany GLB/glTF/FBX + prompt („An object walks forward.”). Wyjście: ruch (NPZ, 60 klatek) + animowany GLB/FBX.
-Nic z tego nie jest jeszcze w repo. To lista pomysłów, nie zrobione funkcje.
+Zrobione: punkt 1 w części renderu — `python nelderim.py creature` (`uo3d/cli_creature.py`, `uo3d/creature.py`): animowany, zeskinowany GLB
+→ `.vd` typ 0/1, 5 kierunków, mapa akcji w JSON. Sprawdzone na syntetycznym modelu i na ciele UO_Body_0x190 jako „stworze”;
+NIE sprawdzone na prawdziwym potworze ani w grze. Reszta to lista pomysłów.
 
 ## Licencje (sprawdzić przed użyciem)
 
