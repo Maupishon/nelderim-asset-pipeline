@@ -107,3 +107,17 @@ def test_load_actions_accepts_bare_strings(tmp_path):
     p.write_text(json.dumps({"_opis": "x", "0": {"clip": "Walk", "frames": 10, "loop": True}, "1": "Idle"}), encoding="utf-8")
     a = C.load_actions(str(p))
     assert a == {0: {"clip": "Walk", "frames": 10, "loop": True}, 1: {"clip": "Idle"}}
+
+
+def test_prompt_table_covers_every_action_and_loads_as_an_action_map(tmp_path):
+    import json
+    from uo3d import cli_creature
+    for kind, n in (("high", 22), ("low", 13)):
+        t = C.action_template(kind)
+        assert sorted(map(int, t)) == list(range(n))
+        assert all(v["prompt"].startswith("An object") and v["frames"] >= 1 for v in t.values())
+        out = tmp_path / f"{kind}.json"
+        assert cli_creature.main(["--template", kind, "--out", str(out)]) == 0
+        loaded = C.load_actions(str(out))
+        assert len(loaded) == n and loaded[0]["loop"] is True
+    assert C.action_template("high", {0: "Walk_L"})["0"]["clip"] == "Walk_L"

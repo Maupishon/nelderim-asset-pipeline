@@ -28,13 +28,15 @@ albo ręcznie `--face_r/--face_l`. Wniosek: UniMate = **osobne środowisko, krok
    lub 1 (Low, 13 akcji) → `vd_inject.py` (anim.mul) albo `anim_import.py`/`anim_wire.py` (anim2–5). Dziś `uo3d` umie tylko
    body 400 + przedmiot; brakuje: renderu dowolnego skinowanego GLB w 5 kierunkach (`glbmodel.py` ma już skinning) i zapisu
    `.vd` typu 0/1 (`vdwrite.py` — sprawdzić, czy obsługuje inne typy niż 2).
-2. **Tabela akcja UO → prompt.** Jeden plik JSON (np. `examples/creature_prompts.json`). Nazwy grup z pamięci — **sprawdzić
-   w ClassicUO (`HighAnimationGroup`, `LowAnimationGroup`) przed użyciem**:
-   - High (22): 0 Walk, 1 Stand, 2 Die1, 3 Die2, 4 Attack1, 5 Attack2, 6 Attack3, 7–9 ataki dodatkowe, 10 GetHit, 11 Pillage,
-     12 Stomp, 13–14 Cast, 15–16 Block, 17 Idle, 18 Fidget, 19 Fly, 20 TakeOff, 21 GetHitInAir.
-   - Low (13): 0 Walk, 1 Run, 2 Idle, 3 Eat, 4 Alert, 5 Attack1, 6 Attack2, 7 GetHit, 8 Die1, 9 Idle2, 10 Fidget, 11 LieDown, 12 Die2.
-   - Prompty w stylu zbioru: krótkie, „An object …”, jeden ruch („An object walks in place.”, „An object bites forward.”,
-     „An object falls to the side and lies still.”). Chód: **„in place”** (UO przesuwa postać sam).
+2. **Tabela akcja UO → prompt** — GOTOWA: `examples/creature_prompts.json` (`python nelderim.py creature --template high|low --out mapa.json`
+   zapisuje ją jako mapę akcji do `creature`). Nazwy i numery grup sprawdzone w ClassicUO (`AnimationsLoader.cs`, 2026-10-21);
+   lista z pamięci, którą tu wcześniej miałem, była błędna (np. 7–9 to Misc1–3, nie ataki; 10 to Stumble, nie GetHit).
+   - High (22): 0 Walk, 1 Stand, 2 Die1, 3 Die2, 4 Attack1, 5 Attack2, 6 Attack3, 7 Misc1, 8 Misc2, 9 Misc3, 10 Stumble, 11 SlapGround,
+     12 Cast, 13 GetHit1, 14 Misc4, 15 GetHit2, 16 GetHit3, 17 Fidget1, 18 Fidget2, 19 Fly, 20 Land, 21 DieInFlight.
+   - Low (13): 0 Walk, 1 Run, 2 Stand, 3 Eat, 4 Unknown (czujność), 5 Attack1, 6 Attack2, 7 Attack3, 8 Die1, 9 Fidget1, 10 Fidget2, 11 LieDown, 12 Die2.
+   - Z kodu gry: atak potwora używa grup 4/5/6 (wg trybu), zamach „czar” grupy 12; trafienie potwora grup 15/16.
+     Czego NIE sprawdzono: do czego serwer używa Misc1–4 i Unknown, oraz liczby klatek oryginałów (w tabeli są domyślne).
+   - Prompty w stylu zbioru: krótkie, „An object …”, jeden ruch. Chód i bieg: **„in place”** (UO przesuwa postać sam).
 3. **Pętle chodu/biegu bez szwu** — *motion in-betweening* (`--keep_frames "0,-1"`) albo *motion expansion*: wymusić, by
    pierwsza i ostatnia poza się zgadzały. Potem próbkowanie 60 klatek → liczba klatek UO (np. 10 dla Walk, ~5–8 dla ataków).
 4. **Edycja ruchu z blokadą kości** (`--keep_joints`): np. zachować tułów/głowę z istniejącej animacji, przegenerować łapy.
