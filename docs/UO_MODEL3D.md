@@ -1,14 +1,17 @@
 # UO_Model3D v13.5 — co z niego weźmiemy (notatka do przyszłych sesji)
 
+**Stan 2026-10-21: autor zgodził się na użycie kodu i danych. Zrobione: pkt 1, 2 (jako `body_export.py`), 4 (FOLLOW „chest”), 8, 9 (było),
+10, 11 (cień przy częściach ciała; rękaw–tułów nie: brak `uo_region`), 12 (bez `uo_cloth_lie`), 14 (`uo3d/hang.py`), 17, 19, 22.
+Opis w `docs/PIPELINE.md` → „UO_Model3D v13.5 in uo3d”.**
+
 Źródło: <https://github.com/Kserian/UO_Model3D> (main `b212cee`, 2026-10-20), wydanie
 [UO3DMv13.5](https://github.com/Kserian/UO_Model3D/releases/tag/UO3DMv13.5). Przejrzane 2026-10-21. Nic z tego nie jest jeszcze w repo.
 Wydanie 13.5: ciało bez zmian; nowości to szaty/tkanina (presety tkanin), opcje renderu (kontrast, cienie styku), QA, dokumentacja.
 
 ## Najpierw: licencja i dane
 
-- **W repo nie ma pliku LICENSE** (= domyślnie wszystkie prawa zastrzeżone). Siatka ciała MakeHuman jest CC0, ale skrypty nie mają licencji.
-  README zabrania rozpowszechniania `.blend` i plików klienta. Przed kopiowaniem kodu: zapytać autora (Kserian/Levy) o licencję
-  albo przenosić tylko pomysły i zmierzone liczby, pisząc własny kod.
+- W repo nie ma pliku LICENSE; **autor zgodził się (2026-10-21)** na użycie kodu i danych w tym projekcie. Porty mają to w nagłówku.
+  README autora nadal zabrania rozpowszechniania `.blend` i plików klienta.
 - W repo są **oryginalne klatki klienta** (`client/`, `pipeline/body400.vd`, `horse200.vd`, `pipeline/body13/mul/*.vd`,
   `UO_Original_Atlas.png`). Nigdy nie kopiować ich do naszego repo.
 - `.glb`/`.fbx` nie ma w repo; robi je `pipeline/export.py --blend model/UO_Body_0x190.blend` (bpy 4.2).

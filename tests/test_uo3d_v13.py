@@ -71,3 +71,37 @@ def test_render_options_contrast_edge_floor_and_near():
     assert n[3, 3] == 1 and 0 < n[3, 4] < 1 and n[3, 6] == 0
     assert E.render_options("robe")["contrast"] == 1.5 and E.render_options("shirt")["contrast"] == 1.0
     assert E.render_options("robe", {"contrast": 1.0, "hide_erode": None})["contrast"] == 1.0
+
+
+def test_gump_grip_fist_and_fit():
+    from uo3d import gump as G
+    # upright sword: grip 0..0.12, wide guard at 0.13, blade above: the hand goes halfway up the grip
+    P, T = [], []
+    for (cx, cy, sx, sy) in ((0, 0.06, 0.03, 0.12), (0, 0.13, 0.16, 0.02), (0, 0.5, 0.05, 0.72)):
+        o = len(P)
+        P += [(cx + i * sx / 2, cy + j * sy / 2, k * 0.01) for i in (-1, 1) for j in (-1, 1) for k in (-1, 1)]
+        T += [(o + a, o + b, o + c) for a, b, c in ((0, 1, 3), (0, 3, 2), (4, 6, 7), (4, 7, 5), (0, 4, 5), (0, 5, 1), (2, 3, 7), (2, 7, 6))]
+    g = G.auto_grip(np.array(P, float), np.array(T))
+    assert 0.04 < g < 0.09
+    img = np.zeros((G.GH, G.GW, 4), np.uint8); img[100:130, 47:50] = 255           # a haft through the fist
+    body = np.zeros_like(img); body[108:121, 42:54, 3] = 255                        # the fist of the body gump
+    cut = G.cut_fist(img, body, G.GRIP["male"], show=2)
+    col = cut[:, 48, 3] > 0
+    assert col[100:106].all() and not col[108:118].any() and col[119:121].all()      # cut under the fist, its 2 bottom rows show
+    ref = np.zeros_like(img); ref[50:150, 60:120] = (90, 90, 90, 255)
+    it = np.zeros_like(img); it[80:120, 80:100] = (200, 200, 200, 255)
+    f = G.match_levels(G.fit_to(it, ref), ref)
+    ys, xs = np.nonzero(f[..., 3])
+    assert (ys.min(), ys.max(), xs.min(), xs.max()) == (50, 149, 60, 119) and abs(int(f[100, 90, 0]) - 90) <= 2
+
+
+def test_holes_inside_outline_only():
+    from uo3d import holes as Hh
+    item = np.zeros((40, 40), bool); item[5:35, 10:30] = True; item[15:20, 15:20] = False   # a hole in the item
+    item[5:35, 19] = False                                                                   # a 1-px slit: closed, not a hole
+    ins = Hh.inside(item)
+    assert ins[17, 17] and ins[25, 19] and not ins[2, 2]
+    lab = np.full((40, 40), -1); lab[16, 16] = Hh.PARTS.index("leg")
+    hole = ins & ~item
+    out = Hh.nearest_label(lab, hole)
+    assert out[17, 17] == Hh.PARTS.index("leg")

@@ -772,6 +772,18 @@ const FIT = {
       el("button", { class: "primary", text: "▶ Próba", onclick: () => this.build(P.actions) }),
       el("button", { text: "Wszystkie", onclick: () => this.build([...Array(35).keys()].filter((i) => (P.horse && ex.horse_vd) || i < 23 || i > 29).join(" ")) })), bres);
     this.bres = bres;
+    sec("Gump i ikona z 3D");
+    side.append(el("div", { class: "hint", text: "Gump paperdolla (260×237) i ikona z tego samego modelu, bez Blendera. Broń: w prawej dłoni jak buzdygany klienta (tylko męski: klient nie ma damskich gumpów broni). Ubranie: na ciele 3D; z gumpem wzorcowym (oryginalny gump tego rodzaju, PNG) dopasowane do jego obrysu i szarości." }));
+    const txt = (label, key, ph, tip) => { const i = el("input", { type: "text", value: P[key] ?? "", placeholder: ph }); i.onchange = () => { P[key] = i.value.trim(); this.persist(false); }; kv(label, i, tip); };
+    txt("Numer animacji", "anim", "np. 1992", "Body / AnimID przedmiotu: pliki gump_<+50000>_meski.png i gump_<+60000>_damski.png. Puste = bez numeru.");
+    txt("Gump wzorcowy M", "ref_male", "ścieżka PNG (opcjonalnie)", "Oryginalny gump męski tego samego rodzaju, np. zwykłej szaty 50469 (eksport z UOFiddlera).");
+    txt("Gump wzorcowy K", "ref_female", "ścieżka PNG (opcjonalnie)", "Oryginalny gump damski tego samego rodzaju, np. 60469.");
+    const gres = el("div", { class: "hint" });
+    side.append(el("div", { class: "btns" }, el("button", { text: "🖼 Zrób gump i ikonę", onclick: async () => {
+      if (!P.item || !P.name) return toast("Podaj plik modelu i nazwę pracy.", "bad");
+      try { const j = await runTask("gump3d", { ...P }, "Gump i ikona z modelu 3D"); gres.innerHTML = "";
+        if (j.status === "ok" && j.result.dir) { gres.append("Gotowe: " + j.result.dir + " ", el("button", { class: "small", text: "Folder", onclick: () => api.post("/api/open", { path: j.result.dir, folder: true }) })); }
+        else gres.textContent = "Nie udało się – Szczegóły."; } catch (e) {} } })), gres);
     side.append(el("div", { class: "btns" }, el("button", { text: "💾 Zapisz ustawienia", onclick: () => this.save() }), el("button", { text: "Reset slotu", onclick: () => { P.off = [0, 0, 0]; P.rot = [0, 0, 0]; P.scl = 100; this.change(); this.panel(); } })));
   },
   persist(hist = true) { store("fitparams", this.params); if (hist) { this.hist = this.hist.slice(0, this.hpos + 1); this.hist.push(JSON.stringify(this.params)); if (this.hist.length > 60) this.hist.shift(); this.hpos = this.hist.length - 1; } },
@@ -856,7 +868,13 @@ const FIT = {
         this.bres.innerHTML = ""; this.bres.append("Gotowe: " + j.result.vd + " ",
           el("button", { class: "small", text: "Podgląd", onclick: () => VD.open(j.result.vd) }), " ",
           el("button", { class: "small", text: "Do toolkitu", onclick: () => runTask("copy_to_toolkit", { vd: j.result.vd }) }), " ",
-          el("button", { class: "small", text: "Folder", onclick: () => api.post("/api/open", { path: j.result.vd, folder: true }) }));
+          el("button", { class: "small", text: "Folder", onclick: () => api.post("/api/open", { path: j.result.vd, folder: true }) }), " ",
+          el("button", { class: "small", text: "🩺 Dziury", "data-tip": "Gdzie przez przedmiot widać ORYGINALNE ciało (tak jak w kliencie). Dłoń/głowa: zwykle celowo; ramię/tułów/noga: błąd.", onclick: async () => {
+            try { const h = await runTask("holes", { vd: j.result.vd }, "Dziury na oryginalnym ciele");
+              if (h.status !== "ok") return; const t = h.result.total || {};
+              this.bres.append(el("div", { class: (h.result.fault_px ? "warn" : "ok"), text: `Dziury: ramię ${t.arm || 0}, tułów ${t.torso || 0}, noga ${t.leg || 0} px (dłoń/głowa ${(t.hand || 0) + (t.head || 0)} px).` }));
+              for (const f of h.result.sheets || []) this.bres.append(el("button", { class: "small", text: f.split(/[\\/]/).pop(), onclick: () => api.post("/api/open", { path: f }) }));
+            } catch (e) {} } }));
         this.save(true);
       } else this.bres.textContent = "Nie udało się – zobacz podpowiedź na dole.";
     } catch (e) {}

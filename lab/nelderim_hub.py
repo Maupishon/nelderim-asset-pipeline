@@ -754,6 +754,32 @@ def model3d_problems(cfg) -> list[str]:
     return out
 
 
+def cmd_gump3d(cfg, spec: dict):
+    """uo3d/cli_gump.py: paperdoll gump (male / female) + art of a 3D item. Prints RESULT_DIR."""
+    a = [str(HERE / "uo3d" / "cli_gump.py"), "--body", cfg["bodyglb"], "--item", spec["item"], "--kind", spec["kind"], "--out", spec["out"],
+         "--turn", str(spec.get("turn", 0)), "--scale", str(spec.get("scale", 0)), "--saturation", str(spec.get("saturation", 1.0))]
+    if spec.get("anim") not in (None, ""):
+        a += ["--anim", str(int(spec["anim"]))]
+    if cfg.get("client"):
+        a += ["--client", str(cfg["client"])]
+    for k, flag in (("ref_male", "--ref-male"), ("ref_female", "--ref-female")):
+        if spec.get(k):
+            a += [flag, str(spec[k])]
+    if spec.get("skip"):
+        a += ["--skip", ",".join(spec["skip"])]
+    if spec.get("adjust"):
+        a += ["--adjust", json.dumps(spec["adjust"])]
+    return {"argv": self_script_cmd(*a), "cwd": str(HERE), "env": dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")}
+
+
+def cmd_holes(cfg, vd, body_vd, out):
+    """uo3d/cli_holes.py: holes of an item .vd over the original body 400, with sheets of the worst blocks. Prints RESULT_JSON."""
+    a = [str(HERE / "uo3d" / "cli_holes.py"), "--item-vd", str(vd), "--body-vd", str(body_vd), "--auto-sheets", "3", "--out", str(out)]
+    if cfg.get("bodyglb"):
+        a += ["--body", str(cfg["bodyglb"])]
+    return {"argv": self_script_cmd(*a), "cwd": str(HERE), "env": dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")}
+
+
 def cmd_body_export(cfg, blend, out):
     """uo3d/body_export.py inside Blender: UO_Model3D .blend -> .glb with the exact bone poses baked in. Prints RESULT_GLB."""
     return {"argv": [str(cfg["blender"]), "-b", str(blend), "-P", str(HERE / "uo3d" / "body_export.py"), "--", "--out", str(out)],

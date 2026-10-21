@@ -35,6 +35,11 @@ PARTS = {
     "neck": ["neck", "chest", "head"],
     "all": ["pelvis", "spine", "chest", "neck", "head", "clavicle", "upper_arm", "forearm", "hand", "finger", "thigh", "shin", "foot", "toe"],
 }
+# FOLLOW (UO_Model3D uo_bind_item.py): share of a limb bone's weight that stays on it, the rest goes to its parent; a tuple
+# (share, t0, t1) ramps along the bone: `share` up to t0 of its length, 1.0 from t1. "chest": a tunic's hem near the hip follows the
+# thigh only 30 %, the rest the pelvis, fully the thigh from 40 % of it down.
+FOLLOW = {"chest": {"thigh": (0.3, 0.1, 0.4)}}
+FOLLOW_PARENT = {"thigh": "pelvis", "shin": "thigh", "foot": "shin", "hand": "forearm", "forearm": "upper_arm", "upper_arm": "chest"}
 KIND_PART = {"shirt": "chest", "plate": "chest", "arms": "arms", "pants": "legs", "legs": "legs", "boots": "boots", "gloves": "gloves",
              "helm": "helm", "hair": "hair", "beard": "beard", "hat": "hat", "neck": "neck", "robe": "all", "skirt": "skirt", "cloak": "cloak"}
 FIT_KINDS = {"shirt", "plate", "arms", "pants", "legs", "boots", "gloves", "helm"}
@@ -267,6 +272,7 @@ class Item:
         Rm = np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
         P = P @ Rm.T; N = m.nrm @ Rm.T
         length = max(P[:, 1].max() - P[:, 1].min(), 1e-6)
+        self.raw_nrm = N.copy()
         if kind == "shield":
             if not shield_keys:
                 raise ValueError("Brak danych tarczy (pipeline/uo_shield_keys.py projektu UO_Model3D).")
@@ -282,6 +288,7 @@ class Item:
             P = P * sc
             Q = self.rigid.place(P, ref=ref, roll_deg=roll_deg)
         Q, _ = apply_adjust(Q, None, self.adjust)
+        self.raw_pos = P.copy()                                  # upright, butt lowest, scaled: the paperdoll gump (uo3d.gump)
         self.scale = sc
         # normals follow the same rotation as the vertices (place() is rigid): recompute from the geometry
         self.pos = Q
@@ -344,7 +351,9 @@ class Item:
                 W = self.cloth_weights("skirt", W, base=["pelvis", "spine", "chest", "neck", "clavicle", "upper_arm", "forearm", "thigh", "shin"],
                                        sleeves=True)
             else:
-                W = self.restrict(W, PARTS[part])
+                fol = FOLLOW.get(part, {})
+                W = self.restrict(W, PARTS[part] + list(fol))
+                W = self.follow(W, fol)
         # keep the 4 strongest
         top = np.argsort(-W, axis=1)[:, :4]
         wv = np.take_along_axis(W, top, 1)
@@ -353,6 +362,36 @@ class Item:
         # which body parts this item is skinned to (they never hide it)
         used = np.unique(top[wv > 0.2])
         self.worn = set(jbase(b.names[k]) for k in used)
+
+    def follow(self, W, fol):
+        """FOLLOW: move part of a limb bone's weight to its parent bone (ramp along the bone)"""
+        b = self.body
+        for base, f in fol.items():
+            for j, nm in enumerate(b.names):
+                if jbase(nm) != base:
+                    continue
+                side = nm[len(base):]
+                par = FOLLOW_PARENT[base] + ("" if FOLLOW_PARENT[base] in ("pelvis", "chest") else side)
+                if par not in b.names:
+                    continue
+                pj = b.names.index(par)
+                if isinstance(f, tuple):
+                    h = b.headpos[j]
+                    bone = b.g.bones.get(nm)
+                    if bone:
+                        t_ = np.array(bone["tail"])
+                    else:
+                        ch = [k for k, p in enumerate(b.parent) if p == j]
+                        t_ = b.headpos[ch[0]] if ch else h + np.array([0.0, -0.4, 0.0])
+                    ab = t_ - h
+                    t = ((self.pos - h) @ ab) / max(float(ab @ ab), 1e-12)
+                    share = f[0] + (1.0 - f[0]) * np.clip((t - f[1]) / max(f[2] - f[1], 1e-6), 0, 1)
+                else:
+                    share = np.full(len(W), float(f))
+                mv = W[:, j] * (1 - share)
+                W[:, j] -= mv
+                W[:, pj] += mv
+        return W
 
     def _near_k(self, k):
         g = self.body.g; pts = self.pos

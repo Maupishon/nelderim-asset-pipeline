@@ -641,6 +641,42 @@ def task(cfg, name, p):
                 j.result["vd"] = m[-1].split("RESULT_VD", 1)[1].strip()
         c = H.cmd_uo3d(cfg, spec); c["on_output"] = parse
         return run_job("Render modelu 3D", [lambda j: c])
+    if name == "holes":
+        vd = Path(str(p.get("vd") or ""))
+        ex = H.model3d_extras(cfg) if cfg.get("bodyglb") else {}
+        if not vd.is_file():
+            raise ValueError("Nie ma takiego pliku .vd: " + str(vd))
+        if not ex.get("body_vd"):
+            raise ValueError("Brak body400.vd (oryginalne ciało) w folderze pipeline obok modelu ciała UO_Model3D.")
+
+        def parse(j, cap):
+            m = [x for x in cap if x.startswith("RESULT_JSON ")]
+            if m:
+                j.result.update(json.loads(m[-1][len("RESULT_JSON "):]))
+        c = H.cmd_holes(cfg, vd, ex["body_vd"], vd.parent / "dziury"); c["on_output"] = parse
+        return run_job("Dziury na oryginalnym ciele", [lambda j: c])
+    if name == "gump3d":
+        probs = H.model3d_problems(cfg)
+        if probs:
+            raise ValueError(" ".join(probs))
+        for k in ("ref_male", "ref_female"):
+            if str(p.get(k) or "").strip() and not Path(str(p[k]).strip()).is_file():
+                raise ValueError("Nie ma takiego pliku gumpu wzorcowego: " + str(p[k]))
+        anim = str(p.get("anim", "")).strip()
+        out = works_root(cfg) / H.slugify(p["name"]) / "gump3d"
+        spec = dict(item=p["item"], kind=p["kind"], out=str(out), anim=int(anim, 0) if anim else None, turn=p.get("turn", 0),
+                    scale=p.get("scale", 0), saturation=p.get("sat", 1), skip=[s.strip() for s in str(p.get("skip", "")).split(",") if s.strip()],
+                    ref_male=str(p.get("ref_male") or "").strip(), ref_female=str(p.get("ref_female") or "").strip(),
+                    adjust={"off": [float(v) / 100 for v in p.get("off", [0, 0, 0])], "rot": [float(v) for v in p.get("rot", [0, 0, 0])],
+                            "scl": float(p.get("scl", 100)) / 100, "fit": bool(p.get("fit", True))})
+
+        def parse(j, cap):
+            m = [x for x in cap if x.startswith("RESULT_DIR ")]
+            if m:
+                j.result["dir"] = m[-1][len("RESULT_DIR "):].strip()
+                j.result["files"] = sorted(str(f) for f in Path(j.result["dir"]).glob("*.png"))
+        c = H.cmd_gump3d(cfg, spec); c["on_output"] = parse
+        return run_job("Gump i ikona z modelu 3D", [lambda j: c])
     if name == "vd2glb":
         probs = H.model3d_problems(cfg)
         if probs:
