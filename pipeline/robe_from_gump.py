@@ -9,6 +9,7 @@ WHAT IT DOES (the route that produced the alchemist robe)
   1. design    = the robe cut out of the gump (alpha bbox) enlarged x4 with LANCZOS -> <toolkit>/workspace/ultima-online/<key>/design.png
   2. build     = outfit-lab/build_item.py on the base item (default 0x2684 Hooded Shroud), all 35 actions, face + hands cut out
   3. hood      = hood_blend.py (hood takes the robe's tone and grain; skip with --no-hood)
+  3a. cover    = cover_fill.py: the robe covers everything the original robe covered (no body showing through); off with --no-cover-fill
   3b. shade    = shade_transfer.py when --shade-transfer K is given (shadows of the original robe, K = 1.5 matches its contrast)
   4. pack      = outfit-lab/atlas_to_vd.py with the original animation of the base item (extracted from anim.mul when missing)
   5. verify    = outfit-lab/verify.py (errors must be [] and missingSequences 0; exit code 1 is normal)
@@ -25,6 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import hood_blend                                   # noqa: E402
 import shade_transfer                               # noqa: E402
+import cover_fill                                   # noqa: E402
 
 
 def run(cmd, cwd, env, ok=(0,)):
@@ -48,6 +50,7 @@ def main(argv=None):
     ap.add_argument("--hide-labels", nargs="*", default=["1", "5"])
     ap.add_argument("--actions", nargs="*", default=[], help="only these actions (a test run); default all 35")
     ap.add_argument("--no-hood", action="store_true")
+    ap.add_argument("--no-cover-fill", action="store_true", help="nie uzupełniaj dziur, w których oryginalna szata miała materiał")
     ap.add_argument("--scale", type=int, default=4)
     ap.add_argument("--shade-transfer", type=float, default=0.0, metavar="K",
                     help="przenieś cieniowanie z oryginalnej szaty (pachy, wnętrze rękawów, pas); 1.5 = kontrast oryginału, 0 = wyłączone")
@@ -85,6 +88,13 @@ def main(argv=None):
             os.remove(mark)
         done, skipped = hood_blend.run(lab, masks)
         print(f"[HOOD   ] {done} klatek, {skipped} pominięto")
+
+    if not a.no_cover_fill:
+        mark = os.path.join(lab, cover_fill.MARK)
+        if os.path.exists(mark):
+            os.remove(mark)
+        frames, pixels = cover_fill.run(lab)
+        print(f"[COVER  ] uzupełniono {pixels} px w {frames} klatkach")
 
     if a.shade_transfer > 0:
         mark = os.path.join(lab, shade_transfer.MARK)
