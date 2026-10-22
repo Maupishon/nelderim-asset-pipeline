@@ -280,9 +280,9 @@ class UopFile:
     gumpartLegacyMUL.uop: 4391 entries before/after, only targeted entries
     changed, 20 random unrelated entries payload-identical)."""
 
-    def __init__(self, path):
+    def __init__(self, path, mode="r+b"):
         self.path = path
-        self.f = open(path, "r+b")
+        self.f = open(path, mode)
         self.f.seek(0)
         if self.f.read(4) != b"MYP\x00":
             raise Problem(f"not a UOP file: {path}")
@@ -435,6 +435,33 @@ def build_uop_gump_payload(w, h, px):
 def decode_uop_gump_payload(data):
     w, h = struct.unpack_from("<II", data, 0)
     return w, h, decode_gump(data[8:], w, h)
+
+
+def read_gump(client, gid):
+    """gump `gid` of a client as (w, h, rows of 1555 values) or None. gumpartLegacyMUL.uop first (with MainMisc.uop the client reads
+    gumps ONLY from it), then Gumpidx/Gumpart.mul. Read-only."""
+    up = find(client, "gumpartLegacyMUL.uop")
+    if up:
+        u = UopFile(up, "rb")
+        try:
+            h = uop_hash(gump_path(gid))
+            if h in u.entries:
+                e = u.entries[h]
+                data = u.read_payload(h)
+                if e.get("flag") == 1:
+                    data = zlib.decompress(data)
+                return decode_uop_gump_payload(data)
+        finally:
+            u.close()
+    ip, mp = find(client, "Gumpidx.mul"), find(client, "Gumpart.mul")
+    if ip and mp:
+        r = MulPair(ip, mp).raw(gid)
+        if r:
+            data, extra = r
+            w, h = (extra >> 16) & 0xFFFF, extra & 0xFFFF
+            if w and h:
+                return w, h, decode_gump(data, w, h)
+    return None
 
 
 def encode_art(w, h, px, flag=1234):

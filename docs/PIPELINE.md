@@ -21,6 +21,9 @@ python nelderim.py inject --client "C:\Klient" --vd potwor.vd --out wyniki [--ap
 python nelderim.py wire   --client "C:\Klient" --file 5 [--slots 196] [--apply] [--check-body 32]
 python nelderim.py uo3d   --body UO_Body_0x190.glb --item model.glb --kind shirt --out dir --name x
 python nelderim.py vd2glb --body UO_Body_0x190.glb --vd anim_0469.vd --out szata.glb
+python nelderim.py gump3d --body UO_Body_0x190.glb --item miecz.glb --kind weapon1h --out dir --anim 1992 --client "C:\Klient"
+python nelderim.py holes  --item-vd szata.vd --body-vd body400.vd --body UO_Body_0x190.glb --auto-sheets 3
+python uo3d/body_export.py --blend UO_Body_0x190.blend --out UO_Body_0x190.glb      # needs bpy 4.2 (or: blender -b X.blend -P uo3d/body_export.py -- --out X.glb)
 ```
 
 The scripts can also be run directly (`python pipeline/nelderim_search.py ...`).
@@ -48,7 +51,7 @@ present that is true for every gump id, so all of them are routed here and new o
 | `pipeline/vd_inject.py` | Imports a monster `.vd` into `anim.mul`/`anim.idx`, auto-picking (or taking) a body id. |
 | `pipeline/anim_wire.py` | Finds animations in anim2..5.mul that no body uses yet and wires them into `Bodyconv.def` + `mobtypes.txt`. |
 | `pipeline/uop_probe.py` | Compatibility shim re-exporting `uop_hash` / `read_uop_hashes` from `nelderim_core` (kept next to the scripts). |
-| `uo3d/` | 3D route without Blender (numpy + Pillow): glTF/FBX/OBJ, skinning, UO camera, cloth, weapons, `.vd` read/write, `.vd` -> `.glb`; CLIs `cli_render.py`, `cli_vd2glb.py`. |
+| `uo3d/` | 3D route without Blender (numpy + Pillow): glTF/FBX/OBJ, skinning, UO camera, cloth, weapons, `.vd` read/write, `.vd` -> `.glb`; CLIs `cli_render.py`, `cli_vd2glb.py`, `cli_gump.py`, `cli_holes.py`; `body_export.py` (runs inside Blender), `hang.py` (loose garments on a body without cloth chains), `data/cloak_pitch.json`. |
 | `tests/` | pytest suite on a synthetic client (no game files); runs in CI before the exe build. |
 | `client-config/` | Reference snapshot of this shard's live `.def`/`mobtypes.txt` files - see its own README. Not deployed automatically. |
 | `build_exe.bat`, `.github/workflows/build-exe.yml` | PyInstaller build of `Nelderim.exe`; CI: tests, exe smoke test, release `Nelderim-windows.zip`. |
@@ -202,6 +205,25 @@ Not verified in game for a freshly appended slot.
 * `uo3d/icon.py` / `cli_icon.py` - inventory icon from a 3D model with the animation renderer's rasterizer and lighting;
   ignores a nearly-all-zero `COLOR_0` layer (CC0 starter models carry one). SpriteMotion's own `inventory.png` is only the
   idle frame shrunk to 44 px, so this is new.
+
+## UO_Model3D v13.5 in uo3d (2026-10-21)
+
+Ported with the author's permission (Kserian / Levy): see `docs/UO_MODEL3D.md` for the full list and what is done.
+
+* The v13 body must be exported with `uo3d/body_export.py`: Blender's glTF exporter re-expresses bones that do not inherit
+  scale in their non-uniformly scaled parent's space and loses the shear (measured: mean 1.8-11 mm, max 17-73 mm against
+  Blender's evaluated mesh). The script appends `extras.uo3d` = Blender's joint world matrices per scene frame of every action,
+  non-deforming bones (clavicles; Blender ignores their groups, the exporter does not), rest heads / tails of the bones; all
+  skin influences are exported (5 on 207 vertices). Self-check against the evaluated mesh: 0.00 mm.
+* Body silhouette IoU (uo3d raster vs `body400.vd`, all 35 actions x 5 dirs): 0.883; actions 0-22 and 30-34 0.86-0.94,
+  mounted 23-29 0.74-0.80.
+* `uo3d/hang.py`: robe / skirt / cloak without cloth chains (v13 has none): pelvis-hung + leg hull push per frame, mounted lie
+  along the legs, cloak pitch per action. Verified on a synthetic cone robe (walk spreads the hem, mounted lies on the legs);
+  not compared with an original robe here.
+* `uo3d/gump.py` + `cli_gump.py`: paperdoll gump (90.5 px/m, feet y 221, axis x 94.5) and art from the 3D model; weapons in
+  the right hand on the mace haft line (48, 114.5), fist of body gump 12 cuts the haft (read from `gumpartLegacyMUL.uop`, then MUL:
+  `nelderim_core.read_gump`, read-only). Checked by eye on UO_Model3D's picture of body gump 12; not in game.
+* `uo3d/holes.py` + `cli_holes.py`: original body 400 seen through the item (UO_Model3D `item_body_holes.py` rules).
 
 ## Aktualizacja toolkitu 2D (SpriteMotion upstream)
 

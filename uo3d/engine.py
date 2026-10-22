@@ -7,6 +7,7 @@ from .glbmodel import GLB
 from . import statmesh
 from . import weapons as wp
 from . import vdread
+from . import hang
 
 # frames per action of the original body (anim 400); loop actions have 3 extra keys in the .glb that are not UO frames
 ACTION_FRAMES = [10, 10, 10, 10, 1, 5, 5, 1, 1, 7, 7, 7, 7, 7, 7, 10, 7, 7, 7, 7, 5, 6, 6, 5, 5, 1, 5, 5, 7, 5, 5, 7, 5, 5, 5]
@@ -34,6 +35,11 @@ PARTS = {
     "neck": ["neck", "chest", "head"],
     "all": ["pelvis", "spine", "chest", "neck", "head", "clavicle", "upper_arm", "forearm", "hand", "finger", "thigh", "shin", "foot", "toe"],
 }
+# FOLLOW (UO_Model3D uo_bind_item.py): share of a limb bone's weight that stays on it, the rest goes to its parent; a tuple
+# (share, t0, t1) ramps along the bone: `share` up to t0 of its length, 1.0 from t1. "chest": a tunic's hem near the hip follows the
+# thigh only 30 %, the rest the pelvis, fully the thigh from 40 % of it down.
+FOLLOW = {"chest": {"thigh": (0.3, 0.1, 0.4)}}
+FOLLOW_PARENT = {"thigh": "pelvis", "shin": "thigh", "foot": "shin", "hand": "forearm", "forearm": "upper_arm", "upper_arm": "chest"}
 KIND_PART = {"shirt": "chest", "plate": "chest", "arms": "arms", "pants": "legs", "legs": "legs", "boots": "boots", "gloves": "gloves",
              "helm": "helm", "hair": "hair", "beard": "beard", "hat": "hat", "neck": "neck", "robe": "all", "skirt": "skirt", "cloak": "cloak"}
 FIT_KINDS = {"shirt", "plate", "arms", "pants", "legs", "boots", "gloves", "helm"}
@@ -69,6 +75,10 @@ class Body:
         self.dom = dom
         self.nframes = ACTION_FRAMES
         self.action_names = list(g.anims)
+        self.chains = any(n.startswith(("skirt_", "cloak_")) for n in self.names)     # old models: cloth chains; v13+: none (uo3d.hang)
+        if "weapon1h.R" in self.names and not g.baked:
+            say("UWAGA: model v13+ bez wypieczonych póz (zwykły eksport glTF): do 2 px błędu w ruchu. "
+                "Zrób .glb przez Ustawienia → Ciało 3D z pliku .blend (uo3d/body_export.py).")
 
     def joint_mask(self, patterns):
         return np.array([any(jbase(n) == p or n.startswith(p) for p in patterns) for n in self.names])
@@ -199,6 +209,7 @@ class Item:
         self.rigid = None
         self.cloth = None
         self.cloth_t = None
+        self.hang = None
         self.adjust = adjust or {}
         m = statmesh.load(path, skip)
         if pre_rot == "auto":
@@ -261,6 +272,7 @@ class Item:
         Rm = np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
         P = P @ Rm.T; N = m.nrm @ Rm.T
         length = max(P[:, 1].max() - P[:, 1].min(), 1e-6)
+        self.raw_nrm = N.copy()
         if kind == "shield":
             if not shield_keys:
                 raise ValueError("Brak danych tarczy (pipeline/uo_shield_keys.py projektu UO_Model3D).")
@@ -276,6 +288,7 @@ class Item:
             P = P * sc
             Q = self.rigid.place(P, ref=ref, roll_deg=roll_deg)
         Q, _ = apply_adjust(Q, None, self.adjust)
+        self.raw_pos = P.copy()                                  # upright, butt lowest, scaled: the paperdoll gump (uo3d.gump)
         self.scale = sc
         # normals follow the same rotation as the vertices (place() is rigid): recompute from the geometry
         self.pos = Q
@@ -326,13 +339,21 @@ class Item:
                     np.add.at(W, (np.arange(len(W)), g.jnt[idx, c]), wt * g.wgt[idx, c])
             W /= np.maximum(W.sum(1, keepdims=True), 1e-9)
             part = KIND_PART[kind]
-            if part in ("skirt", "cloak"):
+            if not b.chains and kind in ("robe", "skirt", "cloak"):
+                # v13+: the hanging part follows the pelvis (legs' weight goes to it), the legs push it out per frame (uo3d.hang)
+                legs = [b.names.index(n) if n in b.names else None for n in hang.LEG_BONES]
+                leg_w = np.stack([W[:, j] if j is not None else np.zeros(len(W)) for j in legs], 1)
+                W = self.restrict(W, ["pelvis", "spine", "chest", "neck", "head", "clavicle", "upper_arm", "forearm"])
+                self.hang = hang.Hang(b, self.pos, "cloak" if kind == "cloak" else "robe", leg_w)
+            elif part in ("skirt", "cloak"):
                 W = self.cloth_weights(part, W)
             elif kind == "robe":
                 W = self.cloth_weights("skirt", W, base=["pelvis", "spine", "chest", "neck", "clavicle", "upper_arm", "forearm", "thigh", "shin"],
                                        sleeves=True)
             else:
-                W = self.restrict(W, PARTS[part])
+                fol = FOLLOW.get(part, {})
+                W = self.restrict(W, PARTS[part] + list(fol))
+                W = self.follow(W, fol)
         # keep the 4 strongest
         top = np.argsort(-W, axis=1)[:, :4]
         wv = np.take_along_axis(W, top, 1)
@@ -341,6 +362,36 @@ class Item:
         # which body parts this item is skinned to (they never hide it)
         used = np.unique(top[wv > 0.2])
         self.worn = set(jbase(b.names[k]) for k in used)
+
+    def follow(self, W, fol):
+        """FOLLOW: move part of a limb bone's weight to its parent bone (ramp along the bone)"""
+        b = self.body
+        for base, f in fol.items():
+            for j, nm in enumerate(b.names):
+                if jbase(nm) != base:
+                    continue
+                side = nm[len(base):]
+                par = FOLLOW_PARENT[base] + ("" if FOLLOW_PARENT[base] in ("pelvis", "chest") else side)
+                if par not in b.names:
+                    continue
+                pj = b.names.index(par)
+                if isinstance(f, tuple):
+                    h = b.headpos[j]
+                    bone = b.g.bones.get(nm)
+                    if bone:
+                        t_ = np.array(bone["tail"])
+                    else:
+                        ch = [k for k, p in enumerate(b.parent) if p == j]
+                        t_ = b.headpos[ch[0]] if ch else h + np.array([0.0, -0.4, 0.0])
+                    ab = t_ - h
+                    t = ((self.pos - h) @ ab) / max(float(ab @ ab), 1e-12)
+                    share = f[0] + (1.0 - f[0]) * np.clip((t - f[1]) / max(f[2] - f[1], 1e-6), 0, 1)
+                else:
+                    share = np.full(len(W), float(f))
+                mv = W[:, j] * (1 - share)
+                W[:, j] -= mv
+                W[:, pj] += mv
+        return W
 
     def _near_k(self, k):
         g = self.body.g; pts = self.pos
@@ -412,6 +463,8 @@ class Item:
         if self.cloth is not None and (action, k) in self.cloth:
             t = self.cloth_t
             P = P + (self.cloth[(action, k)] - P) * t[:, None]
+        if self.hang is not None:
+            P = P + self.hang.displacement(action, k, SM)
         return P, N
 
     def skin(self, SM):
@@ -486,8 +539,9 @@ def shade(item, tid, W, H, xy, nrm_view, direction=None):
     return img
 
 
-def outline(img, factor):
-    """darken the pixels on the silhouette edge (UO-style 1 px outline)."""
+def outline(img, factor, floor=0):
+    """darken the pixels on the silhouette edge (UO-style 1 px outline); `floor` (0-255): the edge is never darker than this per
+    channel (a black item gets a soft dark-grey rim instead of a hole-like black line, UO_Model3D EDGE_FLOOR, e.g. 24)."""
     if factor >= 1.0:
         return img
     a = img[..., 3] > 0
@@ -496,6 +550,55 @@ def outline(img, factor):
     edge = a & ~inner
     img = img.copy()
     img[edge, :3] = (img[edge, :3] * factor).astype(np.uint8)
+    if floor > 0:
+        img[edge, :3] = np.maximum(img[edge, :3], int(floor))
+    return img
+
+
+def contrast(img, k, pivot=0.49):
+    """contrast curve on the item's own pixels: rgb = pivot + k (rgb - pivot). UO robes are painted with dark creases and bright
+    lights: brightness spread in the sleeves 31 -> 45 (k 1.5) -> 52 (k 1.8), original robe 469: 54 (UO_Model3D uo_contrast)."""
+    if abs(k - 1.0) < 1e-6:
+        return img
+    a = img[..., 3] > 0
+    img = img.copy()
+    rgb = img[a, :3].astype(np.float32) / 255.0
+    img[a, :3] = (np.clip(pivot + k * (rgb - pivot), 0, 1) * 255 + 0.5).astype(np.uint8)
+    return img
+
+
+def _erode(m, n):
+    return ~_dilate(~m, n) if n > 0 else m
+
+
+def _near(src, width):
+    """(1 - d / width)^2 within `width` px of the mask `src` (d = 8-neighbour ring distance), 0 farther away"""
+    out = np.zeros(src.shape, np.float32)
+    if not src.any():
+        return out
+    reach = src.copy()
+    out[src] = 1.0
+    for r in range(1, int(np.ceil(width)) + 1):
+        p = np.pad(reach, 1)
+        nxt = reach.copy()
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                nxt |= p[1 + dy:p.shape[0] - 1 + dy, 1 + dx:p.shape[1] - 1 + dx]
+        ring = nxt & ~reach
+        out[ring] = max(0.0, 1.0 - r / width) ** 2
+        reach = nxt
+    return out
+
+
+def contact_shade(img, hidden, s, width):
+    """smooth contact shadow of the body parts in front of the item: item pixels within `width` px of what the body hides are darkened
+    by up to `s` (UO_Model3D uo_shade_body). hidden = item pixels the body removed."""
+    if s <= 0 or not hidden.any():
+        return img
+    a = img[..., 3] > 0
+    f = 1.0 - s * _near(hidden, width)
+    img = img.copy()
+    img[a, :3] = (img[a, :3] * f[a][:, None]).astype(np.uint8)
     return img
 
 
@@ -570,20 +673,47 @@ def _dilate(m, n=1):
 HORSE_ACTION = {23: 0, 24: 1, 25: 2, 26: 2, 27: 2, 28: 2, 29: 2}      # rider action -> action of the horse sprite (walk, run, stand)
 
 
+# per-item render options (UO_Model3D render_uo_layer.py scene properties of the same names, measured there):
+#   contrast / contrast_pivot  uo_contrast: curve on the item's pixels (robe / skirt default 1.5)
+#   edge_floor                 uo_edge_floor: the outline is never darker than this (0-255; 24 for black items)
+#   hide_erode                 uo_hide_erode: hands and head hide the item this many px less (fewer skin holes at cuffs and collar; 1 for robes)
+#   legs_under                 uo_legs_under: the legs never hide the item (a long robe)
+#   shade_body / shade_width   uo_shade_body: contact shadow next to the body parts that hide the item (0..1, px)
+RENDER_DEFAULTS = dict(contrast=1.0, contrast_pivot=0.49, edge_floor=0, hide_erode=0, legs_under=False, shade_body=0.0, shade_width=3.0)
+KIND_RENDER = {"robe": dict(contrast=1.5), "skirt": dict(contrast=1.5)}
+HANDHEAD = ("hand", "finger", "head")
+LEGS = ("thigh", "shin", "foot", "toe")
+
+
+def render_options(kind, opts=None):
+    o = dict(RENDER_DEFAULTS)
+    o.update(KIND_RENDER.get(kind, {}))
+    o.update({k: v for k, v in (opts or {}).items() if v is not None and k in RENDER_DEFAULTS})
+    return o
+
+
 class FrameRenderer:
     """Renders single frames of the item layer (shared by the full render and the live previews of the app)."""
 
-    def __init__(self, body, item, margin=0.01, outline_f=0.38, body_masks=None, horse_masks=None, smooth=0, min_dark=0):
+    def __init__(self, body, item, margin=0.01, outline_f=0.38, body_masks=None, horse_masks=None, smooth=0, min_dark=0, opts=None):
         self.body, self.item = body, item
         self.smooth, self.min_dark = smooth, min_dark
         self.margin, self.outline_f = margin, outline_f
         self.body_masks, self.horse_masks = body_masks, horse_masks
+        self.o = render_options(item.kind, opts)
         g = body.g
-        occl = body.joint_mask(OCCLUDER_JOINTS)
+        joints = [j for j in OCCLUDER_JOINTS if not (self.o["legs_under"] and j in LEGS)]
+        occl = body.joint_mask(joints)
         worn = item.worn
         occ_vert = np.array([jbase(body.names[j]) not in worn and occl[j] for j in body.dom])
+        hh_vert = np.array([jbase(body.names[j]) in HANDHEAD for j in body.dom])
         torso_vert = np.array([body.names[j].split(".")[0] in TORSO_JOINTS for j in body.dom])
-        self.occ_tri = g.tri[occ_vert[g.tri].all(1)]
+        if self.o["hide_erode"] > 0:                               # hands / head are rastered apart: their hiding area is shrunk
+            self.occ_tri = g.tri[(occ_vert & ~hh_vert)[g.tri].all(1)]
+            self.hh_tri = g.tri[(occ_vert & hh_vert)[g.tri].all(1)]
+        else:
+            self.occ_tri = g.tri[occ_vert[g.tri].all(1)]
+            self.hh_tri = None
         self.tors_tri = g.tri[torso_vert[g.tri].all(1)]
         self.pelvis = body.names.index("pelvis")
 
@@ -606,6 +736,9 @@ class FrameRenderer:
         img = shade(self.item, tid, W, H, xyi, R.rotate_normals(Ni, d))
         _, bdep = R.raster(xyb, zb, self.occ_tri, W, H)
         hide = bdep < dep - self.margin
+        if self.hh_tri is not None and len(self.hh_tri):
+            _, hdep = R.raster(xyb, zb, self.hh_tri, W, H)
+            hide |= _erode(hdep < dep - self.margin, int(self.o["hide_erode"]))
         if self.item.kind == "cloak":
             _, tdep = R.raster(xyb, zb, self.tors_tri, W, H)
             hide |= tdep < dep - 0.12
@@ -626,20 +759,24 @@ class FrameRenderer:
         if poke:                                                  # body (any part) poking through the item
             _, adep = R.raster(xyb, zb, g.tri, W, H)
             npoke = int(((adep < dep - 0.003) & (tid >= 0)).sum())
+        o = self.o
+        hidden = hide & (img[..., 3] > 0)
         img[hide] = 0
+        img = contact_shade(img, hidden, float(o["shade_body"]), float(o["shade_width"]))
         if self.smooth:
             img = smooth_alpha(img, self.smooth)
-        img = lift_dark(clean(outline(img, self.outline_f)), self.min_dark)
+        img = contrast(outline(img, self.outline_f, int(o["edge_floor"])), float(o["contrast"]), float(o["contrast_pivot"]))
+        img = lift_dark(clean(img), self.min_dark)
         return img, npoke
 
 
 def render_layer(body, item, actions, out_path, outline_f=0.38, margin=0.01, progress=None, body_masks=None, horse_masks=None,
-                 cloth_sim=None, smooth=0, min_dark=0):
+                 cloth_sim=None, smooth=0, min_dark=0, opts=None):
     """Render the item layer of every (action, direction, frame) to a .vd.
     body_masks: {(action, dir): [bool mask]} silhouettes of the original body (anim 400): the body hides the item exactly along them (EXACT_BODY).
     horse_masks: same for the original horse (mounted actions): the horse hides the part of the item behind the saddle."""
     from .vdwrite import write_vd
-    fr = FrameRenderer(body, item, margin, outline_f, body_masks, horse_masks, smooth, min_dark)
+    fr = FrameRenderer(body, item, margin, outline_f, body_masks, horse_masks, smooth, min_dark, opts)
     blocks = {}
     total = sum(5 * ACTION_FRAMES[a] for a in actions); done = 0; t0 = time.time()
     for a in actions:

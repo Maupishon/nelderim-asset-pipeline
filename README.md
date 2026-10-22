@@ -88,6 +88,12 @@ Najpierw zbuduj kilka akcji na próbę, obejrzyj podgląd, dopiero potem wszystk
 ### D. Mam model 3D przedmiotu i chcę zobaczyć, jak leży na postaci
 **Model 3D (Fit Lab)**: wczytaj `.glb` / `.fbx` / `.obj`, dopasuj suwakami, **▶ Próba** → **Wszystkie**.
 Nie masz modelu? Kliknij **🎞 Z pliku .vd…**: program odtworzy przybliżoną bryłę z oryginalnych klatek.
+- **Nowe ciało UO_Model3D (v13 i nowsze):** w **Ustawieniach**, w ramce „Ciało 3D z pliku .blend”, wskaż `UO_Body_0x190.blend` i kliknij
+  **🧍 Zrób .glb z .blend** (potrzebny `blender.exe`). Zwykły eksport z Blendera daje do 2 px błędu w ruchu; ten przycisk nie.
+- **Wygląd UO** (prawy panel): kontrast (szaty same dostają 1,5), cień przy dłoniach, „Nogi pod przedmiotem” dla długich szat.
+- Po **▶ Próba** kliknij **🩺 Dziury**: program pokaże, gdzie w grze przez przedmiot będzie widać ciało (ramię, tułów, noga = do poprawy).
+- **🖼 Zrób gump i ikonę**: gump paperdolla i ikona z tego samego modelu. Broń trafia do prawej dłoni (tylko gump męski, klient nie ma damskich
+  gumpów broni). Dla ubrania podaj oryginalny gump tego rodzaju (PNG z UOFiddlera) jako wzór, żeby dopasować kształt i szarość.
 
 ### E. Chcę tylko obejrzeć plik `.vd`
 **Podgląd .vd** → wybierz plik. Pokaże 5 kierunków wybranej akcji z ciałem pod spodem.
@@ -159,7 +165,7 @@ Krok 4 w **Dodawanie do klienta**: **📋 Pokaż już podpięte** (albo **Szukaj
 - Gump i art z klatki animacji to **przybliżenie** (klatka ma ok. 60 px, paperdoll ok. 200 px). Dla szat wychodzi dobrze, dla broni i pasków to raczej podkład do ręcznej poprawki.
 
 **Sprawdzone w grze:** podpinanie animacji z `anim5.mul` przez `Bodyconv.def` + `mobtypes.txt` (wilkołak, szata humanoidalna 429); dopisywanie nowego gumpu (paperdoll) do `gumpartLegacyMUL.uop`.
-**Jeszcze niesprawdzone w grze:** model 3D (przymiarka i `.vd` z 3D) oraz odtwarzanie 3D z `.vd`. Traktuj je jako podgląd i weryfikuj wynik.
+**Jeszcze niesprawdzone w grze:** model 3D (przymiarka i `.vd` z 3D, gump i ikona z 3D) oraz odtwarzanie 3D z `.vd`. Traktuj je jako podgląd i weryfikuj wynik.
 
 ---
 
@@ -168,6 +174,7 @@ Krok 4 w **Dodawanie do klienta**: **📋 Pokaż już podpięte** (albo **Szukaj
 - Komendy, układ folderów, format receptury, zasady bezpieczeństwa, pułapki formatów: [`docs/PIPELINE.md`](docs/PIPELINE.md)
 - Zasady pracy z Claude Code (ścieżki, nakładka Levy'ego, model 3D): [`CLAUDE.md`](CLAUDE.md)
 - Pomysły z zewnętrznych repo (UniMate: animacje stworów z tekstu): [`docs/UNIMATE.md`](docs/UNIMATE.md)
+- Co wziąć z UO_Model3D v13.5 (ciało 54 kości, zasady wiązania i renderu, gump z 3D, testy): [`docs/UO_MODEL3D.md`](docs/UO_MODEL3D.md)
 - Testy: `python -m pip install pytest numpy pillow && python -m pytest tests` (sztuczny klient, bez plików gry)
 - Narzędzia z wiersza poleceń: `python nelderim.py search | patch | inject | wire | uo3d | vd2glb …` (też `Nelderim.exe …`); `--help` pokazuje opcje
 
