@@ -66,3 +66,21 @@ def test_lift_dark_leaves_no_near_black_pixels_and_keeps_transparency():
     out = engine.lift_dark(_img(m, (3, 5, 9)), 24)
     assert out[m][:, :3].min() >= 24 and (out[~m][:, 3] == 0).all()
     assert engine.lift_dark(_img(m, (3, 5, 9)), 0)[m][:, :3].max() == 9
+
+
+def test_fatten_thin_thickens_the_shaft_but_not_a_wide_head():
+    rng = np.random.default_rng(2)
+    y = np.linspace(0.0, 1.6, 600)
+    w = np.where(y > 1.25, 0.2, 0.02)                                   # thin shaft, wide head on top
+    ang = rng.uniform(0, 2 * np.pi, 600)
+    m = Mesh(np.array([0.0, 1.0, 0.0]))
+    m.pos = np.stack([w * np.cos(ang), y, w * np.sin(ang)], 1); m.nrm = m.pos.copy(); m.tri = np.zeros((0, 3), int)
+    base = m.pos.copy()
+    engine.fatten(m, 3.0, thin_only=True)
+    shaft, head = y < 1.0, y > 1.4
+    r0 = np.abs(base[:, 0]); r1 = np.abs(m.pos[:, 0])
+    assert r1[shaft].max() > 2.5 * r0[shaft].max()                      # shaft ~3x
+    assert r1[head].max() < 1.3 * r0[head].max()                        # head stays
+    m2 = Mesh(np.array([0.0, 1.0, 0.0])); m2.pos = base.copy(); m2.nrm = base.copy(); m2.tri = np.zeros((0, 3), int)
+    engine.fatten(m2, 3.0)
+    assert np.abs(m2.pos[head, 0]).max() > 2.5 * r0[head].max()         # uniform fatten scales the head too

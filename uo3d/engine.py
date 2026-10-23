@@ -191,19 +191,36 @@ def align_long_axis(m):
     return R
 
 
-def fatten(m, k):
-    """scale the two axes perpendicular to the blade (X and Z) by k about the blade axis; Y (length) is untouched."""
+def thin_factor(m, k, slabs=48):
+    """per-vertex thickening factor: k on the thin shaft, 1 on wide parts (a staff head, a guard), eased in between.
+    The model stands along +Y; a slab is thin when its widest point is within ~1.5x of the median slab width."""
+    y = m.pos[:, 1]
+    c = np.array([np.median(m.pos[:, 0]), np.median(m.pos[:, 2])])
+    r = np.sqrt(((m.pos[:, [0, 2]] - c) ** 2).sum(1))
+    edges = np.linspace(y.min(), y.max() + 1e-9, slabs + 1)
+    idx = np.clip(np.searchsorted(edges, y, side="right") - 1, 0, slabs - 1)
+    w = np.array([r[idx == i].max() if (idx == i).any() else 0.0 for i in range(slabs)])
+    ref = np.median(w[w > 0])
+    t = np.clip((3.0 * ref - w) / (1.5 * ref), 0.0, 1.0)                    # 1 = thin slab, 0 = >= 3x the median
+    t = np.convolve(np.pad(t, 2, mode="edge"), np.ones(5) / 5, mode="valid")  # no steps between slabs
+    return 1.0 + (k - 1.0) * t[idx]
+
+
+def fatten(m, k, thin_only=False):
+    """scale the two axes perpendicular to the blade (X and Z) by k about the blade axis; Y (length) is untouched.
+    thin_only: only the thin shaft (a staff with a wide head keeps its head)."""
     if abs(k - 1.0) < 1e-9:
         return m
     c = m.pos.mean(0)
-    m.pos[:, 0] = (m.pos[:, 0] - c[0]) * k + c[0]
-    m.pos[:, 2] = (m.pos[:, 2] - c[2]) * k + c[2]
+    f = thin_factor(m, k) if thin_only else k
+    m.pos[:, 0] = (m.pos[:, 0] - c[0]) * f + c[0]
+    m.pos[:, 2] = (m.pos[:, 2] - c[2]) * f + c[2]
     return m
 
 
 class Item:
     def __init__(self, path, kind, body, turn=0, scale=0.0, skip=(), saturation=1.0, metal=None, shift=(0.0, 0.0, 0.0),
-                 motion=None, shield_keys=None, ref=None, roll_deg=None, adjust=None, pre_rot=None, fatten_k=1.0, flip=False):
+                 motion=None, shield_keys=None, ref=None, roll_deg=None, adjust=None, pre_rot=None, fatten_k=1.0, flip=False, fatten_thin=False):
         self.kind = kind
         self.body = body
         self.rigid = None
@@ -220,7 +237,7 @@ class Item:
             m.pos = m.pos * np.array([-1.0, -1.0, 1.0])
             m.nrm = m.nrm * np.array([-1.0, -1.0, 1.0])
         if fatten_k and abs(float(fatten_k) - 1.0) > 1e-9:
-            fatten(m, float(fatten_k))
+            fatten(m, float(fatten_k), fatten_thin)
         self.mesh = m
         P = m.pos.copy()
         if kind in wp.CLASS_OF_KIND or kind == "shield":
