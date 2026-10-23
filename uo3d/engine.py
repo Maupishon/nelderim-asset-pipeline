@@ -193,15 +193,16 @@ def align_long_axis(m):
 
 def thin_mask(m, slabs=48):
     """per-vertex 1 on the thin shaft, 0 on wide parts (a staff head, a guard), eased in between.
-    The model stands along +Y; a slab is thin when its widest point is within ~1.5x of the median slab width."""
+    The model stands along +Y; a slab is thin when its widest point is within ~2x of the shaft width (the 20th percentile of the
+    non-empty slabs: a head that fills a third of the staff would pull a median up to its own width), wide from ~4x."""
     y = m.pos[:, 1]
     c = np.array([np.median(m.pos[:, 0]), np.median(m.pos[:, 2])])
     r = np.sqrt(((m.pos[:, [0, 2]] - c) ** 2).sum(1))
     edges = np.linspace(y.min(), y.max() + 1e-9, slabs + 1)
     idx = np.clip(np.searchsorted(edges, y, side="right") - 1, 0, slabs - 1)
     w = np.array([r[idx == i].max() if (idx == i).any() else 0.0 for i in range(slabs)])
-    ref = np.median(w[w > 0])
-    t = np.clip((3.0 * ref - w) / (1.5 * ref), 0.0, 1.0)                    # 1 = thin slab, 0 = >= 3x the median
+    ref = np.percentile(w[w > 0], 20)
+    t = np.clip((4.0 * ref - w) / (2.0 * ref), 0.0, 1.0)                    # 1 = thin slab (<= 2x the shaft), 0 = >= 4x
     t = np.convolve(np.pad(t, 2, mode="edge"), np.ones(5) / 5, mode="valid")  # no steps between slabs
     return t[idx]
 
