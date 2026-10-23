@@ -21,6 +21,7 @@ def main(argv=None):
     ap.add_argument("--min-dark", type=int, default=0, help="najciemniejszy dozwolony kolor w każdym kanale 0-255 (np. 24): brak prawie czarnych krawędzi")
     ap.add_argument("--flip", action="store_true", help="the weapon is held by the blade: turn it upside down (swap hilt and tip)")
     ap.add_argument("--fatten", type=float, default=1.0, help="thicken a very slender weapon: scale of the cross-section (X, Z), e.g. 2.5")
+    ap.add_argument("--head-scale", type=float, default=1.0, help="shrink (<1) the wide head of a staff, the shaft stays (e.g. 0.4)")
     ap.add_argument("--fatten-thin", action="store_true", help="--fatten only on the thin shaft (a staff with a wide head keeps its head)")
     ap.add_argument("--skip", default=""); ap.add_argument("--saturation", type=float, default=1.0)
     ap.add_argument("--outline", type=float, default=0.38); ap.add_argument("--margin", type=float, default=0.01)
@@ -59,7 +60,7 @@ def main(argv=None):
                        saturation=a.saturation, metal={"auto": None, "yes": True, "no": False}[a.metal], motion=motion,
                        shield_keys=keys, ref=a.weapon_ref, roll_deg=a.roll, adjust=json.loads(a.adjust) if a.adjust else None,
                        pre_rot=("auto" if a.pre_rot.strip().lower() == "auto" else [float(x) for x in a.pre_rot.split(",")]) if a.pre_rot else None,
-                       fatten_k=a.fatten, flip=a.flip, fatten_thin=a.fatten_thin)
+                       fatten_k=a.fatten, flip=a.flip, fatten_thin=a.fatten_thin, head_scale=a.head_scale)
     body_masks = engine.vdread.alpha_masks(a.body_vd) if a.body_vd and os.path.isfile(a.body_vd) else None
     horse_masks = engine.vdread.alpha_masks(a.horse_vd) if horse else None
     engine.say("ciało: " + ("dokładna sylwetka z oryginału (EXACT_BODY)" if body_masks else "tylko model 3D") + "; koń: " + ("tak" if horse_masks else "nie"))

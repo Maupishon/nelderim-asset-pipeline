@@ -191,8 +191,8 @@ def align_long_axis(m):
     return R
 
 
-def thin_factor(m, k, slabs=48):
-    """per-vertex thickening factor: k on the thin shaft, 1 on wide parts (a staff head, a guard), eased in between.
+def thin_mask(m, slabs=48):
+    """per-vertex 1 on the thin shaft, 0 on wide parts (a staff head, a guard), eased in between.
     The model stands along +Y; a slab is thin when its widest point is within ~1.5x of the median slab width."""
     y = m.pos[:, 1]
     c = np.array([np.median(m.pos[:, 0]), np.median(m.pos[:, 2])])
@@ -203,16 +203,24 @@ def thin_factor(m, k, slabs=48):
     ref = np.median(w[w > 0])
     t = np.clip((3.0 * ref - w) / (1.5 * ref), 0.0, 1.0)                    # 1 = thin slab, 0 = >= 3x the median
     t = np.convolve(np.pad(t, 2, mode="edge"), np.ones(5) / 5, mode="valid")  # no steps between slabs
-    return 1.0 + (k - 1.0) * t[idx]
+    return t[idx]
 
 
-def fatten(m, k, thin_only=False):
+def thin_factor(m, k, slabs=48):
+    """per-vertex thickening factor: k on the thin shaft, 1 on wide parts, eased in between."""
+    return 1.0 + (k - 1.0) * thin_mask(m, slabs)
+
+
+def fatten(m, k, thin_only=False, head_scale=1.0):
     """scale the two axes perpendicular to the blade (X and Z) by k about the blade axis; Y (length) is untouched.
-    thin_only: only the thin shaft (a staff with a wide head keeps its head)."""
-    if abs(k - 1.0) < 1e-9:
+    thin_only: only the thin shaft (a staff with a wide head keeps its head).
+    head_scale: the wide parts (staff head) are scaled by this on top (< 1 = smaller head), the shaft is not."""
+    if abs(k - 1.0) < 1e-9 and abs(head_scale - 1.0) < 1e-9:
         return m
     c = m.pos.mean(0)
     f = thin_factor(m, k) if thin_only else k
+    if abs(head_scale - 1.0) > 1e-9:
+        f = f * (1.0 - (1.0 - head_scale) * (1.0 - thin_mask(m)))
     m.pos[:, 0] = (m.pos[:, 0] - c[0]) * f + c[0]
     m.pos[:, 2] = (m.pos[:, 2] - c[2]) * f + c[2]
     return m
@@ -220,7 +228,7 @@ def fatten(m, k, thin_only=False):
 
 class Item:
     def __init__(self, path, kind, body, turn=0, scale=0.0, skip=(), saturation=1.0, metal=None, shift=(0.0, 0.0, 0.0),
-                 motion=None, shield_keys=None, ref=None, roll_deg=None, adjust=None, pre_rot=None, fatten_k=1.0, flip=False, fatten_thin=False):
+                 motion=None, shield_keys=None, ref=None, roll_deg=None, adjust=None, pre_rot=None, fatten_k=1.0, flip=False, fatten_thin=False, head_scale=1.0):
         self.kind = kind
         self.body = body
         self.rigid = None
@@ -236,8 +244,8 @@ class Item:
         if flip:                                             # hilt and tip the wrong way round: turn the model upside down
             m.pos = m.pos * np.array([-1.0, -1.0, 1.0])
             m.nrm = m.nrm * np.array([-1.0, -1.0, 1.0])
-        if fatten_k and abs(float(fatten_k) - 1.0) > 1e-9:
-            fatten(m, float(fatten_k), fatten_thin)
+        if (fatten_k and abs(float(fatten_k) - 1.0) > 1e-9) or abs(float(head_scale) - 1.0) > 1e-9:
+            fatten(m, float(fatten_k or 1.0), fatten_thin, float(head_scale))
         self.mesh = m
         P = m.pos.copy()
         if kind in wp.CLASS_OF_KIND or kind == "shield":

@@ -84,3 +84,21 @@ def test_fatten_thin_thickens_the_shaft_but_not_a_wide_head():
     m2 = Mesh(np.array([0.0, 1.0, 0.0])); m2.pos = base.copy(); m2.nrm = base.copy(); m2.tri = np.zeros((0, 3), int)
     engine.fatten(m2, 3.0)
     assert np.abs(m2.pos[head, 0]).max() > 2.5 * r0[head].max()         # uniform fatten scales the head too
+
+
+def test_head_scale_shrinks_only_the_wide_head():
+    rng = np.random.default_rng(3)
+    y = np.linspace(0.0, 1.6, 600)
+    w = np.where(y > 1.25, 0.2, 0.02)
+    ang = rng.uniform(0, 2 * np.pi, 600)
+    m = Mesh(np.array([0.0, 1.0, 0.0]))
+    m.pos = np.stack([w * np.cos(ang), y, w * np.sin(ang)], 1); m.nrm = m.pos.copy(); m.tri = np.zeros((0, 3), int)
+    base = m.pos.copy()
+    engine.fatten(m, 3.0, thin_only=True, head_scale=0.4)
+    shaft, head = y < 1.0, y > 1.4
+    r0, r1 = np.abs(base[:, 0]), np.abs(m.pos[:, 0])
+    assert r1[shaft].max() > 2.5 * r0[shaft].max()                      # shaft still thickened
+    assert r1[head].max() < 0.5 * r0[head].max()                        # head ~0.4x
+    m2 = Mesh(np.array([0.0, 1.0, 0.0])); m2.pos = base.copy(); m2.nrm = base.copy(); m2.tri = np.zeros((0, 3), int)
+    engine.fatten(m2, 1.0, head_scale=1.0)
+    assert np.allclose(m2.pos, base)                                    # nothing requested, nothing changed

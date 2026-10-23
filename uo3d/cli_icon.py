@@ -21,6 +21,7 @@ def main(argv=None):
     ap.add_argument("--align", action="store_true", help="broń: ustaw długą oś pionowo, rękojeścią w dół")
     ap.add_argument("--flip", action="store_true", help="odwróć rękojeść i czubek")
     ap.add_argument("--fatten", type=float, default=1.0, help="pogrub smukły przedmiot (np. 2.6)")
+    ap.add_argument("--head-scale", type=float, default=1.0, help="zmniejsz szeroką głowicę laski (np. 0.4), trzon zostaje")
     ap.add_argument("--fatten-thin", action="store_true", help="pogrub tylko cienki trzon (głowica laski zostaje)")
     ap.add_argument("--tilt", type=float, default=0.0, help="przechyl o kąt (-45 = klasyczna ukośna ikona)")
     ap.add_argument("--face", action="store_true", help="patrz prosto z przodu (bez nachylenia kamery)")
@@ -29,7 +30,7 @@ def main(argv=None):
         sys.exit("[icon] --size: 8-256")
     im = icon.render_icon(a.item, size=a.size, yaw=a.yaw, skip=[s for s in a.skip.split(",") if s],
                           saturation=a.saturation, outline=a.outline,
-                          align=a.align, fatten=a.fatten, flip=a.flip, tilt=a.tilt, face=a.face, fatten_thin=a.fatten_thin)
+                          align=a.align, fatten=a.fatten, flip=a.flip, tilt=a.tilt, face=a.face, fatten_thin=a.fatten_thin, head_scale=a.head_scale)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     im.save(a.out)
     print(f"[icon] {im.width}x{im.height} -> {a.out}")
