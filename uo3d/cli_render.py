@@ -38,6 +38,8 @@ def main(argv=None):
     ap.add_argument("--contrast-pivot", type=float, default=None, help="szarość 0..1, której kontrast nie zmienia (domyślnie 0.49)")
     ap.add_argument("--edge-floor", type=int, default=None, help="obwódka nie ciemniejsza niż ta wartość 0-255 (np. 24 dla czarnych przedmiotów)")
     ap.add_argument("--hide-erode", type=int, default=None, help="dłonie i głowa zasłaniają przedmiot o tyle px mniej (np. 1 dla szat)")
+    ap.add_argument("--own-side", default=None, choices=["R", "L"], help="dekor na jednej kończynie (tatuaż): tylko kończyny tej strony nie zasłaniają przedmiotu")
+    ap.add_argument("--occlude-torso", action="store_const", const=True, default=None, help="tułów zasłania przedmiot (tatuaż na dalekiej ręce nie prześwituje)")
     ap.add_argument("--legs-under", action="store_const", const=True, default=None, help="nogi nigdy nie zasłaniają przedmiotu (długa szata)")
     ap.add_argument("--shade-body", type=float, default=None, help="cień styku przy dłoniach/ramionach/głowie 0..1 (np. 0.4)")
     ap.add_argument("--shade-width", type=float, default=None, help="szerokość cienia styku w px (domyślnie 3)")
@@ -79,7 +81,7 @@ def main(argv=None):
     engine.render_layer(body, item, acts, out, outline_f=a.outline, margin=a.margin, progress=prog, body_masks=body_masks,
                         horse_masks=horse_masks, cloth_sim=sim, smooth=a.smooth, min_dark=a.min_dark,
                         opts=dict(contrast=a.contrast, contrast_pivot=a.contrast_pivot, edge_floor=a.edge_floor, hide_erode=a.hide_erode,
-                                  legs_under=a.legs_under, shade_body=a.shade_body, shade_width=a.shade_width))
+                                  legs_under=a.legs_under, own_side=a.own_side, occlude_torso=a.occlude_torso, shade_body=a.shade_body, shade_width=a.shade_width))
     print("RESULT_VD " + out, flush=True)
 
 
