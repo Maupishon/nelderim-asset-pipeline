@@ -705,7 +705,10 @@ HORSE_ACTION = {23: 0, 24: 1, 25: 2, 26: 2, 27: 2, 28: 2, 29: 2}      # rider ac
 #   hide_erode                 uo_hide_erode: hands and head hide the item this many px less (fewer skin holes at cuffs and collar; 1 for robes)
 #   legs_under                 uo_legs_under: the legs never hide the item (a long robe)
 #   shade_body / shade_width   uo_shade_body: contact shadow next to the body parts that hide the item (0..1, px)
-RENDER_DEFAULTS = dict(contrast=1.0, contrast_pivot=0.49, edge_floor=0, hide_erode=0, legs_under=False, shade_body=0.0, shade_width=3.0)
+#   own_side / occlude_torso   a decal on ONE limb (tattoo): only the limbs of that side ("R" / "L") are the item's own and do not hide it,
+#                              the other limbs and (occlude_torso) the torso hide it - the far arm does not show through the body
+RENDER_DEFAULTS = dict(contrast=1.0, contrast_pivot=0.49, edge_floor=0, hide_erode=0, legs_under=False, shade_body=0.0, shade_width=3.0,
+                       own_side="", occlude_torso=False)
 KIND_RENDER = {"robe": dict(contrast=1.5), "skirt": dict(contrast=1.5)}
 HANDHEAD = ("hand", "finger", "head")
 LEGS = ("thigh", "shin", "foot", "toe")
@@ -731,7 +734,11 @@ class FrameRenderer:
         joints = [j for j in OCCLUDER_JOINTS if not (self.o["legs_under"] and j in LEGS)]
         occl = body.joint_mask(joints)
         worn = item.worn
-        occ_vert = np.array([jbase(body.names[j]) not in worn and occl[j] for j in body.dom])
+        side = self.o["own_side"]
+        if side:                                                   # own limbs: worn joints of that side only
+            occ_vert = np.array([occl[j] and not (jbase(body.names[j]) in worn and body.names[j].endswith("." + side)) for j in body.dom])
+        else:
+            occ_vert = np.array([jbase(body.names[j]) not in worn and occl[j] for j in body.dom])
         hh_vert = np.array([jbase(body.names[j]) in HANDHEAD for j in body.dom])
         torso_vert = np.array([body.names[j].split(".")[0] in TORSO_JOINTS for j in body.dom])
         if self.o["hide_erode"] > 0:                               # hands / head are rastered apart: their hiding area is shrunk
@@ -741,6 +748,8 @@ class FrameRenderer:
             self.occ_tri = g.tri[occ_vert[g.tri].all(1)]
             self.hh_tri = None
         self.tors_tri = g.tri[torso_vert[g.tri].all(1)]
+        if self.o["occlude_torso"]:
+            self.occ_tri = np.concatenate([self.occ_tri, self.tors_tri])
         self.pelvis = body.names.index("pelvis")
 
     def posed(self, a, k):

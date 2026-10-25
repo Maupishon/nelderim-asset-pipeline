@@ -203,7 +203,8 @@ def unpose(P, Pb, body, SM):
 
 
 def write_glb(path, P, N, C, tri, extras):
-    P = P.astype(np.float32); N = N.astype(np.float32); C = np.c_[C, np.ones(len(C))].astype(np.float32)
+    P = P.astype(np.float32); N = N.astype(np.float32)
+    C = (np.c_[C, np.ones(len(C))] if C.shape[1] == 3 else C).astype(np.float32)      # RGB, or RGBA (alpha < 0.5 = not drawn)
     I = tri.astype(np.uint32).ravel()
     blobs = [P.tobytes(), N.tobytes(), C.tobytes(), I.tobytes()]
     views, off = [], 0
