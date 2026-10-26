@@ -22,13 +22,23 @@ def main(argv=None):
     from uo3d.glbmodel import GLB
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("arm", "torso", "sleeve"):
+    for name in ("arm", "torso", "sleeve", "leg"):
         p = sub.add_parser(name)
         p.add_argument("--body", required=True, help="UO_Body_0x190.glb")
         p.add_argument("--anim", type=int, required=True, help="body id of the item animation (the gump is 50000 / 60000 + this)")
         p.add_argument("--gump-m", required=True); p.add_argument("--gump-f", required=True)
         p.add_argument("--out", required=True)
-        if name == "sleeve":
+        if name == "leg":
+            p.add_argument("--design", required=True, help="a coloured design on white; white (also inside it) is the skin")
+            p.add_argument("--crop", default="", help="x0,y0,x1,y1 in the design")
+            p.add_argument("--side", choices=["L"], default="L", help="only the left leg has a paperdoll polyline so far")
+            p.add_argument("--span", type=float, default=260.0, help="degrees of the leg's circumference the design's width covers (front in the middle)")
+            p.add_argument("--t0", type=float, default=0.05, help="where the design's top lies on the leg: 0 = hip joint, 1 = ankle")
+            p.add_argument("--t1", type=float, default=1.0, help="where its bottom lies")
+            p.add_argument("--offset", type=float, default=0.004, help="m the decal lies off the skin")
+            p.add_argument("--tex-len", type=int, default=256, help="texels along the leg in the render texture (a sprite pixel is ~3 cm)")
+            p.add_argument("--cover", type=float, default=0.45, help="share of ink under a pixel that makes it ink (lower = bolder)")
+        elif name == "sleeve":
             p.add_argument("--design", required=True, help="black ink on white (e.g. a flash sheet); only the biggest pattern is used")
             p.add_argument("--crop", default="", help="x0,y0,x1,y1 in the design: one sleeve of a sheet (without the titles)")
             p.add_argument("--side", choices=["L", "R"], default="L")
@@ -52,7 +62,15 @@ def main(argv=None):
     g = GLB(a.body)
     gm = os.path.join(a.out, f"gump_{50000 + a.anim}_meski.png"); gf = os.path.join(a.out, f"gump_{60000 + a.anim}_damski.png")
     res = {"gump_male": gm, "gump_female": gf}
-    if a.cmd == "sleeve":
+    if a.cmd == "leg":
+        pt = T.patch_prepare(Image.open(a.design), [int(v) for v in a.crop.split(",")] if a.crop else None)
+        glb = os.path.join(a.out, "tatuaz_decal.glb"); tr = (a.t0, a.t1)
+        d = T.patch_decal(pt, g, a.side, glb, tr, a.span, a.offset, a.tex_len, a.cover)
+        n1 = T.patch_gump(pt, a.side, "12", a.gump_m, gm, tr, a.span, cover=a.cover); n2 = T.patch_gump(pt, a.side, "13", a.gump_f, gf, tr, a.span, cover=a.cover)
+        res.update(decal=glb, ink_px=[n1, n2], **{k: v for k, v in d.items() if k != "length"})
+        T.preview(a.gump_m, gm, gm.replace(".png", "_podglad.png"), box=(50, 120, 140, 226), zoom=6)
+        T.preview(a.gump_f, gf, gf.replace(".png", "_podglad.png"), box=(50, 120, 140, 226), zoom=6)
+    elif a.cmd == "sleeve":
         sl = T.sleeve_prepare(Image.open(a.design), [int(v) for v in a.crop.split(",")] if a.crop else None)
         glb = os.path.join(a.out, "tatuaz_decal.glb")
         d = T.sleeve_decal(sl, g, a.side, glb, a.offset, a.tex_len, a.cover)

@@ -106,6 +106,39 @@ def test_sleeve_xy_wraps_the_circumference():
     assert abs(y_back[0] - sl["bot"][xi]) < 1e-6                           # the back = the seam (the edge)
 
 
+def coloured_design():
+    """a tall coloured design (red / green / black) on white with a white hole inside"""
+    im = np.full((300, 120, 3), 255, np.uint8)
+    im[10:290, 40:80] = (20, 20, 20)
+    im[10:60, 10:110] = (120, 20, 40)
+    im[120:200, 50:70] = (255, 255, 255)               # skin inside the design
+    im[220:280, 30:90] = (30, 80, 50)
+    return Image.fromarray(im)
+
+
+def test_patch_prepare_ink_is_everything_but_white():
+    pt = T.patch_prepare(coloured_design())
+    assert pt["y0"] <= 11 and pt["y1"] >= 288 and pt["x0"] <= 11 and pt["x1"] >= 108
+    assert pt["alpha"][150, 60] == 0 and pt["alpha"][30, 20] == 1 and pt["alpha"][240, 50] == 1       # the white inside stays skin
+    x, y = T.patch_xy(pt, np.array([0.05, 1.0]), np.array([0.0, 0.0]))
+    assert abs(x[0] - (pt["x0"] + pt["x1"]) / 2) < 1e-6 and abs(y[0] - pt["y0"]) < 1e-6 and abs(y[1] - pt["y1"]) < 1e-6    # the front, top .. bottom
+
+
+def test_patch_gump_colours_and_hides_under_cloth(tmp_path):
+    body = np.zeros((237, 260, 4), np.uint8)
+    body[120:222, 90:112] = (190, 190, 190, 255)
+    body[124:150, 90:112] = (168, 168, 150, 255)       # underwear: slightly yellow
+    Image.fromarray(body).save(tmp_path / "b.png")
+    pt = T.patch_prepare(coloured_design())
+    spec = ([(104, 132), (102, 172), (99, 196), (97, 208)], [7.0, 5.5, 5.0, 4.5])
+    n = T.patch_gump(pt, "L", "12", str(tmp_path / "b.png"), str(tmp_path / "l.png"), spec=spec, cover=0.3)
+    g = np.array(Image.open(tmp_path / "l.png"))
+    assert n > 30 and g[..., 3].sum() // 255 == n
+    assert not g[:150, :, 3].any()                      # under the underwear nothing is drawn
+    ink = g[g[..., 3] > 0][:, :3]
+    assert (ink[:, 0] > ink[:, 2] + 30).any() or (ink[:, 1] > ink[:, 0] + 20).any()      # red or green ink, not only black
+
+
 def test_sleeve_gump_draws_ink_on_the_arm_only(tmp_path):
     body = np.zeros((237, 260, 4), np.uint8)
     body[60:200, 100:140] = (200, 200, 200, 255)
