@@ -232,6 +232,9 @@ Ported with the author's permission (Kserian / Levy): see `docs/UO_MODEL3D.md` f
   '{"fit": false}' --occlude-torso` on the `_render.glb` (torso); then `animimport`, `patch` (tiledata layer 32..37 + art), `gumppatch`, the C# class.
   Limits: the model must be in the pose / axes of `arm_for_tattoo.glb` (shoulder at the lowest X, thumb towards -Z); the 5 stored directions are mirrored by
   the client for the other 3, so a one-sided tattoo shows on the other arm there (as shields do). Needs scipy. Checked in game: arm 0x5389, torso 0x538A.
+  `sleeve --design flash.jpg --crop x0,y0,x1,y1 --side L|R`: a flat blackwork design (black on white; one sleeve of a flash sheet) wrapped round a whole arm (its height = the
+  circumference, the left end = the wrist); decal with a texture (UVs) + gumps (black where the share of ink under a gump pixel >= `--cover`, 0.42). At the
+  size of a sprite (~3 cm per pixel) / of the paperdoll arm (6 px) the knotwork shows as a black sleeve with light flecks. Render with `--own-side L`.
 
 ## Aktualizacja toolkitu 2D (SpriteMotion upstream)
 

@@ -343,3 +343,113 @@ def preview(body_gump, tattoo_png, out_png, box=(50, 70, 135, 135), zoom=8, bra=
     if bra is not None:
         t2 = np.array(t); bb = np.array(b); t2[bra] = bb[bra]; t = Image.fromarray(t2)
     t.crop(box).resize(((box[2] - box[0]) * zoom, (box[3] - box[1]) * zoom), Image.NEAREST).convert("RGB").save(out_png)
+
+
+# ---- sleeve: a flat blackwork design wrapped round an arm -----------------------------------------------------------------------------
+# polylines (shoulder, elbow, wrist) of the arm in the body gumps 12 / 13; "R" is the one on the viewer's left, "L" on the right
+SLEEVE_POLY = {("R", "12"): ARM_POLY["12"], ("R", "13"): ARM_POLY["13"],
+               ("L", "12"): [(112, 84), (115, 98), (119, 110), (134, 123)], ("L", "13"): [(112, 84), (117, 100), (122, 108), (136, 122)]}
+INK_RGB = (22, 24, 30)                                       # faded black ink
+
+
+def sleeve_prepare(img, crop=None, ink_lum=(150, 90)):
+    """a flat design (black ink on white, e.g. a flash sheet) -> dict(alpha (H, W) float 0..1, x0, x1, top[x], bot[x]); thin outline strokes and text
+    are not ink: the silhouette (per-column top / bottom) is the closed, filled and opened (9 px) mask"""
+    ndi, _ = _scipy()
+    g = img.convert("L")
+    if crop:
+        g = g.crop(tuple(crop))
+    lum = np.array(g).astype(float)
+    hi, lo = ink_lum
+    ink = np.clip((hi - lum) / (hi - lo), 0, 1)                                  # soft ink: 0 at `hi` and above, 1 at `lo` and below
+    disk = lambda r: np.hypot(*np.mgrid[-r:r + 1, -r:r + 1]) <= r + 0.3
+    filled = ndi.binary_fill_holes(ndi.binary_closing(lum < 110, structure=disk(5)))      # the solid silhouette of the sleeve (the white linework is inside)
+    blob = ndi.binary_opening(filled, structure=disk(9))                                  # thin outline strokes and the text are not the sleeve
+    lab, n = ndi.label(blob)
+    if n == 0:
+        raise SystemExit("[BŁĄD  ] w obrazie nie ma czarnego wzoru")
+    sz = ndi.sum(blob, lab, range(1, n + 1))
+    main = lab == int(np.argmax(sz)) + 1
+    alpha = ink * ndi.binary_dilation(main, structure=disk(3), iterations=1)
+    cols = np.nonzero(main.any(0))[0]
+    x0, x1 = int(cols.min()), int(cols.max())
+    top = np.full(main.shape[1], np.nan); bot = np.full(main.shape[1], np.nan)
+    for x in cols:
+        ys = np.nonzero(main[:, x])[0]
+        top[x], bot[x] = ys.min(), ys.max()
+    xs = np.arange(main.shape[1]); ok = ~np.isnan(top)
+    top = np.interp(xs, xs[ok], top[ok]); bot = np.interp(xs, xs[ok], bot[ok])
+    w = 31
+    top = np.convolve(np.pad(top, w // 2, mode="edge"), np.ones(w) / w, mode="valid")
+    bot = np.convolve(np.pad(bot, w // 2, mode="edge"), np.ones(w) / w, mode="valid")
+    return {"alpha": alpha, "x0": x0, "x1": x1, "top": top, "bot": bot}
+
+
+def sleeve_xy(sl, t, phi):
+    """design pixel (x, y) of a point of the arm: t 0 = shoulder .. 1 = wrist (the shoulder is the right end of the design), phi = angle round the
+    arm from the front, positive outwards; the design's height is the circumference (the top and bottom edges meet at the back of the arm)"""
+    x = sl["x1"] - np.clip(t, 0, 1) * (sl["x1"] - sl["x0"])
+    xi = np.clip(np.round(x).astype(int), 0, len(sl["top"]) - 1)
+    v = 0.5 + phi / (2 * np.pi)
+    return x, sl["top"][xi] + v * (sl["bot"][xi] - sl["top"][xi])
+
+
+def sleeve_decal(sl, body, side, out_glb, offset=0.004, tex_len=200, cover=0.5):
+    """the body's own `side` arm skin 4 mm out, with UVs into the (box-filtered) design texture; the seam at the back of the arm is not drawn.
+    Returns dict(length, ...) for the gump."""
+    ndi, _ = _scipy()
+    g = body.g if hasattr(body, "g") else body
+    S = joint_rest(g, f"upper_arm.{side}"); Hd = joint_rest(g, f"hand.{side}")
+    d = Hd - S; d[2] = 0; d /= np.linalg.norm(d)
+    e1 = np.array([0, 0, 1.0]); e2 = np.cross(d, e1)
+    if e2[0] * (1 if side == "L" else -1) < 0:
+        e2 = -e2                                                                    # e2 points away from the body
+    L = float(np.linalg.norm(Hd - S))
+    want = {i for i, n in enumerate(g.joint_names) if n in (f"upper_arm.{side}", f"upper_arm_twist.{side}", f"forearm.{side}", f"forearm_twist.{side}")}
+    dom = g.jnt[np.arange(len(g.pos)), np.argmax(g.wgt, 1)]
+    tr = g.tri[np.isin(dom, list(want))[g.tri].all(1)]
+    used = np.unique(tr); rm = -np.ones(len(g.pos), int); rm[used] = np.arange(len(used))
+    P = g.pos[used] + g.nrm[used] * offset; N = g.nrm[used]
+    rel = P - S
+    t = rel @ d / L
+    perp = rel - np.outer(rel @ d, d)
+    phi = np.arctan2(perp @ e2, perp @ e1)
+    tri = rm[tr]
+    tri = tri[((t[tri] >= -0.02) & (t[tri] <= 1.02)).all(1) & ((phi[tri].max(1) - phi[tri].min(1)) < np.pi)]
+    u2 = np.unique(tri); r2 = -np.ones(len(used), int); r2[u2] = np.arange(len(u2))
+    # the texture: the design box-filtered to ~tex_len texels along the arm (a sprite pixel is ~3 cm: sub-millimetre linework only makes noise)
+    f = max(1, int(round((sl["x1"] - sl["x0"]) / tex_len)))
+    a = ndi.uniform_filter(sl["alpha"], size=f)[::f, ::f]
+    tex = np.zeros(a.shape + (4,), np.uint8); tex[..., :3] = INK_RGB; tex[..., 3] = (np.clip(0.5 + (a - cover) * 4.0, 0, 1) * 255).astype(np.uint8)   # the renderer cuts at 0.5: ink where the share of ink >= cover
+    buf = io.BytesIO(); Image.fromarray(tex, "RGBA").save(buf, "PNG")
+    x, y = sleeve_xy(sl, t[u2], phi[u2])
+    uv = np.clip(np.stack([(x / f) / a.shape[1], (y / f) / a.shape[0]], 1), 0, 1)
+    _write_relief(out_glb, P[u2], N[u2], uv, r2[tri], P[u2], N[u2], buf.getvalue(), {"uo3d_rest": True, "name": f"tatuaz_rekaw_{side}"}, False)
+    return {"length": L, "side": side, "vertices": int(len(u2)), "triangles": int(len(tri)), "texture": list(tex.shape[:2])}
+
+
+def sleeve_gump(sl, side, gid, body_gump, out_png, half=ARM_HALF, ss=5, cover=0.4):
+    """draw the sleeve on the arm of the body gump (gid '12' / '13'); a gump pixel is black when the share of ink under its ss x ss sub-pixels >= cover"""
+    body = np.array(Image.open(body_gump).convert("RGBA")).astype(float)
+    H, W = body.shape[:2]
+    poly = np.array(SLEEVE_POLY[(side, gid)], float)
+    sgn = 1.0 if side == "R" else -1.0                                               # the polyline's left normal is outwards for the right arm
+    yy, xx = np.mgrid[0:H, 0:W]
+    near = _seg_project(np.c_[xx.ravel() + 0.5, yy.ravel() + 0.5], poly)[2].reshape(H, W) <= half + 2.0
+    near &= body[..., 3] > 0
+    ys, xs = np.nonzero(near)
+    sub = (np.arange(ss) + 0.5) / ss
+    ox, oy = np.meshgrid(sub, sub)
+    PX = (xs[:, None] + ox.ravel()[None]).ravel(); PY = (ys[:, None] + oy.ravel()[None]).ravel()
+    a, s, dm = _seg_project(np.c_[PX, PY], poly)
+    inside = (np.abs(s) <= half) & (a >= 0) & (a <= 1)
+    x, y = sleeve_xy(sl, a, np.arcsin(np.clip(sgn * s / half, -0.97, 0.97)))
+    xi = np.clip(x.round().astype(int), 0, sl["alpha"].shape[1] - 1); yi = np.clip(y.round().astype(int), 0, sl["alpha"].shape[0] - 1)
+    ink = np.where(inside, sl["alpha"][yi, xi], 0.0).reshape(-1, ss * ss)
+    cnt = inside.reshape(-1, ss * ss).sum(1)
+    ok = (cnt >= ss * ss * 0.3) & (ink.sum(1) / np.maximum(cnt, 1) >= cover)
+    lum = body[..., :3].mean(2)
+    f = np.clip(lum[ys, xs] / np.median(lum[ys, xs]), 0.6, 1.2)[:, None]
+    out = np.zeros((H, W, 4)); out[ys[ok], xs[ok], :3] = np.clip(np.array(INK_RGB)[None] * f[ok], 0, 255); out[ys[ok], xs[ok], 3] = 255
+    Image.fromarray(out.astype(np.uint8)).save(out_png)
+    return int(ok.sum())
