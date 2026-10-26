@@ -224,6 +224,14 @@ Ported with the author's permission (Kserian / Levy): see `docs/UO_MODEL3D.md` f
   the right hand on the mace haft line (48, 114.5), fist of body gump 12 cuts the haft (read from `gumpartLegacyMUL.uop`, then MUL:
   `nelderim_core.read_gump`, read-only). Checked by eye on UO_Model3D's picture of body gump 12; not in game.
 * `uo3d/holes.py` + `cli_holes.py`: original body 400 seen through the item (UO_Model3D `item_body_holes.py` rules).
+* `uo3d/tattoo.py` + `cli_tattoo.py` (`nelderim.py tattoo arm|torso`): decor tattoos for the layers 0x20-0x25 of the ClassicUO fork (`feature/decor-layers`).
+  `arm`: a textured right-arm model -> a decal (the body's own arm skin 4 mm out, vertex RGBA, alpha = ink) + the paperdoll gumps (ink unrolled along
+  the arm onto gump 12 / 13). `torso`: a 2D design on a white card -> a relief `.glb` (linework high, bevelled, the base follows the true front surface of
+  the body), the texture, gumps (shaded by the body gump, wrapped on the chest, the female one UNDER the bra of gump 13) and the 44 px icon.
+  Render the animation with `nelderim.py uo3d --kind arms --adjust '{"fit": false}' --own-side R --occlude-torso` (arm) or `--kind plate --adjust
+  '{"fit": false}' --occlude-torso` on the `_render.glb` (torso); then `animimport`, `patch` (tiledata layer 32..37 + art), `gumppatch`, the C# class.
+  Limits: the model must be in the pose / axes of `arm_for_tattoo.glb` (shoulder at the lowest X, thumb towards -Z); the 5 stored directions are mirrored by
+  the client for the other 3, so a one-sided tattoo shows on the other arm there (as shields do). Needs scipy. Checked in game: arm 0x5389, torso 0x538A.
 
 ## Aktualizacja toolkitu 2D (SpriteMotion upstream)
 
