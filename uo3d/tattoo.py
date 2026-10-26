@@ -458,7 +458,9 @@ def sleeve_gump(sl, side, gid, body_gump, out_png, half=ARM_HALF, ss=5, cover=0.
 # ---- patch: a coloured design laid on the front of a limb ------------------------------------------------------------------------------
 # polyline (hip, knee, shin, ankle) and the half-width (px) of each point of the LEFT leg on the body gumps; the leg on the viewer's right
 LEG_POLY = {("L", "12"): ([(104, 132), (102, 172), (99, 196), (97, 208)], [7.0, 5.5, 5.0, 4.5]),
-            ("L", "13"): ([(104, 132), (102, 172), (100, 196), (99, 208)], [7.5, 5.5, 5.0, 4.5])}
+            ("L", "13"): ([(104, 132), (102, 172), (100, 196), (99, 208)], [7.5, 5.5, 5.0, 4.5]),
+            ("R", "12"): ([(83, 132), (76, 172), (68, 196), (65, 208)], [7.5, 7.0, 5.0, 4.2]),
+            ("R", "13"): ([(83, 132), (74, 172), (68, 196), (65, 208)], [7.5, 6.5, 4.8, 4.2])}
 
 
 def patch_prepare(img, crop=None, white=235, soft=70):

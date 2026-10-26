@@ -31,7 +31,7 @@ def main(argv=None):
         if name == "leg":
             p.add_argument("--design", required=True, help="a coloured design on white; white (also inside it) is the skin")
             p.add_argument("--crop", default="", help="x0,y0,x1,y1 in the design")
-            p.add_argument("--side", choices=["L"], default="L", help="only the left leg has a paperdoll polyline so far")
+            p.add_argument("--side", choices=["L", "R"], default="L", help="the leg (the polylines of both are in LEG_POLY)")
             p.add_argument("--span", type=float, default=260.0, help="degrees of the leg's circumference the design's width covers (front in the middle)")
             p.add_argument("--t0", type=float, default=0.05, help="where the design's top lies on the leg: 0 = hip joint, 1 = ankle")
             p.add_argument("--t1", type=float, default=1.0, help="where its bottom lies")
