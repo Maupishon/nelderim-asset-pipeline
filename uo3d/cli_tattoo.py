@@ -57,7 +57,17 @@ def main(argv=None):
             p.add_argument("--centre-y", type=float, default=1.30, help="m, height of its centre (sternum)")
             p.add_argument("--centre-x", type=float, default=91.0, help="px, the torso's midline on the gump")
             p.add_argument("--grid", type=int, default=200, help="cells across the relief (200 = 110k triangles, 120 = 40k)")
+    sh = sub.add_parser("shade", help="finish a rendered tattoo .vd: the ink takes the shading of the skin, a soft edge (render it with --outline 1)")
+    sh.add_argument("--item-vd", required=True); sh.add_argument("--body-vd", required=True, help="body400.vd (the original body 400)")
+    sh.add_argument("--out", required=True, help="the shaded .vd")
+    sh.add_argument("--lift", type=float, default=0.12, help="share of the skin colour mixed into the ink (a black ink becomes dark grey)")
+    sh.add_argument("--edge", type=float, default=0.5, help="how much the edge pixels fade into the skin (0 = not at all)")
     a = ap.parse_args(argv)
+    if a.cmd == "shade":
+        from uo3d.tattoo_shade import shade_vd
+        n = shade_vd(a.item_vd, a.body_vd, a.out, lift=a.lift, edge=a.edge)
+        print("RESULT_JSON " + json.dumps({"vd": a.out, "frames": n}))
+        return 0
     os.makedirs(a.out, exist_ok=True)
     g = GLB(a.body)
     gm = os.path.join(a.out, f"gump_{50000 + a.anim}_meski.png"); gf = os.path.join(a.out, f"gump_{60000 + a.anim}_damski.png")
