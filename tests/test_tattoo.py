@@ -166,3 +166,39 @@ def test_sleeve_gump_draws_ink_on_the_arm_only(tmp_path):
     g = np.array(Image.open(tmp_path / "s.png"))
     assert n > 20 and g[..., 3].sum() // 255 == n
     assert not g[:75, :, 3].any() and not g[:, :100, 3].any()          # only the arm region
+
+
+def _dome_head():
+    """a UV sphere (r 0.11, centre = T.HEAD_C) skinned to one joint 'head', with outward normals"""
+    la, lo = np.meshgrid(np.linspace(-np.pi / 2, np.pi / 2, 25), np.linspace(-np.pi, np.pi, 49), indexing="ij")
+    d = np.stack([np.cos(la) * np.sin(lo), np.sin(la), np.cos(la) * np.cos(lo)], -1).reshape(-1, 3)      # +Z = the face
+    ids = np.arange(len(d)).reshape(25, 49)
+    a, b, c, e = ids[:-1, :-1].ravel(), ids[:-1, 1:].ravel(), ids[1:, 1:].ravel(), ids[1:, :-1].ravel()
+
+    class G:
+        pos = np.array(T.HEAD_C) + 0.11 * d
+        nrm = d
+        tri = np.concatenate([np.stack([a, b, c], 1), np.stack([a, c, e], 1)])
+        joint_names = ["head"]
+        jnt = np.zeros((len(d), 4), int)
+        wgt = np.tile([1.0, 0, 0, 0], (len(d), 1))
+    return G
+
+
+def test_head_decal_covers_the_back_and_crown_never_the_face(tmp_path):
+    g = _dome_head()
+    pt = T.patch_prepare(design())
+    out = tmp_path / "h.glb"
+    d = T.head_decal(pt, g, str(out), width=0.15, top_off=0.01, reach=0.03, tex_len=64)
+    assert d["triangles"] > 20 and d["texture"][0] > 0
+    m = d["map"]
+    used = np.unique(m["tri_decal"])
+    P = g.pos[m["used"]][used]
+    assert P[:, 2].max() < T.HEAD_C[2] + 0.03 + 1e-6              # nothing in front of `reach`
+    assert (P[:, 2].mean() < T.HEAD_C[2])                          # mostly the back
+    assert abs(P[:, 0].mean()) < 0.02                              # centred
+    mesh = statmesh.load(str(out))
+    assert len(mesh.pos) == len(used) and mesh.extras.get("uo3d_rest")
+    gm = tmp_path / "g.png"
+    Image.fromarray(np.dstack([np.full((237, 260, 3), 128, np.uint8), np.full((237, 260), 255, np.uint8)]), "RGBA").save(gm)
+    assert T.head_gump(pt, m, g, str(gm), str(tmp_path / "gh.png")) < 20          # seen from the front only the rim of the silhouette shows

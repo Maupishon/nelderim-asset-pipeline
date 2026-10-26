@@ -238,6 +238,11 @@ Ported with the author's permission (Kserian / Levy): see `docs/UO_MODEL3D.md` f
   `leg --design d.jpg --side L [--span 260 --t0 0.05 --t1 1.0]`: a coloured design on white (white = skin, also inside it) laid on the front of the left leg (the width = `--span`
   degrees of its circumference, top = hip, bottom = ankle): decal with a texture (UVs, padded with transparent margins) + gumps (under the underwear of the body gump).
   Render with `--kind legs --adjust '{"fit": false}' --own-side L --occlude-torso`. Paperdoll polylines exist for the left leg only (`LEG_POLY`).
+  `head --design d.png --anim N [--width 0.15 --top-off 0.01 --reach 0.03 --centre-x 0]`: a design on white (white = skin) on the BACK of the head and a little over the crown (layer 0x25 `TattooHead`).
+  It is projected along the UO camera (28.45 deg above and behind), so it looks undistorted from the back; only skin that faces that camera and lies up to `--reach` m in front of the
+  skull centre (HEAD_C) carries ink, never the face. A sprite pixel is ~3 cm, the head is ~8 px wide: the design shows as a patch with a few light pixels, not as linework. The paperdoll
+  shows the front of the head, so the gumps get (almost) no ink (the rim of the crown at most); the gump files are still written (check that `gumppatch` accepts an all-transparent gump).
+  Render with `--kind helm --adjust '{"fit": false}' --occlude-torso --outline 1`, then `shade`. Body id must stay below 2048 (the fork's `MAX_ANIMATIONS_DATA_INDEX_COUNT`).
   `shade --item-vd raw.vd --body-vd body400.vd --out tat.vd` (`uo3d/tattoo_shade.py`): the finishing of every tattoo animation. Render it with `--outline 1` (no dark edge), then the ink takes the
   shading of the skin under it (a black ink = dark grey that shows the muscles), edge pixels fade into the skin, lone pixels are dropped. Without it a tattoo is a flat black patch with a hard outline.
 
