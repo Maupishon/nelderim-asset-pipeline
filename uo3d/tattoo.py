@@ -453,3 +453,121 @@ def sleeve_gump(sl, side, gid, body_gump, out_png, half=ARM_HALF, ss=5, cover=0.
     out = np.zeros((H, W, 4)); out[ys[ok], xs[ok], :3] = np.clip(np.array(INK_RGB)[None] * f[ok], 0, 255); out[ys[ok], xs[ok], 3] = 255
     Image.fromarray(out.astype(np.uint8)).save(out_png)
     return int(ok.sum())
+
+
+# ---- patch: a coloured design laid on the front of a limb ------------------------------------------------------------------------------
+# polyline (hip, knee, shin, ankle) and the half-width (px) of each point of the LEFT leg on the body gumps; the leg on the viewer's right
+LEG_POLY = {("L", "12"): ([(104, 132), (102, 172), (99, 196), (97, 208)], [7.0, 5.5, 5.0, 4.5]),
+            ("L", "13"): ([(104, 132), (102, 172), (100, 196), (99, 208)], [7.5, 5.5, 5.0, 4.5])}
+
+
+def patch_prepare(img, crop=None, white=235, soft=70):
+    """a coloured design on white -> dict(rgb (H, W, 3) uint8, alpha (H, W) float, x0, x1, y0, y1 = the box of the ink); white (also inside the design)
+    is the skin: only the ink is drawn"""
+    ndi, _ = _scipy()
+    im = img.convert("RGB")
+    if crop:
+        im = im.crop(tuple(crop))
+    rgb = np.array(im)
+    mn = rgb.min(2).astype(float)
+    alpha = np.clip((white - mn) / soft, 0, 1)
+    alpha = np.where(ndi.binary_opening(alpha > 0.3, structure=np.ones((2, 2))), alpha, 0)      # the speckles of the JPEG are not ink
+    ys, xs = np.nonzero(alpha > 0.3)
+    if not len(xs):
+        raise SystemExit("[BŁĄD  ] w obrazie nie ma wzoru (samo białe tło)")
+    return {"rgb": rgb, "alpha": alpha, "x0": int(xs.min()), "x1": int(xs.max()), "y0": int(ys.min()), "y1": int(ys.max())}
+
+
+def patch_xy(pt, t, phi, t_range=(0.05, 1.0), span_deg=260.0):
+    """design pixel of a point of the limb: the design's width is the arc `span_deg` round the front, its top is t_range[0], its bottom t_range[1]"""
+    u = 0.5 + phi / np.radians(span_deg)
+    v = (t - t_range[0]) / (t_range[1] - t_range[0])
+    return pt["x0"] + u * (pt["x1"] - pt["x0"]), pt["y0"] + v * (pt["y1"] - pt["y0"])
+
+
+def patch_decal(pt, body, side, out_glb, t_range=(0.05, 1.0), span_deg=260.0, offset=0.004, tex_len=256, cover=0.5):
+    """the body's own `side` leg skin (thigh and shin) 4 mm out, UVs into the box-filtered design (padded with transparent margins); returns the
+    numbers the log wants"""
+    ndi, _ = _scipy()
+    g = body.g if hasattr(body, "g") else body
+    S = joint_rest(g, f"thigh.{side}"); E = joint_rest(g, f"foot.{side}")
+    d = E - S; L = float(np.linalg.norm(d)); d /= L
+    e1 = np.array([0, 0, 1.0]) - d[2] * d; e1 /= np.linalg.norm(e1)
+    e2 = np.cross(d, e1)
+    if e2[0] * (1 if side == "L" else -1) < 0:
+        e2 = -e2                                                                    # away from the body
+    want = {i for i, n in enumerate(g.joint_names) if n.endswith("." + side) and n.split(".")[0].split("_")[0] in ("thigh", "shin")}
+    dom = g.jnt[np.arange(len(g.pos)), np.argmax(g.wgt, 1)]
+    tr = g.tri[np.isin(dom, list(want))[g.tri].all(1)]
+    used = np.unique(tr); rm = -np.ones(len(g.pos), int); rm[used] = np.arange(len(used))
+    P = g.pos[used] + g.nrm[used] * offset; N = g.nrm[used]
+    rel = P - S
+    t = rel @ d / L
+    perp = rel - np.outer(rel @ d, d)
+    phi = np.arctan2(perp @ e2, perp @ e1)
+    tri = rm[tr]
+    tri = tri[((t[tri] >= t_range[0] - 0.05) & (t[tri] <= t_range[1] + 0.02)).all(1) & ((phi[tri].max(1) - phi[tri].min(1)) < np.pi)]
+    u2 = np.unique(tri); r2 = -np.ones(len(used), int); r2[u2] = np.arange(len(u2))
+    x, y = patch_xy(pt, t[u2], phi[u2], t_range, span_deg)
+    f = max(1, int(round((pt["y1"] - pt["y0"]) / tex_len)))
+    pad = 3 * f
+    xa, xb = int(min(x.min(), pt["x0"])) - pad, int(max(x.max(), pt["x1"])) + pad                # the texture covers every vertex: no wrapping, transparent margins
+    ya, yb = int(min(y.min(), pt["y0"])) - pad, int(max(y.max(), pt["y1"])) + pad
+    H, W = pt["alpha"].shape
+    canvas_a = np.zeros((yb - ya, xb - xa)); canvas_c = np.zeros((yb - ya, xb - xa, 3))
+    sy0, sy1, sx0, sx1 = max(ya, 0), min(yb, H), max(xa, 0), min(xb, W)
+    canvas_a[sy0 - ya:sy1 - ya, sx0 - xa:sx1 - xa] = pt["alpha"][sy0:sy1, sx0:sx1]
+    canvas_c[sy0 - ya:sy1 - ya, sx0 - xa:sx1 - xa] = pt["rgb"][sy0:sy1, sx0:sx1]
+    pa = canvas_a[..., None]
+    pm = np.concatenate([canvas_c * pa, pa], 2)
+    cut = (pm.shape[0] // f * f, pm.shape[1] // f * f)
+    small = pm[:cut[0], :cut[1]].reshape(cut[0] // f, f, cut[1] // f, f, 4).mean((1, 3))
+    a = small[..., 3:4]
+    col = np.where(a > 1e-4, small[..., :3] / np.maximum(a, 1e-4), 0)
+    tex = np.zeros(a.shape[:2] + (4,), np.uint8); tex[..., :3] = np.clip(col, 0, 255)
+    tex[..., 3] = (np.clip(0.5 + (a[..., 0] - cover) * 4.0, 0, 1) * 255).astype(np.uint8)
+    buf = io.BytesIO(); Image.fromarray(tex, "RGBA").save(buf, "PNG")
+    uv = np.stack([(x - xa) / (cut[1]), (y - ya) / (cut[0])], 1)
+    uv = np.clip(uv, 0, 1)
+    _write_relief(out_glb, P[u2], N[u2], uv, r2[tri], P[u2], N[u2], buf.getvalue(), {"uo3d_rest": True, "name": f"tatuaz_noga_{side}"}, False)
+    return {"length": L, "side": side, "vertices": int(len(u2)), "triangles": int(len(tri)), "texture": list(tex.shape[:2])}
+
+
+def patch_gump(pt, side, gid, body_gump, out_png, t_range=(0.05, 1.0), span_deg=260.0, spec=None, ss=5, cover=0.45):
+    """draw the design on the leg of the body gump (gid '12' / '13'); spec = (polyline, half-widths) of the leg (LEG_POLY)"""
+    poly, hw = spec or LEG_POLY[(side, gid)]
+    poly = np.array(poly, float); hw = np.array(hw, float)
+    seg = np.diff(poly, axis=0); cum = np.r_[0, np.cumsum(np.hypot(seg[:, 0], seg[:, 1]))]; cum /= cum[-1]
+    body = np.array(Image.open(body_gump).convert("RGBA")).astype(float)
+    H, W = body.shape[:2]
+    sgn = -1.0 if side == "L" else 1.0                                       # the polyline (hip -> ankle, downwards): its left normal is the viewer's right
+    yy, xx = np.mgrid[0:H, 0:W]
+    a0, s0, dm0 = _seg_project(np.c_[xx.ravel() + 0.5, yy.ravel() + 0.5], poly)
+    near = (dm0 <= np.interp(a0, cum, hw) + 2.0).reshape(H, W) & (body[..., 3] > 0)
+    ys, xs = np.nonzero(near)
+    sub = (np.arange(ss) + 0.5) / ss
+    ox, oy = np.meshgrid(sub, sub)
+    PX = (xs[:, None] + ox.ravel()[None]).ravel(); PY = (ys[:, None] + oy.ravel()[None]).ravel()
+    a, s, dm = _seg_project(np.c_[PX, PY], poly)
+    half = np.interp(a, cum, hw)
+    inside = (np.abs(s) <= half) & (a >= 0) & (a <= 1)
+    phi = np.arcsin(np.clip(sgn * s / half, -0.97, 0.97))                    # positive = outwards (away from the body)
+    # the paperdoll leg is shorter than the real one: t runs hip -> ankle over the polyline
+    x, y = patch_xy(pt, t_range[0] + a * (1.0 - t_range[0]), phi, t_range, span_deg)
+    ok_xy = (x >= 0) & (x < pt["alpha"].shape[1]) & (y >= 0) & (y < pt["alpha"].shape[0])
+    xi = np.clip(x.round().astype(int), 0, pt["alpha"].shape[1] - 1); yi = np.clip(y.round().astype(int), 0, pt["alpha"].shape[0] - 1)
+    al = np.where(inside & ok_xy, pt["alpha"][yi, xi], 0.0)
+    cols = pt["rgb"][yi, xi].astype(float) * al[:, None]
+    alr = al.reshape(-1, ss * ss); colr = cols.reshape(-1, ss * ss, 3)
+    cnt = inside.reshape(-1, ss * ss).sum(1)
+    share = alr.sum(1) / np.maximum(cnt, 1)
+    ok = (cnt >= ss * ss * 0.3) & (share >= cover)
+    ndi, _ = _scipy()                                                         # the tattoo goes UNDER the underwear of the body gump (slightly yellow cloth)
+    cloth = ndi.binary_fill_holes(ndi.binary_closing(((body[..., 0] - body[..., 2]) >= 6) & (body[..., 3] > 0), structure=np.ones((3, 3)), iterations=2))
+    ok &= ~cloth[ys, xs]
+    ink_rgb = colr.sum(1) / np.maximum(alr.sum(1)[:, None], 1e-6)
+    lum = body[..., :3].mean(2)
+    f = np.clip(lum[ys, xs] / np.median(lum[ys, xs]), 0.6, 1.2)[:, None]
+    out = np.zeros((H, W, 4)); out[ys[ok], xs[ok], :3] = np.clip(ink_rgb[ok] * f[ok], 0, 255); out[ys[ok], xs[ok], 3] = 255
+    Image.fromarray(out.astype(np.uint8)).save(out_png)
+    return int(ok.sum())

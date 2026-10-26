@@ -235,6 +235,9 @@ Ported with the author's permission (Kserian / Levy): see `docs/UO_MODEL3D.md` f
   `sleeve --design flash.jpg --crop x0,y0,x1,y1 --side L|R`: a flat blackwork design (black on white; one sleeve of a flash sheet) wrapped round a whole arm (its height = the
   circumference, the left end = the wrist); decal with a texture (UVs) + gumps (black where the share of ink under a gump pixel >= `--cover`, 0.42). At the
   size of a sprite (~3 cm per pixel) / of the paperdoll arm (6 px) the knotwork shows as a black sleeve with light flecks. Render with `--own-side L`.
+  `leg --design d.jpg --side L [--span 260 --t0 0.05 --t1 1.0]`: a coloured design on white (white = skin, also inside it) laid on the front of the left leg (the width = `--span`
+  degrees of its circumference, top = hip, bottom = ankle): decal with a texture (UVs, padded with transparent margins) + gumps (under the underwear of the body gump).
+  Render with `--kind legs --adjust '{"fit": false}' --own-side L --occlude-torso`. Paperdoll polylines exist for the left leg only (`LEG_POLY`).
 
 ## Aktualizacja toolkitu 2D (SpriteMotion upstream)
 
