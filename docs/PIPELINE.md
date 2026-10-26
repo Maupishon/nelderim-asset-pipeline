@@ -238,6 +238,8 @@ Ported with the author's permission (Kserian / Levy): see `docs/UO_MODEL3D.md` f
   `leg --design d.jpg --side L [--span 260 --t0 0.05 --t1 1.0]`: a coloured design on white (white = skin, also inside it) laid on the front of the left leg (the width = `--span`
   degrees of its circumference, top = hip, bottom = ankle): decal with a texture (UVs, padded with transparent margins) + gumps (under the underwear of the body gump).
   Render with `--kind legs --adjust '{"fit": false}' --own-side L --occlude-torso`. Paperdoll polylines exist for the left leg only (`LEG_POLY`).
+  `shade --item-vd raw.vd --body-vd body400.vd --out tat.vd` (`uo3d/tattoo_shade.py`): the finishing of every tattoo animation. Render it with `--outline 1` (no dark edge), then the ink takes the
+  shading of the skin under it (a black ink = dark grey that shows the muscles), edge pixels fade into the skin, lone pixels are dropped. Without it a tattoo is a flat black patch with a hard outline.
 
 ## Aktualizacja toolkitu 2D (SpriteMotion upstream)
 

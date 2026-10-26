@@ -139,6 +139,23 @@ def test_patch_gump_colours_and_hides_under_cloth(tmp_path):
     assert (ink[:, 0] > ink[:, 2] + 30).any() or (ink[:, 1] > ink[:, 0] + 20).any()      # red or green ink, not only black
 
 
+def test_shade_frame_follows_the_skin_and_softens_the_edge():
+    from uo3d.tattoo_shade import shade_frame
+    skin = np.zeros((256, 256, 4), np.uint8)
+    skin[50:200, 50:200] = (200, 200, 200, 255)
+    skin[50:200, 130:200] = (90, 90, 90, 255)                       # the right part of the body is in shadow
+    item = np.zeros((256, 256, 4), np.uint8)
+    item[100:120, 80:100] = (20, 20, 30, 255)                       # a patch of black ink in the light
+    item[100:120, 150:170] = (20, 20, 30, 255)                      # and one in the shadow
+    item[60, 60] = (20, 20, 30, 255)                                # a lone pixel
+    out = shade_frame(item, skin)
+    assert out[110, 90, :3].sum() > out[110, 160, :3].sum()         # the ink in the light is lighter than the one in the shadow
+    assert out[110, 90, :3].sum() > 3 * 20 + 10                     # the black ink is a dark grey, not pure black (the skin shows through)
+    assert out[60, 60, 3] == 0                                      # the lone pixel is dropped
+    assert out[110, 80, :3].sum() > out[110, 90, :3].sum()          # the edge pixel fades into the (lighter) skin
+    assert ((out[..., 3] > 0) <= (item[..., 3] > 0)).all()          # nothing is added
+
+
 def test_sleeve_gump_draws_ink_on_the_arm_only(tmp_path):
     body = np.zeros((237, 260, 4), np.uint8)
     body[60:200, 100:140] = (200, 200, 200, 255)
