@@ -22,13 +22,20 @@ def main(argv=None):
     from uo3d.glbmodel import GLB
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("arm", "torso"):
+    for name in ("arm", "torso", "sleeve"):
         p = sub.add_parser(name)
         p.add_argument("--body", required=True, help="UO_Body_0x190.glb")
         p.add_argument("--anim", type=int, required=True, help="body id of the item animation (the gump is 50000 / 60000 + this)")
         p.add_argument("--gump-m", required=True); p.add_argument("--gump-f", required=True)
         p.add_argument("--out", required=True)
-        if name == "arm":
+        if name == "sleeve":
+            p.add_argument("--design", required=True, help="black ink on white (e.g. a flash sheet); only the biggest pattern is used")
+            p.add_argument("--crop", default="", help="x0,y0,x1,y1 in the design: one sleeve of a sheet (without the titles)")
+            p.add_argument("--side", choices=["L", "R"], default="L")
+            p.add_argument("--offset", type=float, default=0.004, help="m the decal lies off the skin")
+            p.add_argument("--tex-len", type=int, default=200, help="texels along the arm in the render texture (a sprite pixel is ~3 cm)")
+            p.add_argument("--cover", type=float, default=0.42, help="share of ink under a gump / texture pixel that makes it black (lower = darker, higher = more skin shows)")
+        elif name == "arm":
             p.add_argument("--model", required=True)
             p.add_argument("--scale", type=float, default=0.205, help="model units -> m (shoulder joint to wrist of the body arm)")
             p.add_argument("--wrist-x", type=float, default=1.45, help="x of the wrist in the model (the hand is cut off there)")
@@ -45,7 +52,15 @@ def main(argv=None):
     g = GLB(a.body)
     gm = os.path.join(a.out, f"gump_{50000 + a.anim}_meski.png"); gf = os.path.join(a.out, f"gump_{60000 + a.anim}_damski.png")
     res = {"gump_male": gm, "gump_female": gf}
-    if a.cmd == "arm":
+    if a.cmd == "sleeve":
+        sl = T.sleeve_prepare(Image.open(a.design), [int(v) for v in a.crop.split(",")] if a.crop else None)
+        glb = os.path.join(a.out, "tatuaz_decal.glb")
+        d = T.sleeve_decal(sl, g, a.side, glb, a.offset, a.tex_len, a.cover)
+        n1 = T.sleeve_gump(sl, a.side, "12", a.gump_m, gm, cover=a.cover); n2 = T.sleeve_gump(sl, a.side, "13", a.gump_f, gf, cover=a.cover)
+        res.update(decal=glb, ink_px=[n1, n2], **{k: v for k, v in d.items() if k != "length"})
+        T.preview(a.gump_m, gm, gm.replace(".png", "_podglad.png"), box=(60, 70, 150, 140))
+        T.preview(a.gump_f, gf, gf.replace(".png", "_podglad.png"), box=(60, 70, 150, 140))
+    elif a.cmd == "arm":
         glb = os.path.join(a.out, "tatuaz_decal.glb")
         d = T.arm_decal(a.model, g, glb, a.scale, a.wrist_x, a.offset, a.threshold)
         n1 = T.arm_gump(d, a.gump_m, "12", gm); n2 = T.arm_gump(d, a.gump_f, "13", gf)

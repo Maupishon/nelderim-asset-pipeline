@@ -71,3 +71,48 @@ def test_torso_gump_is_shaded_wrapped_and_hidden_under_the_bra(tmp_path):
     n2 = T.torso_gump(tex, str(tmp_path / "b.png"), str(tmp_path / "g2.png"), centre=(92.0, 103.0), width=0.24, bra=bra)
     g2 = np.array(Image.open(tmp_path / "g2.png"))
     assert n2 < n and g2[103, 92, 3] == 0
+
+
+def sheet():
+    """a black sleeve (tapering) with white linework, a caption above it and a thin outline stroke: a flash sheet in miniature"""
+    im = np.full((260, 700, 3), 255, np.uint8)
+    for x in range(60, 640):
+        h = 40 + (x - 60) // 12
+        im[130 - h:130 + h, x] = 0
+        if x % 40 < 6:
+            im[130 - h + 10:130 + h - 10, x] = 255                     # white lines across the sleeve
+    im[10:22, 200:420:6] = 0                                           # caption letters
+    im[40:43, 100:600] = 0                                             # a thin outline stroke above the sleeve
+    return Image.fromarray(im)
+
+
+def test_sleeve_prepare_ignores_text_and_thin_strokes():
+    sl = T.sleeve_prepare(sheet())
+    assert 55 <= sl["x0"] <= 70 and 630 <= sl["x1"] <= 645
+    xi = 300
+    assert 130 - (40 + (xi - 60) // 12) - 8 <= sl["top"][xi] <= 130 - (40 + (xi - 60) // 12) + 8     # the sleeve's edge, not the stroke / caption
+    assert sl["alpha"][130, 301] > 0.9 and sl["alpha"][130, 62 + 0] >= 0
+    assert sl["alpha"][15, 300] == 0 and sl["alpha"][41, 300] == 0
+
+
+def test_sleeve_xy_wraps_the_circumference():
+    sl = T.sleeve_prepare(sheet())
+    x_sh, y_front = T.sleeve_xy(sl, np.array([0.0]), np.array([0.0]))
+    x_wr, _ = T.sleeve_xy(sl, np.array([1.0]), np.array([0.0]))
+    assert x_sh[0] > x_wr[0]                                           # the shoulder is the right end
+    xi = int(round(x_sh[0]))
+    assert abs(y_front[0] - (sl["top"][xi] + sl["bot"][xi]) / 2) < 1e-6    # the front = the middle of the design's height
+    _, y_back = T.sleeve_xy(sl, np.array([0.0]), np.array([np.pi]))
+    assert abs(y_back[0] - sl["bot"][xi]) < 1e-6                           # the back = the seam (the edge)
+
+
+def test_sleeve_gump_draws_ink_on_the_arm_only(tmp_path):
+    body = np.zeros((237, 260, 4), np.uint8)
+    body[60:200, 100:140] = (200, 200, 200, 255)
+    Image.fromarray(body).save(tmp_path / "b.png")
+    sl = T.sleeve_prepare(sheet())
+    T.SLEEVE_POLY[("L", "99")] = [(112, 84), (115, 98), (119, 110), (134, 123)]
+    n = T.sleeve_gump(sl, "L", "99", str(tmp_path / "b.png"), str(tmp_path / "s.png"), cover=0.3)
+    g = np.array(Image.open(tmp_path / "s.png"))
+    assert n > 20 and g[..., 3].sum() // 255 == n
+    assert not g[:75, :, 3].any() and not g[:, :100, 3].any()          # only the arm region
