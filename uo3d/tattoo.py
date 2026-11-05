@@ -135,10 +135,19 @@ def arm_gump(decal, body_gump, gid, out_png, radius=0.04, half=ARM_HALF):
 
 
 # ---- torso relief ---------------------------------------------------------------------------------------------------------------------
+def _on_white(img):
+    """RGB of a design; a transparent background (PNG with alpha) becomes white, not black"""
+    if img.mode in ("RGBA", "LA", "P") and "A" in img.convert("RGBA").getbands():
+        rgba = img.convert("RGBA")
+        bg = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+        return Image.alpha_composite(bg, rgba).convert("RGB")
+    return img.convert("RGB")
+
+
 def cutout(rgb_img):
     """a design on a white card -> (rgb uint8, alpha bool) cropped to the design; only the white connected to the border is background"""
     ndi, _ = _scipy()
-    im = np.array(rgb_img.convert("RGB")).astype(int)
+    im = np.array(_on_white(rgb_img)).astype(int)
     mx, mn = im.max(2), im.min(2)
     white = (mn >= 232) & ((mx - mn) <= 22)
     lab, n = ndi.label(white)
@@ -151,7 +160,8 @@ def cutout(rgb_img):
     sz = ndi.sum(alpha, lab, range(1, n + 1))
     ys, xs = np.nonzero(lab == int(np.argmax(sz)) + 1)
     box = np.zeros_like(alpha); box[max(ys.min() - 25, 0):ys.max() + 26, max(xs.min() - 25, 0):xs.max() + 26] = True   # the card's edge / shadow lies farther
-    alpha &= box
+    dark = ndi.binary_opening(~bg, iterations=1) & (im.mean(2) < 90)         # a dark piece of the design farther away (a separate part, e.g. the mouth of a mask) stays;
+    alpha = (alpha & box) | dark                                              # the card's grey edge / shadow is not dark
     lab, n = ndi.label(alpha); sz = ndi.sum(alpha, lab, range(1, n + 1))
     alpha = np.isin(lab, [i + 1 for i, s in enumerate(sz) if s > 200])
     ys, xs = np.nonzero(alpha)
@@ -467,7 +477,7 @@ def patch_prepare(img, crop=None, white=235, soft=70):
     """a coloured design on white -> dict(rgb (H, W, 3) uint8, alpha (H, W) float, x0, x1, y0, y1 = the box of the ink); white (also inside the design)
     is the skin: only the ink is drawn"""
     ndi, _ = _scipy()
-    im = img.convert("RGB")
+    im = _on_white(img)
     if crop:
         im = im.crop(tuple(crop))
     rgb = np.array(im)
@@ -573,3 +583,150 @@ def patch_gump(pt, side, gid, body_gump, out_png, t_range=(0.05, 1.0), span_deg=
     out = np.zeros((H, W, 4)); out[ys[ok], xs[ok], :3] = np.clip(ink_rgb[ok] * f[ok], 0, 255); out[ys[ok], xs[ok], 3] = 255
     Image.fromarray(out.astype(np.uint8)).save(out_png)
     return int(ok.sum())
+
+
+def arm_patch_decal(pt, body, side, out_glb, t_range=(0.0, 1.0), span_deg=260.0, offset=0.004, tex_len=256, cover=0.4):
+    """a coloured design (patch_prepare) laid on the front of the `side` arm: the body's own arm skin 4 mm out with UVs into the design (shoulder = top of
+    the design, wrist = bottom); the same geometry as sleeve_decal, the colours of patch_decal"""
+    g = body.g if hasattr(body, "g") else body
+    S = joint_rest(g, f"upper_arm.{side}"); Hd = joint_rest(g, f"hand.{side}")
+    d = Hd - S; d[2] = 0; d /= np.linalg.norm(d)
+    e1 = np.array([0, 0, 1.0]); e2 = np.cross(d, e1)
+    if e2[0] * (1 if side == "L" else -1) < 0:
+        e2 = -e2
+    L = float(np.linalg.norm(Hd - S))
+    want = {i for i, n in enumerate(g.joint_names) if n in (f"upper_arm.{side}", f"upper_arm_twist.{side}", f"forearm.{side}", f"forearm_twist.{side}")}
+    dom = g.jnt[np.arange(len(g.pos)), np.argmax(g.wgt, 1)]
+    tr = g.tri[np.isin(dom, list(want))[g.tri].all(1)]
+    used = np.unique(tr); rm = -np.ones(len(g.pos), int); rm[used] = np.arange(len(used))
+    P = g.pos[used] + g.nrm[used] * offset; N = g.nrm[used]
+    rel = P - S
+    t = rel @ d / L
+    perp = rel - np.outer(rel @ d, d)
+    phi = np.arctan2(perp @ e2, perp @ e1)
+    tri = rm[tr]
+    tri = tri[((t[tri] >= t_range[0] - 0.02) & (t[tri] <= t_range[1] + 0.02)).all(1) & ((phi[tri].max(1) - phi[tri].min(1)) < np.pi)]
+    u2 = np.unique(tri); r2 = -np.ones(len(used), int); r2[u2] = np.arange(len(u2))
+    x, y = patch_xy(pt, t[u2], phi[u2], t_range, span_deg)
+    png, uv, shape, _ = _decal_texture(pt, x, y, tex_len, cover)
+    _write_relief(out_glb, P[u2], N[u2], uv, r2[tri], P[u2], N[u2], png, {"uo3d_rest": True, "name": f"tatuaz_reka_{side}"}, False)
+    return {"length": L, "side": side, "vertices": int(len(u2)), "triangles": int(len(tri)), "texture": list(shape)}
+
+
+def arm_patch_gump(pt, side, gid, body_gump, out_png, t_range=(0.0, 1.0), span_deg=260.0, half=ARM_HALF, **kw):
+    """draw a coloured design on the arm of the body gump (the polyline of SLEEVE_POLY)"""
+    poly = SLEEVE_POLY[(side, gid)]
+    return patch_gump(pt, side, gid, body_gump, out_png, t_range, span_deg, spec=(poly, [half] * len(poly)), **kw)
+
+
+# ---- head: a design laid on the back of the head and a little over the crown ---------------------------------------------------------------
+# The design is projected along the UO camera (seen from behind and above: 28.45 deg), so in the game it looks undistorted from the back and the
+# crown; the sides compress as the head turns. Only surfaces that face that camera carry ink.
+HEAD_C = (0.0, 1.72, 0.085)                                  # m, centre of the skull in the body glb (the head joint is at y 1.548)
+
+
+def _decal_texture(pt, x, y, tex_len, cover):
+    """the design box-filtered to ~tex_len texels high, padded with transparent margins so that every vertex (x, y in design pixels) lies inside;
+    returns (png bytes, uv (n, 2), (h, w))"""
+    f = max(1, int(round((pt["y1"] - pt["y0"]) / tex_len)))
+    pad = 3 * f
+    xa, xb = int(min(x.min(), pt["x0"])) - pad, int(max(x.max(), pt["x1"])) + pad
+    ya, yb = int(min(y.min(), pt["y0"])) - pad, int(max(y.max(), pt["y1"])) + pad
+    H, W = pt["alpha"].shape
+    canvas_a = np.zeros((yb - ya, xb - xa)); canvas_c = np.zeros((yb - ya, xb - xa, 3))
+    sy0, sy1, sx0, sx1 = max(ya, 0), min(yb, H), max(xa, 0), min(xb, W)
+    canvas_a[sy0 - ya:sy1 - ya, sx0 - xa:sx1 - xa] = pt["alpha"][sy0:sy1, sx0:sx1]
+    canvas_c[sy0 - ya:sy1 - ya, sx0 - xa:sx1 - xa] = pt["rgb"][sy0:sy1, sx0:sx1]
+    pa = canvas_a[..., None]
+    pm = np.concatenate([canvas_c * pa, pa], 2)
+    cut = (pm.shape[0] // f * f, pm.shape[1] // f * f)
+    small = pm[:cut[0], :cut[1]].reshape(cut[0] // f, f, cut[1] // f, f, 4).mean((1, 3))
+    a = small[..., 3:4]
+    col = np.where(a > 1e-4, small[..., :3] / np.maximum(a, 1e-4), 0)
+    tex = np.zeros(a.shape[:2] + (4,), np.uint8); tex[..., :3] = np.clip(col, 0, 255)
+    tex[..., 3] = (np.clip(0.5 + (a[..., 0] - cover) * 4.0, 0, 1) * 255).astype(np.uint8)
+    buf = io.BytesIO(); Image.fromarray(tex, "RGBA").save(buf, "PNG")
+    uv = np.clip(np.stack([(x - xa) / cut[1], (y - ya) / cut[0]], 1), 0, 1)
+    return buf.getvalue(), uv, tex.shape[:2], tex
+
+
+def head_map(g, pt, width=0.15, top_off=0.01, centre_x=0.0, reach=0.03, centre=HEAD_C, min_face=0.15):
+    """the head and neck skin, the design coordinates of every vertex and the triangles that carry the design. Returns a dict"""
+    from . import raster as R
+    s_e, c_e = np.sin(R.ELEV), np.cos(R.ELEV)
+    want = {i for i, n in enumerate(g.joint_names) if n in ("head", "neck")}
+    dom = g.jnt[np.arange(len(g.pos)), np.argmax(g.wgt, 1)]
+    tr = g.tri[np.isin(dom, list(want))[g.tri].all(1)]
+    used = np.unique(tr); rm = -np.ones(len(g.pos), int); rm[used] = np.arange(len(used))
+    N = g.nrm[used]
+    C = np.asarray(centre, float)
+    rel = g.pos[used] - C
+    face = N @ np.array([0.0, s_e, -c_e])                                           # > 0: faces the camera behind and above
+    u = -(rel[:, 0] - centre_x)                                                     # the viewer's right when seen from behind is -X
+    vv = rel[:, 1] * c_e + rel[:, 2] * s_e                                          # up the screen
+    vtop = vv[face > 0.0].max() - top_off
+    h_m = width * (pt["y1"] - pt["y0"]) / (pt["x1"] - pt["x0"])
+    x = pt["x0"] + (u / width + 0.5) * (pt["x1"] - pt["x0"])
+    y = pt["y0"] + ((vtop - vv) / h_m) * (pt["y1"] - pt["y0"])
+    tri = rm[tr]
+    ok = (face[tri] > min_face).all(1) & (rel[tri][..., 2].max(1) < reach)                 # the back of the head and the crown up to `reach` m in front of its centre; never the face
+    tri = tri[ok]
+    return {"used": used, "N": N, "x": x, "y": y, "tri": tri, "h_m": h_m, "width": width, "vtop": float(vtop)}
+
+
+def head_decal(pt, body, out_glb, width=0.15, top_off=0.01, centre_x=0.0, offset=0.004, tex_len=128, cover=0.45, reach=0.03):
+    """the skin of the back of the head 4 mm out with UVs into the design; returns the numbers the log wants plus `map` for head_gump"""
+    g = body.g if hasattr(body, "g") else body
+    m = head_map(g, pt, width, top_off, centre_x, reach)
+    P = g.pos[m["used"]] + m["N"] * offset
+    inside = ((m["x"][m["tri"]] >= pt["x0"] - 2) & (m["x"][m["tri"]] <= pt["x1"] + 2) & (m["y"][m["tri"]] >= pt["y0"] - 2) & (m["y"][m["tri"]] <= pt["y1"] + 2)).any(1)
+    tri = m["tri"][inside]
+    u2 = np.unique(tri); r2 = -np.ones(len(m["used"]), int); r2[u2] = np.arange(len(u2))
+    png, uv, shp, tex = _decal_texture(pt, m["x"][u2], m["y"][u2], tex_len, cover)
+    _write_relief(out_glb, P[u2], m["N"][u2], uv, r2[tri], P[u2], m["N"][u2], png, {"uo3d_rest": True, "name": "tatuaz_glowa"}, False)
+    m["tri_decal"] = tri; m["P"] = P
+    return {"vertices": int(len(u2)), "triangles": int(len(tri)), "texture": list(shp), "height_m": m["h_m"], "map": m, "tex": tex}
+
+
+def head_gump(pt, m, body, body_gump, out_png, cx=91.0, elev_deg=0.0, cover=0.45, ss=4):
+    """the ink of the head decal on the head of the body gump (12 / 13): the decal seen from the front (tilted down by elev_deg), hidden by the head
+    itself; only pixels of the body gump carry ink. Returns the number of ink pixels (may be 0: the design lies on the back of the head)"""
+    from . import raster as R
+    g = body.g if hasattr(body, "g") else body
+    e = np.radians(elev_deg)
+    bg = np.array(Image.open(body_gump).convert("RGBA")).astype(float)
+    H, W = bg.shape[:2]
+
+    def proj(P):
+        return np.stack([cx + P[:, 0] * PXM, FEET_Y - (P[:, 1] * np.cos(e) - P[:, 2] * np.sin(e)) * PXM], 1), -(P[:, 2] * np.cos(e) + P[:, 1] * np.sin(e))
+
+    # the head itself hides what is behind it
+    want = {i for i, n in enumerate(g.joint_names) if n in ("head", "neck")}
+    dom = g.jnt[np.arange(len(g.pos)), np.argmax(g.wgt, 1)]
+    btri = g.tri[np.isin(dom, list(want))[g.tri].all(1)]
+    xy, dz = proj(g.pos)
+    _, bdep = R.raster(xy, dz, btri, W, H)
+    # barycentric samples of the decal triangles
+    tri = m["tri_decal"]; P = m["P"]; used_x, used_y = m["x"], m["y"]
+    k = np.arange(ss + 1) / ss
+    bw = np.array([(a, b, 1 - a - b) for a in k for b in k if a + b <= 1.0 + 1e-9])
+    A = (P[tri][:, None, :, :] * bw[None, :, :, None]).sum(2).reshape(-1, 3)
+    X = (used_x[tri][:, None, :] * bw[None]).sum(2).ravel(); Y = (used_y[tri][:, None, :] * bw[None]).sum(2).ravel()
+    sxy, sdz = proj(A)
+    px = np.floor(sxy[:, 0]).astype(int); py = np.floor(sxy[:, 1]).astype(int)
+    ok = (px >= 0) & (px < W) & (py >= 0) & (py < H)
+    ok &= bdep[np.clip(py, 0, H - 1), np.clip(px, 0, W - 1)] >= sdz - 0.012          # nearer than the head surface (4 mm decal + slack)
+    xi = np.clip(np.round(X).astype(int), 0, pt["alpha"].shape[1] - 1); yi = np.clip(np.round(Y).astype(int), 0, pt["alpha"].shape[0] - 1)
+    al = pt["alpha"][yi, xi]
+    cnt = np.zeros((H, W)); inkn = np.zeros((H, W)); col = np.zeros((H, W, 3))
+    np.add.at(cnt, (py[ok], px[ok]), 1.0); np.add.at(inkn, (py[ok], px[ok]), al[ok])
+    for c in range(3):
+        np.add.at(col[..., c], (py[ok], px[ok]), (pt["rgb"][yi, xi, c] * al)[ok])
+    share = inkn / np.maximum(cnt, 1)
+    ink = (cnt > 0) & (share >= cover) & (bg[..., 3] > 0)
+    rgb = col / np.maximum(inkn[..., None], 1e-6)
+    lum = bg[..., :3].mean(2)
+    f = np.clip(lum / np.median(lum[bg[..., 3] > 0]), 0.6, 1.2)[..., None]
+    out = np.zeros((H, W, 4)); out[..., :3] = np.clip(rgb * f, 0, 255); out[..., 3] = np.where(ink, 255, 0)
+    Image.fromarray(out.astype(np.uint8)).save(out_png)
+    return int(ink.sum())

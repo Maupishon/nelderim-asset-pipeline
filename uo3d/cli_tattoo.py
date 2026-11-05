@@ -1,11 +1,16 @@
 """uo3d/cli_tattoo.py - decor tattoos (layers 0x20-0x25 of the ClassicUO fork): decal on a limb, relief on the torso, paperdoll gumps, icon.
 
     python nelderim.py tattoo arm   --model arm.glb --body UO_Body_0x190.glb --anim 853 --gump-m g12.png --gump-f g13.png --out DIR
+    python nelderim.py tattoo head  --design meduza.png --body UO_Body_0x190.glb --anim 857 --gump-m g12.png --gump-f g13.png --out DIR
+                                    [--width 0.15 --top-off 0.01 --centre-x 0 --gump-elev 0]
     python nelderim.py tattoo torso --design tygrys.jpg --body UO_Body_0x190.glb --anim 854 --gump-m g12.png --gump-f g13.png --out DIR
                                     [--width 0.24 --centre-y 1.30 --centre-x 91 --grid 200]
 
 arm    a right-arm model with a tattoo texture -> DIR/tatuaz_decal.glb (render: `nelderim.py uo3d --item DIR/tatuaz_decal.glb --kind arms
        --adjust '{"fit": false}' --own-side R --occlude-torso ...`) and the gumps gump_<50000+anim>_meski.png / gump_<60000+anim>_damski.png.
+head   a design on white laid on the BACK of the head and a little over the crown (projected along the UO camera, 28 deg above and behind: undistorted
+       from the back) -> DIR/tatuaz_decal.glb (render: `nelderim.py uo3d --item DIR/tatuaz_decal.glb --kind helm --adjust '{"fit": false}' --occlude-torso`),
+       the gumps (the decal seen from the front: mostly hidden, see --gump-elev) and the 44 px icon.
 torso  a 2D design on a white card -> the relief DIR/tatuaz_tors.glb (+ _render.glb without the back: `--kind plate --occlude-torso`), the texture,
        the gumps (the female one hides the tattoo under the bra) and the 44 px icon art_<anim>.png.
 --gump-m / --gump-f: the body gumps 12 and 13 as RGBA PNG (260 x 237). Every output goes to DIR; the client is never touched.
@@ -22,16 +27,29 @@ def main(argv=None):
     from uo3d.glbmodel import GLB
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("arm", "torso", "sleeve", "leg"):
+    for name in ("arm", "torso", "sleeve", "leg", "head"):
         p = sub.add_parser(name)
         p.add_argument("--body", required=True, help="UO_Body_0x190.glb")
         p.add_argument("--anim", type=int, required=True, help="body id of the item animation (the gump is 50000 / 60000 + this)")
         p.add_argument("--gump-m", required=True); p.add_argument("--gump-f", required=True)
         p.add_argument("--out", required=True)
-        if name == "leg":
+        if name == "head":
+            p.add_argument("--design", required=True, help="a design on white; white (also inside it) is the skin")
+            p.add_argument("--crop", default="", help="x0,y0,x1,y1 in the design")
+            p.add_argument("--width", type=float, default=0.15, help="m, width of the design on the back of the head (the skull is ~0.24 m wide)")
+            p.add_argument("--top-off", type=float, default=0.01, help="m the design's top edge lies below the crown as the UO camera (from behind, 28 deg above) sees it; negative = further over the crown")
+            p.add_argument("--centre-x", type=float, default=0.0, help="m, shift of the design to the viewer's left (-) / right (+) as seen from behind")
+            p.add_argument("--reach", type=float, default=0.03, help="m in front of the skull centre up to which the design may climb over the crown (0.085 m = the middle of the head; 0.03 = just over the top)")
+            p.add_argument("--offset", type=float, default=0.004, help="m the decal lies off the skin")
+            p.add_argument("--tex-len", type=int, default=128, help="texels along the height of the render texture (a sprite pixel is ~3 cm)")
+            p.add_argument("--cover", type=float, default=0.45, help="share of ink under a pixel that makes it ink (lower = bolder)")
+            p.add_argument("--gump-elev", type=float, default=0.0, help="deg the paperdoll head is seen from above (0 = straight from the front: the back of the head is hidden)")
+            p.add_argument("--gump-cx", type=float, default=91.0, help="px, the midline of the head on the body gump")
+        elif name == "leg":
             p.add_argument("--design", required=True, help="a coloured design on white; white (also inside it) is the skin")
             p.add_argument("--crop", default="", help="x0,y0,x1,y1 in the design")
-            p.add_argument("--side", choices=["L", "R"], default="L", help="the leg (the polylines of both are in LEG_POLY)")
+            p.add_argument("--side", choices=["L", "R"], default="L", help="the limb (the polylines of both legs are in LEG_POLY, of both arms in SLEEVE_POLY)")
+            p.add_argument("--limb", choices=["leg", "arm"], default="leg", help="arm: the same coloured design on the arm (shoulder = top of the design, wrist = bottom)")
             p.add_argument("--span", type=float, default=260.0, help="degrees of the leg's circumference the design's width covers (front in the middle)")
             p.add_argument("--t0", type=float, default=0.05, help="where the design's top lies on the leg: 0 = hip joint, 1 = ankle")
             p.add_argument("--t1", type=float, default=1.0, help="where its bottom lies")
@@ -72,14 +90,27 @@ def main(argv=None):
     g = GLB(a.body)
     gm = os.path.join(a.out, f"gump_{50000 + a.anim}_meski.png"); gf = os.path.join(a.out, f"gump_{60000 + a.anim}_damski.png")
     res = {"gump_male": gm, "gump_female": gf}
-    if a.cmd == "leg":
+    if a.cmd == "head":
+        pt = T.patch_prepare(Image.open(a.design), [int(v) for v in a.crop.split(",")] if a.crop else None)
+        glb = os.path.join(a.out, "tatuaz_decal.glb")
+        d = T.head_decal(pt, g, glb, a.width, a.top_off, a.centre_x, a.offset, a.tex_len, a.cover, a.reach)
+        n1 = T.head_gump(pt, d["map"], g, a.gump_m, gm, a.gump_cx, a.gump_elev, a.cover)
+        n2 = T.head_gump(pt, d["map"], g, a.gump_f, gf, a.gump_cx, a.gump_elev, a.cover)
+        art = os.path.join(a.out, f"art_{a.anim}.png"); T.icon(d["tex"]).save(art)
+        T.preview(a.gump_m, gm, gm.replace(".png", "_podglad.png"), box=(55, 45, 130, 100), zoom=8)
+        T.preview(a.gump_f, gf, gf.replace(".png", "_podglad.png"), box=(55, 45, 130, 100), zoom=8)
+        res.update(decal=glb, icon=art, ink_px=[n1, n2], **{k: v for k, v in d.items() if k not in ("map", "tex")})
+    elif a.cmd == "leg":
         pt = T.patch_prepare(Image.open(a.design), [int(v) for v in a.crop.split(",")] if a.crop else None)
         glb = os.path.join(a.out, "tatuaz_decal.glb"); tr = (a.t0, a.t1)
-        d = T.patch_decal(pt, g, a.side, glb, tr, a.span, a.offset, a.tex_len, a.cover)
-        n1 = T.patch_gump(pt, a.side, "12", a.gump_m, gm, tr, a.span, cover=a.cover); n2 = T.patch_gump(pt, a.side, "13", a.gump_f, gf, tr, a.span, cover=a.cover)
+        arm = a.limb == "arm"
+        d = (T.arm_patch_decal if arm else T.patch_decal)(pt, g, a.side, glb, tr, a.span, a.offset, a.tex_len, a.cover)
+        gf_ = T.arm_patch_gump if arm else T.patch_gump
+        n1 = gf_(pt, a.side, "12", a.gump_m, gm, tr, a.span, cover=a.cover); n2 = gf_(pt, a.side, "13", a.gump_f, gf, tr, a.span, cover=a.cover)
         res.update(decal=glb, ink_px=[n1, n2], **{k: v for k, v in d.items() if k != "length"})
-        T.preview(a.gump_m, gm, gm.replace(".png", "_podglad.png"), box=(50, 120, 140, 226), zoom=6)
-        T.preview(a.gump_f, gf, gf.replace(".png", "_podglad.png"), box=(50, 120, 140, 226), zoom=6)
+        box = (60, 70, 150, 140) if arm else (50, 120, 140, 226)
+        T.preview(a.gump_m, gm, gm.replace(".png", "_podglad.png"), box=box, zoom=6)
+        T.preview(a.gump_f, gf, gf.replace(".png", "_podglad.png"), box=box, zoom=6)
     elif a.cmd == "sleeve":
         sl = T.sleeve_prepare(Image.open(a.design), [int(v) for v in a.crop.split(",")] if a.crop else None)
         glb = os.path.join(a.out, "tatuaz_decal.glb")

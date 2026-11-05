@@ -187,6 +187,19 @@ class UopFile:
                 break
         return free
 
+    def extend_table(self):
+        """The final block table is full: append a new, empty block table (blkcap records, zero-filled) at the end of the file and link it from
+        the old final block (its `next` pointer). The MYP reader follows the chain, so nothing already in the file moves."""
+        if not self.last_block or self.blkcap <= 0:
+            raise RuntimeError("no free slot left in the UOP block table and the table cannot be extended (unknown block capacity)")
+        old_pos, _ = self.last_block
+        self.f.seek(0, os.SEEK_END)
+        new_pos = self.f.tell()
+        self.f.write(struct.pack("<i q", 0, 0) + bytes(self.blkcap * 34))
+        self.f.seek(old_pos + 4)                      # block: files(4) next(8) | records
+        self.f.write(struct.pack("<q", new_pos))
+        self.last_block = (new_pos, 0)
+
     def add_payload(self, h, new_payload):
         """Add an entry that is NOT in the UOP yet: payload appended to the end of the file, a record written
         into the first free slot of the final block table, that block's file count (and the header count)
@@ -194,7 +207,7 @@ class UopFile:
         if h in self.entries:
             raise KeyError(f"hash {h} is already present - use replace_payload")
         if self.free_slots() < 1:
-            raise RuntimeError("no free slot left in the UOP block table")
+            self.extend_table()
         pos, used = self.last_block
         self.f.seek(0, os.SEEK_END)
         new_off = self.f.tell()
@@ -335,8 +348,7 @@ def run(client, recipe, apply_changes):
         kind = "REPLACE" if h in have else "NEW    "
         print(f"         {kind} {name} ({label}) gump {gid} <- {png_path}")
     if n_new > room:
-        print(f"[ERROR] {n_new} new gump entries do not fit: the UOP has room for {room} more. "
-              "Nothing will be written for the ones that do not fit.")
+        print(f"[PLAN ] the block table has room for {room} more entries: a new block table is appended to the file (linked in the chain)")
 
     if not apply_changes:
         print("[PLAN ] dry run - nothing written. Re-run with --apply.")
