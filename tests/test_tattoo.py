@@ -202,3 +202,12 @@ def test_head_decal_covers_the_back_and_crown_never_the_face(tmp_path):
     gm = tmp_path / "g.png"
     Image.fromarray(np.dstack([np.full((237, 260, 3), 128, np.uint8), np.full((237, 260), 255, np.uint8)]), "RGBA").save(gm)
     assert T.head_gump(pt, m, g, str(gm), str(tmp_path / "gh.png")) < 20          # seen from the front only the rim of the silhouette shows
+
+
+def test_transparent_png_background_is_white():
+    im = np.zeros((60, 60, 4), np.uint8)               # a transparent background with black RGB (as in many PNG exports)
+    im[20:40, 20:40] = (0, 0, 0, 255)
+    rgb, al = T.cutout(Image.fromarray(im))
+    assert al.shape[0] <= 22 and al.mean() > 0.8
+    pt = T.patch_prepare(Image.fromarray(im))
+    assert pt["alpha"][0, 0] == 0 and pt["alpha"][30, 30] == 1

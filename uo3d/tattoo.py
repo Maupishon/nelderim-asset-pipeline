@@ -135,10 +135,19 @@ def arm_gump(decal, body_gump, gid, out_png, radius=0.04, half=ARM_HALF):
 
 
 # ---- torso relief ---------------------------------------------------------------------------------------------------------------------
+def _on_white(img):
+    """RGB of a design; a transparent background (PNG with alpha) becomes white, not black"""
+    if img.mode in ("RGBA", "LA", "P") and "A" in img.convert("RGBA").getbands():
+        rgba = img.convert("RGBA")
+        bg = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+        return Image.alpha_composite(bg, rgba).convert("RGB")
+    return img.convert("RGB")
+
+
 def cutout(rgb_img):
     """a design on a white card -> (rgb uint8, alpha bool) cropped to the design; only the white connected to the border is background"""
     ndi, _ = _scipy()
-    im = np.array(rgb_img.convert("RGB")).astype(int)
+    im = np.array(_on_white(rgb_img)).astype(int)
     mx, mn = im.max(2), im.min(2)
     white = (mn >= 232) & ((mx - mn) <= 22)
     lab, n = ndi.label(white)
@@ -151,7 +160,8 @@ def cutout(rgb_img):
     sz = ndi.sum(alpha, lab, range(1, n + 1))
     ys, xs = np.nonzero(lab == int(np.argmax(sz)) + 1)
     box = np.zeros_like(alpha); box[max(ys.min() - 25, 0):ys.max() + 26, max(xs.min() - 25, 0):xs.max() + 26] = True   # the card's edge / shadow lies farther
-    alpha &= box
+    dark = ndi.binary_opening(~bg, iterations=1) & (im.mean(2) < 90)         # a dark piece of the design farther away (a separate part, e.g. the mouth of a mask) stays;
+    alpha = (alpha & box) | dark                                              # the card's grey edge / shadow is not dark
     lab, n = ndi.label(alpha); sz = ndi.sum(alpha, lab, range(1, n + 1))
     alpha = np.isin(lab, [i + 1 for i, s in enumerate(sz) if s > 200])
     ys, xs = np.nonzero(alpha)
@@ -467,7 +477,7 @@ def patch_prepare(img, crop=None, white=235, soft=70):
     """a coloured design on white -> dict(rgb (H, W, 3) uint8, alpha (H, W) float, x0, x1, y0, y1 = the box of the ink); white (also inside the design)
     is the skin: only the ink is drawn"""
     ndi, _ = _scipy()
-    im = img.convert("RGB")
+    im = _on_white(img)
     if crop:
         im = im.crop(tuple(crop))
     rgb = np.array(im)
