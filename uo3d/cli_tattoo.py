@@ -48,7 +48,8 @@ def main(argv=None):
         elif name == "leg":
             p.add_argument("--design", required=True, help="a coloured design on white; white (also inside it) is the skin")
             p.add_argument("--crop", default="", help="x0,y0,x1,y1 in the design")
-            p.add_argument("--side", choices=["L", "R"], default="L", help="the leg (the polylines of both are in LEG_POLY)")
+            p.add_argument("--side", choices=["L", "R"], default="L", help="the limb (the polylines of both legs are in LEG_POLY, of both arms in SLEEVE_POLY)")
+            p.add_argument("--limb", choices=["leg", "arm"], default="leg", help="arm: the same coloured design on the arm (shoulder = top of the design, wrist = bottom)")
             p.add_argument("--span", type=float, default=260.0, help="degrees of the leg's circumference the design's width covers (front in the middle)")
             p.add_argument("--t0", type=float, default=0.05, help="where the design's top lies on the leg: 0 = hip joint, 1 = ankle")
             p.add_argument("--t1", type=float, default=1.0, help="where its bottom lies")
@@ -102,11 +103,14 @@ def main(argv=None):
     elif a.cmd == "leg":
         pt = T.patch_prepare(Image.open(a.design), [int(v) for v in a.crop.split(",")] if a.crop else None)
         glb = os.path.join(a.out, "tatuaz_decal.glb"); tr = (a.t0, a.t1)
-        d = T.patch_decal(pt, g, a.side, glb, tr, a.span, a.offset, a.tex_len, a.cover)
-        n1 = T.patch_gump(pt, a.side, "12", a.gump_m, gm, tr, a.span, cover=a.cover); n2 = T.patch_gump(pt, a.side, "13", a.gump_f, gf, tr, a.span, cover=a.cover)
+        arm = a.limb == "arm"
+        d = (T.arm_patch_decal if arm else T.patch_decal)(pt, g, a.side, glb, tr, a.span, a.offset, a.tex_len, a.cover)
+        gf_ = T.arm_patch_gump if arm else T.patch_gump
+        n1 = gf_(pt, a.side, "12", a.gump_m, gm, tr, a.span, cover=a.cover); n2 = gf_(pt, a.side, "13", a.gump_f, gf, tr, a.span, cover=a.cover)
         res.update(decal=glb, ink_px=[n1, n2], **{k: v for k, v in d.items() if k != "length"})
-        T.preview(a.gump_m, gm, gm.replace(".png", "_podglad.png"), box=(50, 120, 140, 226), zoom=6)
-        T.preview(a.gump_f, gf, gf.replace(".png", "_podglad.png"), box=(50, 120, 140, 226), zoom=6)
+        box = (60, 70, 150, 140) if arm else (50, 120, 140, 226)
+        T.preview(a.gump_m, gm, gm.replace(".png", "_podglad.png"), box=box, zoom=6)
+        T.preview(a.gump_f, gf, gf.replace(".png", "_podglad.png"), box=box, zoom=6)
     elif a.cmd == "sleeve":
         sl = T.sleeve_prepare(Image.open(a.design), [int(v) for v in a.crop.split(",")] if a.crop else None)
         glb = os.path.join(a.out, "tatuaz_decal.glb")

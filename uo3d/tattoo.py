@@ -585,6 +585,40 @@ def patch_gump(pt, side, gid, body_gump, out_png, t_range=(0.05, 1.0), span_deg=
     return int(ok.sum())
 
 
+def arm_patch_decal(pt, body, side, out_glb, t_range=(0.0, 1.0), span_deg=260.0, offset=0.004, tex_len=256, cover=0.4):
+    """a coloured design (patch_prepare) laid on the front of the `side` arm: the body's own arm skin 4 mm out with UVs into the design (shoulder = top of
+    the design, wrist = bottom); the same geometry as sleeve_decal, the colours of patch_decal"""
+    g = body.g if hasattr(body, "g") else body
+    S = joint_rest(g, f"upper_arm.{side}"); Hd = joint_rest(g, f"hand.{side}")
+    d = Hd - S; d[2] = 0; d /= np.linalg.norm(d)
+    e1 = np.array([0, 0, 1.0]); e2 = np.cross(d, e1)
+    if e2[0] * (1 if side == "L" else -1) < 0:
+        e2 = -e2
+    L = float(np.linalg.norm(Hd - S))
+    want = {i for i, n in enumerate(g.joint_names) if n in (f"upper_arm.{side}", f"upper_arm_twist.{side}", f"forearm.{side}", f"forearm_twist.{side}")}
+    dom = g.jnt[np.arange(len(g.pos)), np.argmax(g.wgt, 1)]
+    tr = g.tri[np.isin(dom, list(want))[g.tri].all(1)]
+    used = np.unique(tr); rm = -np.ones(len(g.pos), int); rm[used] = np.arange(len(used))
+    P = g.pos[used] + g.nrm[used] * offset; N = g.nrm[used]
+    rel = P - S
+    t = rel @ d / L
+    perp = rel - np.outer(rel @ d, d)
+    phi = np.arctan2(perp @ e2, perp @ e1)
+    tri = rm[tr]
+    tri = tri[((t[tri] >= t_range[0] - 0.02) & (t[tri] <= t_range[1] + 0.02)).all(1) & ((phi[tri].max(1) - phi[tri].min(1)) < np.pi)]
+    u2 = np.unique(tri); r2 = -np.ones(len(used), int); r2[u2] = np.arange(len(u2))
+    x, y = patch_xy(pt, t[u2], phi[u2], t_range, span_deg)
+    png, uv, shape, _ = _decal_texture(pt, x, y, tex_len, cover)
+    _write_relief(out_glb, P[u2], N[u2], uv, r2[tri], P[u2], N[u2], png, {"uo3d_rest": True, "name": f"tatuaz_reka_{side}"}, False)
+    return {"length": L, "side": side, "vertices": int(len(u2)), "triangles": int(len(tri)), "texture": list(shape)}
+
+
+def arm_patch_gump(pt, side, gid, body_gump, out_png, t_range=(0.0, 1.0), span_deg=260.0, half=ARM_HALF, **kw):
+    """draw a coloured design on the arm of the body gump (the polyline of SLEEVE_POLY)"""
+    poly = SLEEVE_POLY[(side, gid)]
+    return patch_gump(pt, side, gid, body_gump, out_png, t_range, span_deg, spec=(poly, [half] * len(poly)), **kw)
+
+
 # ---- head: a design laid on the back of the head and a little over the crown ---------------------------------------------------------------
 # The design is projected along the UO camera (seen from behind and above: 28.45 deg), so in the game it looks undistorted from the back and the
 # crown; the sides compress as the head turns. Only surfaces that face that camera carry ink.
